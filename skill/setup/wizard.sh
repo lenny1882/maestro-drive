@@ -181,9 +181,28 @@ phase_a() {
   if [ ! -e "$MARKER" ]; then
     mac_needed
 
-    local mac_user mac_name key addr
-    mac_user=$(ask "the Mac's username")
-    mac_name=$(ask "the Mac's .local name" "$(hostname -s 2>/dev/null || echo mac).local")
+    local mac_user mac_name key addr known_user known_name
+    # Defaults come from what is already configured, never from this machine:
+    # its own hostname is not the Mac's, which is what the first version offered.
+    for _a in $(configured_aliases || true); do
+      known_user=$(host_field "$_a" User); [ -n "$known_user" ] && break
+    done
+    known_name=$(jq -r '(.sandbox.network.allowedDomains // [])[]
+                        | select(endswith(".local"))' \
+                    "${SETTINGS:-$HOME/.claude/settings.json}" 2>/dev/null | head -1)
+    [ -n "$known_name" ] || known_name=$(awk '/\.local$/ { print $2; exit }' /etc/hosts 2>/dev/null)
+
+    mac_user=$(ask "the Mac's username" "$known_user")
+    mac_name=$(ask "the Mac's .local name" "$known_name")
+    # A name with no dot is a short hostname; mDNS needs the suffix. Without
+    # this an allowedDomains entry is written that resolves to nothing while
+    # curl on the real name keeps failing.
+    case "$mac_name" in *.*) ;; "") ;; *) mac_name="$mac_name.local"; ok "read as $mac_name" ;; esac
+    if [ -n "$known_name" ] && [ "$mac_name" != "$known_name" ]; then
+      warn "this machine already knows the Mac as $known_name."
+      warn "Two names means one of them resolves to nothing."
+      confirm "Use $mac_name anyway?" n || mac_name="$known_name"
+    fi
 
     say ""
     say "  A key for this and nothing else. An existing one is fine — the Mac only"
@@ -482,8 +501,22 @@ REMOTE_PLIST="/Library/LaunchDaemons/networkChange.plist"
 VENDORED_SCRIPT="$(dirname "$0")/network-change.sh"
 VENDORED_PLIST="$(dirname "$0")/networkChange.plist"
 
-mac_run() { # mac_run <alias> <command> -> stdout
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$1" "$2" 2>/dev/null
+# How phase C reaches the Mac. The alias is preferred once its Host block
+# exists, but it may not: --dry-run describes the block without writing it, so
+# `ssh <alias>` would try to resolve the alias as a hostname and hang. Falling
+# back to the key and address needs nothing to have been written yet.
+C_SSH=()
+c_target() { # c_target <alias> <addr>
+  if [ -n "$(ssh_block_hostname "$1")" ] && ! dry; then
+    C_SSH=("$1")
+  else
+    C_SSH=(-i "$MAC_KEY" "$MAC_USER@$2")
+  fi
+}
+
+mac_run() { # mac_run <ignored> <command> -> stdout
+  ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
+      "${C_SSH[@]}" "$2" 2>/dev/null
 }
 
 static_default() { # <address> -> same network, last octet 250
@@ -540,6 +573,7 @@ PY
 phase_c() {
   step "Phase C — a fixed address on the Mac"
   local alias="$B_ALIAS" addr="$B_ADDR"
+  c_target "$alias" "$addr"
 
   mac_needed
   say "  Phase C can only configure the network the Mac is joined to right now,"
@@ -653,7 +687,7 @@ c_cycle_and_verify() { # <alias> <device> <static>
   # Detached, or SIGHUP kills it between off and on and the Mac stays off the
   # network. The leading sleep lets ssh return an exit code rather than a
   # broken pipe.
-  ssh -o BatchMode=yes "$1" \
+  ssh -o BatchMode=yes "${C_SSH[@]}" \
     "nohup /bin/sh -c 'sleep 2; networksetup -setairportpower $2 off; sleep 5; networksetup -setairportpower $2 on' >/dev/null 2>&1 </dev/null &" \
     || warn "the cycle command did not return cleanly; continuing to poll"
 
@@ -662,7 +696,7 @@ c_cycle_and_verify() { # <alias> <device> <static>
   # success and is not.
   local i seen_down=0
   for i in $(seq 1 40); do
-    if ssh -o BatchMode=yes -o ConnectTimeout=6 "$1" true 2>/dev/null; then
+    if ssh -o BatchMode=yes -o ConnectTimeout=6 "${C_SSH[@]}" true 2>/dev/null; then
       if [ "$seen_down" = 1 ]; then
         ok "back up at $3"
         mac_run "$1" 'tail -4 /tmp/netchange.log' | sed 's/^/    /'
