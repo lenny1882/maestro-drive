@@ -514,9 +514,14 @@ c_target() { # c_target <alias> <addr>
   fi
 }
 
-mac_run() { # mac_run <ignored> <command> -> stdout
+# Always succeeds, printing nothing when the Mac cannot be reached. The `|| true`
+# is load-bearing: this file runs under `set -e`, and `x=$(mac_run ...)` with a
+# failing ssh takes the whole script down before the caller can check whether
+# the value came back empty. That is what made a failed phase C look like a hang
+# at its own header, with no message and exit 255.
+mac_run() { # mac_run <ignored> <command> -> stdout, empty if unreachable
   ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
-      "${C_SSH[@]}" "$2" 2>/dev/null
+      "${C_SSH[@]}" "$2" 2>/dev/null || true
 }
 
 static_default() { # <address> -> same network, last octet 250
@@ -868,15 +873,19 @@ while confirm "Set up a network now?" "$([ "$ADDED" = 0 ] && echo y || echo n)";
     say ""
     say "  Phase C gives the Mac a fixed address on this network, so the address"
     say "  just written stays true. Skip it if your router does DHCP reservations."
+    # `|| warn` is load-bearing under `set -e`: a phase that reports failure by
+    # returning non-zero is the last command of this branch, so without it the
+    # script exits at the `fi` and the loop never comes back. Reporting and
+    # carrying on is the point — one network failing is not the run failing.
     if confirm "Run phase C for $B_ALIAS?" n; then
-      phase_c
+      phase_c || warn "phase C did not complete for $B_ALIAS"
     fi
   fi
   say ""
 done
 
 if [ "$ADDED" = 1 ]; then
-  write_etc_hosts
+  write_etc_hosts || warn "/etc/hosts was not written"
 else
   say ""
   say "  Nothing else to do. Re-run this any time you join a new network."
