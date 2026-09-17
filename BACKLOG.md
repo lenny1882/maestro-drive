@@ -216,8 +216,10 @@ it instead.
 6. **Per project — not the wizard's. Both halves now covered.**
    `.maestro-mac.conf` is already covered by `bin/init.sh`, which `bin/config.sh`
    routes into when no conf is found. The permission allows are the uncovered
-   half: nothing writes them and nothing documents them, so every `ssh` and `scp`
-   waits for a prompt until someone adds them by hand.
+   half. `reference/setup.md` § 6 documents them, wildcard prefix and all — what
+   was missing is that nothing writes them and nothing checked whether they were
+   there, so every `ssh` and `scp` waits for a prompt until someone reads § 6 or
+   adds them by hand.
 
    **Built 17 Sep in `bin/config.sh`, not a hook.** It sits immediately after the
    conf check, which is the same moment and before any SSH happens. Read `permissions.allow` from `~/.claude/settings.json` and the

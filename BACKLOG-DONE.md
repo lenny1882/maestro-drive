@@ -1269,6 +1269,14 @@ accessor that returns the *picked* single host (or `_pick_host` exported as one)
 and the conf/docs should warn that `$MAC_HOST` is not itself usable as a
 hostname. The build/sync path is where it bites, since it reaches the Mac by name.
 
+**17 Sep: item 85 is the general case of this.** A Mac that moves between
+networks needs a `Host` block, an `/etc/hosts` line and an `allowedDomains`
+entry per network, and this item fixed only the first symptom — `MAC_HOST`
+looking broken when the alias was wrong. The wizard writes all three together,
+which is what stops the next network from producing a failure that reads as the
+Mac being off. This item's own footgun, that `$MAC_HOST` raw is not usable as a
+hostname, is still open and unaffected.
+
 ## 19. Two notes in one file can contradict each other unnoticed — **DONE 11 Sep**
 
 Split out of item 16, whose confidence marker does not address it. Two notes
@@ -3079,6 +3087,13 @@ to whenever the Mac goes home.
 
 Related: item 47 (what the dead MCP server blocked) and item 45 (the physical
 device path, which has the same one-host assumption in its tunnel setup).
+
+**17 Sep: item 85 is the general case of this.** This item's lesson was that a
+second place naming a host drifts from the first; item 85's is that three files
+naming a network drift from each other the same way, and for the same reason —
+they are updated by hand, separately, at a moment when only one of them is in
+front of you. `mcp.sh` fixed this one by removing the second place. The wizard
+fixes the rest by writing all three at once.
 
 ## 49. Start of session never says to read the project's existing flows and journeys — **BUILT AND SHIPPED 10 Sep (rule 1, rule 10, start-of-session step, preflight count; plus `journeys.md` "When a journey is wrong" — repair-in-place, no dodge-fork, write-back, no hard-coded volatile data)**
 

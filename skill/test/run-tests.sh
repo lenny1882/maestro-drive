@@ -2585,5 +2585,71 @@ python3 "$REPO/bin/lint-stdin.py" "$LT/good3.sh" >/dev/null 2>&1 \
   && ok "lint: </dev/null is accepted as the escape hatch" \
   || no "lint: </dev/null is accepted as the escape hatch" "flagged a safe call"
 
+echo "permission allows for ssh and scp (item 85)"
+# Every call to the Mac is an ssh or scp through the Bash tool, and without an
+# allow entry each one waits for a prompt. config.sh names what is uncovered at
+# the same moment it checks the conf — the first thing a project runs, before
+# any SSH. Detection only: a shell script cannot write either settings file.
+#
+# No Mac and no real config: a scratch project, a redirected HOME, and a fresh
+# LDIR per case so the once-per-session marker cannot leak between them.
+PA="$TMP/perm"; mkdir -p "$PA/proj/.claude" "$PA/home/.claude"
+printf ': "${MAC_HOST:=mac-a mac-b}"\n: "${MAC_FQDN:=e.local}"\n: "${APP_ID:=c.e.a}"\n' \
+  > "$PA/proj/.maestro-mac.conf"
+
+perm_run() { # perm_run <case-name> -> stderr of a config.sh load
+  ( cd "$PA/proj" && HOME="$PA/home" LDIR="$PA/ldir-$1" bash -c \
+      'mkdir -p "$LDIR"; . '"$REPO"'/bin/config.sh' ) 2>&1 >/dev/null
+}
+perm_set() { printf '%s' "$2" > "$1"; }
+
+perm_set "$PA/home/.claude/settings.json" '{}'
+rm -f "$PA/proj/.claude/settings.local.json"
+out=$(perm_run none)
+printf '%s' "$out" | grep -q "ssh mac-a" && printf '%s' "$out" | grep -q "ssh mac-b" \
+  && ok "allows: nothing configured names every uncovered call" \
+  || no "allows: nothing configured names every uncovered call" "$out"
+printf '%s' "$out" | grep -q 'Bash(ssh mac-\*:\*)' \
+  && ok "allows: the suggestion uses the aliases' common prefix" \
+  || no "allows: the suggestion uses the aliases' common prefix" "$out"
+printf '%s' "$out" | grep -q "settings.local.json" \
+  && ok "allows: both candidate files are named" \
+  || no "allows: both candidate files are named" "$out"
+
+# A wide entry in the global file covers every project and every alias.
+perm_set "$PA/home/.claude/settings.json" \
+  '{"permissions":{"allow":["Bash(ssh mac-*:*)","Bash(scp mac-*:*)"]}}'
+out=$(perm_run wide)
+[ -z "$out" ] && ok "allows: a wide global entry silences it" \
+              || no "allows: a wide global entry silences it" "$out"
+
+# A project file covering one alias of two leaves the other uncovered, and only
+# the other should be reported.
+perm_set "$PA/home/.claude/settings.json" '{}'
+perm_set "$PA/proj/.claude/settings.local.json" \
+  '{"permissions":{"allow":["Bash(ssh mac-a:*)","Bash(scp mac-a:*)"]}}'
+out=$(perm_run partial)
+printf '%s' "$out" | grep -q "ssh mac-b" \
+  && ! printf '%s' "$out" | grep -q "ssh mac-a " \
+  && ok "allows: a narrow project entry covers its own alias only" \
+  || no "allows: a narrow project entry covers its own alias only" "$out"
+
+# Once per session. The second load is silent whatever it would have said.
+perm_set "$PA/proj/.claude/settings.local.json" '{}'
+( cd "$PA/proj" && HOME="$PA/home" LDIR="$PA/ldir-once" bash -c \
+    'mkdir -p "$LDIR"; . '"$REPO"'/bin/config.sh' ) >/dev/null 2>&1
+out=$( cd "$PA/proj" && HOME="$PA/home" LDIR="$PA/ldir-once" bash -c \
+    '. '"$REPO"'/bin/config.sh' 2>&1 >/dev/null )
+[ -z "$out" ] && ok "allows: said once per session, not once per call" \
+              || no "allows: said once per session, not once per call" "$out"
+
+# A settings file that is not JSON is somebody else's problem to fix, but it
+# must not stop the skill loading.
+perm_set "$PA/home/.claude/settings.json" 'not json {'
+( cd "$PA/proj" && HOME="$PA/home" LDIR="$PA/ldir-bad" bash -c \
+    'mkdir -p "$LDIR"; . '"$REPO"'/bin/config.sh' ) >/dev/null 2>&1 \
+  && ok "allows: a malformed settings.json does not stop the skill loading" \
+  || no "allows: a malformed settings.json does not stop the skill loading" "config.sh returned non-zero"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
