@@ -1,6 +1,6 @@
 # maestro-remote-mac — backlog
 
-Two items remain, and neither is gated. **17 is done** — the package has a git
+Three items remain, and none is gated. **17 is done** — the package has a git
 repo, a version, a manifest, an installer and an update path. That releases
 **28**, which waited on it and is now the only decision left in this file.
 
@@ -55,7 +55,10 @@ Everything built on 17 Sep is in `skill/` and comes with it.
 cards — and 64, 65 and 66 were done on 15 Sep. All four are in
 `BACKLOG-DONE.md` with the rest of the history of all 68 earlier items.
 
-**Next item number: 85.** Items 1–84 are allocated; new items start from 85.
+**85 was raised on 17 Sep** and is the first item about setting the skill up
+rather than running it.
+
+**Next item number: 86.** Items 1–85 are allocated; new items start from 86.
 
 ---
 
@@ -145,3 +148,228 @@ package's `install.sh` for how a hook ships with a skill.
 one does. Nothing in this package changes.
 
 **Gates.** None. Same argument as item 51.
+
+---
+
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **OPEN, raised 17 Sep**
+
+`reference/setup.md` describes the whole SSH and network side and a person does
+it by hand. It is correct and it still gets done wrong, because it spans three
+files that must agree and is read once, at the wrong moment. A wizard should do
+it instead.
+
+**Seven parts.**
+
+1. **Key creation.** `ssh-keygen` for a purpose-built key, not a reused personal
+   one. Every script passes `BatchMode=yes`, so a passphrase prompt fails
+   immediately with no explanation — and note that is a *key passphrase*, a
+   different thing from the password authentication `reference/setup.md:55` warns
+   about, which fails the same way. Neither setup.md nor this item said the key
+   must be made with `-N ''`. **Drift found 17 Sep**: setup.md documents
+   `-t rsa -b 4096 -C "maestro-remote-mac"`; the key actually in use is RSA 3072
+   with a default comment, so the documented command was not followed when the
+   key was made — which is this item's own argument.
+
+2. **Getting the key onto the Mac.** `ssh-copy-id -i <key>.pub <user>@<addr>`
+   authenticates with the Mac's *login password*, prompted on the terminal — the
+   `-i` only names the key to copy. That is the one moment the Mac's password is
+   typed, so the wizard runs the command in the foreground and lets ssh prompt
+   from `/dev/tty`. It must not capture the output, must not pass `BatchMode=yes`,
+   and must not background it. Runs **once per machine**, not per network:
+   `authorized_keys` is one file on the Mac whatever address reaches it.
+   Preconditions worth naming rather than eyeballing (setup.md § 1 lists Remote
+   Login as a checkbox): refused on 22 is Remote Login off, timed out is the
+   wrong address or the wrong network.
+
+3. **`~/.ssh/config`.** One `Host` block per network, identical but for the
+   `Hostname`, named for the place rather than the machine, each carrying the
+   socat `ProxyCommand` that tunnels through the sandbox proxy. **One trap, not
+   two**: `%s` must be doubled because ssh_config expands `%` itself. The
+   `ConnectTimeout` ordering belongs to `bin/lib.sh:69-80`, where `_probe`
+   prepends its own value ahead of `SSH_OPTS`, and is already solved there —
+   command-line `-o` beats the config file whatever order the file is in, which
+   also makes the blocks' own `ConnectTimeout` and `ServerAliveInterval` dead for
+   everything going through `bin/`. Merge-not-replace with a backup: it is the
+   user's file, with fourteen commented-out entries for unrelated hosts.
+   Ownership is matched on `Host <alias>`, with no marker comment — the need is
+   only to avoid a duplicate stanza, which `ssh` silently shadows because it
+   takes the first value it obtains for each keyword.
+
+4. **`/etc/hosts`.** One line per network mapping `<mac>.local` to that
+   network's address, all present at once: the resolver returns them all and the
+   client tries each in turn, so the name follows the Mac. The cost is that two
+   of three are dead on any given network and each one is a connect timeout
+   before the live one answers — file order is try order, so the network used
+   most often belongs first. Needs root, so the wizard **asks whether to write it
+   itself, defaulting to no**, and prints the lines otherwise. The existing block
+   is already marked by `# mac for ios simulator work`, which is the region the
+   wizard owns.
+
+5. **`~/.claude/settings.json` → `sandbox.network.allowedDomains`.** The name AND
+   every address. Without it the proxy refuses and the Mac reads as switched off
+   while SSH still works, which is what makes the failure confusing. Union, never
+   replace — the array may hold entries for unrelated tools — and the
+   `sandbox.network` path may not exist at all. `jq` is already a hard dependency
+   (`install.sh:51`), and `install.sh:97-108`'s write-to-temp, `diff`, move
+   pattern is what to copy, diff preview included.
+
+6. **Per project — not the wizard's. Half covered, half designed and not built.**
+   `.maestro-mac.conf` is already covered by `bin/init.sh`, which `bin/config.sh`
+   routes into when no conf is found. The permission allows are the uncovered
+   half: nothing writes them and nothing documents them, so every `ssh` and `scp`
+   waits for a prompt until someone adds them by hand.
+
+   **Agreed design, 17 Sep — a check in `bin/config.sh`, not a hook.** It goes
+   immediately after the conf check, which is the same moment and before any SSH
+   happens. Read `permissions.allow` from `~/.claude/settings.json` and the
+   project's `.claude/settings.local.json`, strip `Bash(…)` and a trailing `:*`,
+   and glob-match the patterns against the real `ssh <host>` and `scp <host>`
+   command strings for every alias in `MAC_HOST`. Print what is uncovered, once
+   per session, marked in `$LDIR`. Block nothing. Detection only: a shell script
+   cannot write either settings file, so the session asks which file the user
+   wants and writes it with `Edit`. Global counts for every project;
+   project-local means being asked again in the next project, which is intended.
+
+   **Not a hook, and the reason matters.** A hook was the first design. It cannot
+   write the settings file either, so its only advantage over `config.sh` was
+   imaginary — while it would fire on every Bash call for the life of the machine
+   to test a condition true once per project, and would need a third registration
+   in `install.sh`. See item 67 for how a registration goes missing.
+
+   **Two findings from a prototype that was written, tested and reverted.** The
+   suggested entry should use the longest common prefix of the aliases, not the
+   first alias: `mac-a mac-b` gives `Bash(ssh mac-*:*)`, which is exactly
+   what the two projects on this machine already have by hand, whereas per-alias
+   suggestions produce an entry that does not match. And this machine's `python3`
+   is **3.8.10**, so `str.removesuffix` is unavailable — worth checking what else
+   under `skill/` assumes 3.9+.
+
+   **State on this machine.** `~/.claude/settings.json` has no `ssh` or `scp`
+   allow at all. `brandco-flutter-runner` and `claude-sandbox` each carry
+   `Bash(ssh mac-*:*)` and `Bash(scp mac-*:*)` in
+   `.claude/settings.local.json`, identical and duplicated by hand.
+
+7. **The two Mac-side pieces that handle a network change.** Not an Automator
+   script — that guess was wrong. It is `/usr/local/bin/network-change.sh`
+   (root:wheel 755, 242 lines) driven by `/Library/LaunchDaemons/networkChange.plist`,
+   label `com.you.networkchange`, which fires on `WatchPaths` over
+   `/var/run/resolv.conf`, `NetworkInterfaces.plist` and
+   `com.apple.airport.preferences.plist` plus `RunAtLoad`, logging to
+   `/tmp/netchange.log` and `/tmp/netchange.err`. The script applies a per-SSID
+   IPv4 profile to the Wi-Fi service and is idempotent, because WatchPaths fires
+   two or three times per real change.
+
+   **The script half is vendored** at `skill/setup/network-change.sh` — three
+   real SSID blocks cut to one example on `192.0.2.0/24`, plus a header covering
+   what each value means, the Terminal commands that find them on the Mac, and
+   how to check the result. Body is byte-identical to the Mac's from the config
+   block down. The real table is the LAN layout of every network the Mac joins,
+   so it stays local: the wizard writes it, the repo never carries it. **The plist
+   is vendored verbatim** at `skill/setup/networkChange.plist` — 837 bytes, six
+   keys, no site-specific values in any of them, so it needs no redaction and
+   installs as-is.
+
+   **Optional, and last.** It exists to give the Mac a fixed address per network.
+   Anyone whose router does DHCP reservations gets the same result with nothing
+   installed on the Mac. Offered only after a new network is added, never on its
+   own.
+
+   **How the path was recovered, and why it nearly wasn't.** Nothing in the repo
+   or in any surviving transcript names these files. A sweep of all 246
+   transcripts returned a clean negative — but 417 of 577 sessions no longer have
+   a transcript at all, pruned on the rolling 30-day `cleanupPeriodDays` window
+   (nothing before 19 Aug survives), and both sessions that set this up (10–11
+   Aug) were among them. The path survived only in `~/.claude/history.jsonl`,
+   which the window does not touch, in a prompt from 11 Aug 11:03. **Two defects
+   found on reading it**: the third SSID's DNS server and its gateway differ by
+   one digit, which reads as a typo; and `current_ssid()` calls
+   `ipconfig sertverbose 0`, misspelt, so the verbose mode the function turns on
+   is never turned off. The second is fixed in the vendored copy; both are still
+   live on the Mac.
+
+**Design, settled 17 Sep. Two phases and an optional third.**
+
+**Phase A — once per machine.** Ask the Mac's username and its `.local` name.
+Ask for an existing key path or create one: `ed25519` for a new key, no check on
+an existing one's type, because the Mac already trusts an RSA key. Print and run
+`ssh-copy-id` in the foreground; verify with `BatchMode=yes`. **There is no
+stored key path** — the `IdentityFile` line in the `Host` block is the record,
+and a later pass reads it back. `known_hosts` cannot serve: it holds the Mac's
+host key, not this machine's identity.
+
+**Phase B — once per network, repeatable.** Ask the place name and the Mac's
+address on that network, then write the `Host` block and the `allowedDomains`
+entry. Both are needed *during* phase C, so they are written with the DHCP
+address first and corrected afterwards if C moves it.
+
+**Phase C — optional, offered only when a new B completes.** Install
+`network-change.sh` and the plist on the Mac, which needs root there and so is a
+printed command the user runs, as in part 2. Discovery runs live on the Mac:
+SSIDs offered as a list from `networksetup -listpreferredwirelessnetworks en0`
+plus the current one, and mask, gateway and DNS read from `networksetup -getinfo`
+and `netstat -rn`. **The static address defaults to the Mac's current address
+with the last octet replaced by `250`** — which reproduces all three already in
+use, including the /22 where the mask differs — asked rather than assumed, and
+refused if it answers `ping`. It must sit outside the router's DHCP pool, which
+the Mac cannot see, so the wizard cannot derive it.
+
+**`/etc/hosts` is written last**, once the address is final, whether or not C
+ran. It is the only one of the three that can wait: SSH uses the `Host` block's
+literal `Hostname` and the proxy needs the address in `allowedDomains`; only
+`curl` on the `.local` name needs `/etc/hosts`.
+
+**C drops the connection it runs over**, by design. The last command before the
+drop cycles Wi-Fi, detached so SIGHUP does not kill it mid-cycle:
+
+```sh
+ssh <alias> 'nohup /bin/sh -c "sleep 2; \
+  networksetup -setairportpower en0 off; sleep 5; \
+  networksetup -setairportpower en0 on" >/dev/null 2>&1 </dev/null &'
+```
+
+The leading `sleep 2` lets ssh return an exit code rather than a broken pipe.
+The wizard then polls the **new** address for up to two minutes; a normal
+recovery is 15–30 seconds. Note `RunAtLoad` already applies the profile on
+`launchctl load` — the cycle proves the `WatchPaths` trigger fires, which is the
+part that must work unattended. **Unverified**: whether
+`networksetup -setairportpower` needs sudo. Reading power does not.
+
+**Re-runs of phase A assume the Mac is reachable, but a failure does not prove
+it is not.** Compare this machine's current network against the addresses
+already stored; if it matches one, ask whether the Mac is on and reachable.
+Regardless of the answer, ask whether to set up a new network — that is the
+common reason for a re-run, and the Mac may be on a network this machine has
+never seen. Reachability is therefore phase B's question about a specific
+address, never phase A's about the machine.
+
+**Before any command that needs the Mac**, say plainly that the Mac must be
+turned on and joined to the network being configured. Phase C can only discover
+the network the Mac is currently on.
+
+**Where it lives.** `skill/setup/wizard.sh`, so it installs with the skill and
+can be re-run months later without the repo on the machine. `install.sh` calls
+it, and checks a **phase A completion marker** in
+`~/.local/share/maestro-remote-mac/` — where `install.sh` already points
+`LIB_DIR` — offering the wizard when it is absent. A flag, not a state file:
+networks are discoverable from the `Host` block, the `/etc/hosts` line and the
+`allowedDomains` entry, which are the record.
+
+
+**Why 3, 4 and 5 belong in one tool: they must all three be right or none is.**
+`setup.md:159-161` already says it — *"Add a new address when the Mac joins a new
+network, in three places at once: here, `/etc/hosts`, and a new `Host` block in
+`~/.ssh/config`. All three or none — two out of three produces a failure that
+looks like something else."* That sentence is the item. A third network has been
+added since the backlog last mentioned two, so this keeps happening.
+
+**Two existing items are symptoms of the same gap.** Item 18 — `MAC_HOST` became
+a space-separated list so a moving Mac stops looking like a broken one, and its
+footgun, that `$MAC_HOST` raw is not usable as a hostname, is still open. Item
+48 — the MCP server hardcoded one alias and missed the fix every script already
+had. Both should cross-reference this one.
+
+**Why a wizard and not more prose.** The same argument items 51 and 56 made: the
+instructions exist, are correct, and are read at a moment when they cannot be
+acted on.
+
+**Gates.** None.
