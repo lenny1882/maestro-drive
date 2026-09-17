@@ -62,7 +62,10 @@ rather than running it.
 change, on a test that was only correct when it was not shortly after midnight.
 It is in `BACKLOG-DONE.md`.
 
-**Next item number: 87.** Items 1–86 are allocated; new items start from 87.
+**87 was raised on 18 Sep**, the first item about what this package is *for*
+rather than how it works.
+
+**Next item number: 88.** Items 1–87 are allocated; new items start from 88.
 
 ---
 
@@ -519,3 +522,76 @@ instructions exist, are correct, and are read at a moment when they cannot be
 acted on.
 
 **Gates.** None.
+
+---
+
+## 87. Flutter and iOS are wired in, not plugged in — **OPEN, raised 18 Sep**
+
+The driving half of this skill does not care what built the app. Maestro taps a
+coordinate, reads a hierarchy, runs a journey and takes a screenshot the same way
+whatever produced the binary, and `driver.sh`, `drivers.sh`, `flow.sh`, `img.sh`,
+`wall.sh` and the journey tooling are all written against Maestro rather than
+against Flutter. That half already generalises.
+
+The *other* half — getting an app onto a device and looking inside it while it
+runs — is Flutter and iOS all the way down, and it is not separated from the
+part that generalises. Wanting to drive a React Native app, or a plain Android or
+iOS one, means either forking the package or teaching every one of these files a
+second way to do its job.
+
+**Where the framework is wired in.** Counted 18 Sep by `grep -ciE
+'flutter|dart|pubspec'`:
+
+| file | hits | what it does that is framework-specific |
+| --- | --- | --- |
+| `remote/build.sh` | 31 | discovers how the project builds, builds for the simulator, installs |
+| `remote/vmservice.sh` | 10 | finds the Dart VM Service base URI and main isolate id |
+| `bin/net.sh` | 9 | reads the app's real HTTP traffic out of the Dart VM Service |
+| `bin/publish.sh` | 5 | republishes that loopback-bound service on the LAN |
+| `remote/gitstate.sh` | 5 | splits tracked changes into build residue and real edits |
+| `bin/preflight.sh` | 3 | is the installed app the code under test |
+| `bin/prefs.sh`, `bin/driver.sh`, `bin/build.sh`, `bin/config.sh`, `bin/hier.sh`, `bin/secrets.sh`, `bin/resolve.py`, `remote/relay.py`, `remote/net.py`, `remote/wall.py` | 1–2 each | a mention apiece, mostly a path or a comment |
+
+**Where the platform is wired in**, separately and just as deeply — `grep -ciE
+'xcrun|simctl|XCUITest|iphonesimulator'`: `remote/wall.py` 11, `remote/build.sh`
+8, `bin/driver.sh` 8, `remote/deviceup.sh` 5, `bin/drivers.sh` 5,
+`remote/driverup.sh` 4, then `wall.sh`, `lib.sh`, `shot.sh`, `prefs.sh`,
+`preflight.sh`, `init.sh` with two or three each. **Nothing under `bin/` or
+`remote/` mentions `adb`, an emulator or Android at all**, so Android is not
+half-done, it is absent.
+
+**Two axes, not one.** Framework (Flutter, React Native, native) decides how the
+app is built and how you see inside it. Platform (iOS simulator, Android
+emulator, a physical device) decides how it is installed and driven. They are
+independent — React Native on Android is a real combination — and the code
+currently assumes one point in that grid without saying so anywhere.
+
+**Approximate shape of the seam.** A runner is a small set of answers, and
+everything else stays as it is:
+
+- **detect** — is this checkout mine? (`pubspec.yaml`, `package.json` with a
+  react-native dependency, `*.xcodeproj`, `build.gradle`)
+- **build and install** — for a given device, returning the installed app id
+- **is the installed build the code under test** — `preflight.sh`'s question,
+  answered per framework
+- **build residue** — the paths `gitstate.sh` should ignore when deciding
+  whether a working tree is dirty
+- **traffic**, optional — the Dart VM Service for Flutter, Metro or a proxy for
+  React Native, nothing at all for native. `net.sh` and `publish.sh` become one
+  runner's answer rather than a feature of the package.
+
+Platform is the same shape: install, list devices, boot, screenshot, and the
+driver bring-up that `driverup.sh` and `deviceup.sh` do for XCUITest.
+
+**Why it is worth doing rather than forking.** Everything expensive in this
+package is in the half that already generalises — the rig, the wall, the journey
+tooling, the driver lifecycle, the SSH and network side that item 85 is about.
+A fork would copy all of it to change `build.sh`.
+
+**Related.** Item 82 is four sessions opening the wrong skill because one builds
+and the other drives; a package that names its runner explicitly makes that
+distinction structural rather than a sentence in a description. `flutter-hot-reload-mac`
+is the sister package and is Flutter by definition — it is not in scope here, but
+whatever seam this item settles on is the one it would plug into.
+
+**Gates.** None. Item 85 touches none of these files.
