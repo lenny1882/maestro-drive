@@ -185,7 +185,11 @@ phase_a() {
   if [ ! -e "$MARKER" ]; then
     mac_needed
 
-    local mac_user mac_name key addr known_user known_name
+    local mac_user mac_name key addr
+    # Assigned, not just declared: `local x` under `set -u` leaves x UNSET, and
+    # on a machine with nothing configured the loops below never assign it. That
+    # aborted the script on the one path that matters most — a fresh machine.
+    local known_user="" known_name=""
     # Defaults come from what is already configured, never from this machine:
     # its own hostname is not the Mac's, which is what the first version offered.
     for _a in $(configured_aliases || true); do
@@ -194,7 +198,7 @@ phase_a() {
     known_name=$(jq -r '(.sandbox.network.allowedDomains // [])[]
                         | select(endswith(".local"))' \
                     "${SETTINGS:-$HOME/.claude/settings.json}" 2>/dev/null | head -1)
-    [ -n "$known_name" ] || known_name=$(awk '/\.local$/ { print $2; exit }' /etc/hosts 2>/dev/null)
+    [ -n "$known_name" ] || known_name=$(awk '/\.local$/ { print $2; exit }' "$HOSTS_FILE" 2>/dev/null)
 
     mac_user=$(ask "the Mac's username" "$known_user")
     mac_name=$(ask "the Mac's .local name" "$known_name")
@@ -746,6 +750,13 @@ c_cycle_and_verify() { # <alias> <device> <static>
 HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
 HOSTS_MARKER="# mac for ios simulator work"
 
+# The Host block on disk, or the address this run just configured for it.
+hosts_addr_for() { # <alias>
+  local a; a=$(ssh_block_hostname "$1")
+  if [ -z "$a" ] && [ "$1" = "${B_ALIAS:-}" ]; then a="${B_ADDR:-}"; fi
+  printf '%s' "$a"
+}
+
 write_etc_hosts() {
   step "/etc/hosts"
   resolve_from_existing
@@ -756,13 +767,24 @@ write_etc_hosts() {
 
   local aliases addr first ordered=""
   aliases=$(configured_aliases || true)
+  # The network configured in THIS run counts even if its Host block is not on
+  # disk yet — a dry run describes the block rather than writing it, and on a
+  # fresh machine that block is the only one there is. Without this the last
+  # step of a first run reports nothing to do.
+  if [ -n "${B_ALIAS:-}" ]; then
+    case " $aliases " in
+      *" $B_ALIAS "*) ;;
+      *) aliases="$aliases $B_ALIAS" ;;
+    esac
+  fi
+  aliases=$(printf '%s\n' $aliases)
   [ -n "$aliases" ] || { warn "no configured networks — skipping"; return 0; }
 
   say "  Every configured address maps to $MAC_NAME. The first one listed is"
   say "  tried first, so name the network you are on most often."
   say ""
   for a in $aliases; do
-    printf '    %-18s %s\n' "$a" "$(ssh_block_hostname "$a")"
+    printf '    %-18s %s\n' "$a" "$(hosts_addr_for "$a")"
   done
   say ""
   # File order is not an answer to "which do you use most" — it is just whichever
@@ -778,14 +800,14 @@ write_etc_hosts() {
 
   for a in $first $aliases; do
     case " $ordered " in *" $a "*) continue ;; esac
-    addr=$(ssh_block_hostname "$a")
+    addr=$(hosts_addr_for "$a")
     [ -n "$addr" ] || continue
     ordered="$ordered $a"
   done
 
   local block; block="$HOSTS_MARKER"$'\n'
   for a in $ordered; do
-    block="$block$(ssh_block_hostname "$a") $MAC_NAME"$'\n'
+    block="$block$(hosts_addr_for "$a") $MAC_NAME"$'\n'
   done
 
   say ""
