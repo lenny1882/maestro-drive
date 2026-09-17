@@ -437,15 +437,6 @@ phase_b() {
   alias=$(printf '%s' "$alias" | tr -d '[:space:]')
   [ -n "$alias" ] || { warn "no alias given"; return 1; }
 
-  # A network already done in this run is almost always a mistake — the loop
-  # asks again after each one, and the obvious answer to "another?" is the
-  # alias just typed.
-  case " ${DONE_ALIASES:-} " in
-    *" $alias "*)
-      warn "$alias was already set up in this run."
-      confirm "Do it again?" n || return 1 ;;
-  esac
-
   existing=$(ssh_block_hostname "$alias" || true)
   [ -n "$existing" ] && say "  $alias already points at $existing."
   addr=$(ask "the Mac's address on this network" "$existing")
@@ -494,7 +485,6 @@ phase_b() {
   DROP_ADDR=""
 
   B_ALIAS="$alias"; B_ADDR="$addr"
-  DONE_ALIASES="${DONE_ALIASES:-} $alias"
 }
 
 # --- phase C ----------------------------------------------------------------
@@ -879,10 +869,13 @@ phase_a_followup
 # One pass per network. C is offered only after a network is added, because it
 # can only configure the network the Mac is currently joined to, and /etc/hosts
 # is written once at the end with whatever address ended up being final.
+# One network per run, not a loop. A second network cannot be finished in the
+# same run anyway: phase C reads every value off the interface the Mac is joined
+# to right now, and phase B's probe against an address the Mac is not on will
+# fail, so the Host block would be written unverified. Joining the other network
+# is a step outside this script, and re-running it afterwards is the same code.
 ADDED=0
-while confirm "$([ "$ADDED" = 0 ] && echo "Set up a network now?" \
-                                 || echo "Set up ANOTHER network?")" \
-              "$([ "$ADDED" = 0 ] && echo y || echo n)"; do
+if confirm "Set up a network now?" y; then
   if phase_b; then
     ADDED=1
     say ""
@@ -890,19 +883,21 @@ while confirm "$([ "$ADDED" = 0 ] && echo "Set up a network now?" \
     say "  just written stays true. Skip it if your router does DHCP reservations."
     # `|| warn` is load-bearing under `set -e`: a phase that reports failure by
     # returning non-zero is the last command of this branch, so without it the
-    # script exits at the `fi` and the loop never comes back. Reporting and
-    # carrying on is the point — one network failing is not the run failing.
+    # script exits at the `fi` and nothing after it runs. Reporting and carrying
+    # on is the point — one phase failing is not the run failing.
     if confirm "Run phase C for $B_ALIAS?" n; then
       phase_c || warn "phase C did not complete for $B_ALIAS"
     fi
     say ""
-    ok "$B_ALIAS is done. Say no below to finish and write /etc/hosts."
+    ok "$B_ALIAS is done."
   fi
-  say ""
-done
+fi
 
 if [ "$ADDED" = 1 ]; then
   write_etc_hosts || warn "/etc/hosts was not written"
+  say ""
+  say "  Join another network and re-run this to add it. Phase A is skipped from"
+  say "  now on, so it is two questions and a check."
 else
   say ""
   say "  Nothing else to do. Re-run this any time you join a new network."
