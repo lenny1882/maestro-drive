@@ -4,6 +4,7 @@
 #   ./wizard.sh            run it
 #   ./wizard.sh --status   what is already in place, change nothing
 #   ./wizard.sh --hosts    rewrite the /etc/hosts block only, to reorder it
+#   ./wizard.sh --dry-run  ask everything, read everything, write nothing
 #
 # Why this exists rather than more prose. reference/setup.md describes all of
 # this correctly and it still gets done wrong, because it spans three files that
@@ -34,11 +35,12 @@ MARKER="$LIB_DIR/phase-a-done"
 SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 DEFAULT_KEY="$HOME/.ssh/mac_rc"
 
-STATUS_ONLY=0; HOSTS_ONLY=0
+STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0
 for a in "$@"; do
   case "$a" in
     --status)  STATUS_ONLY=1 ;;
     --hosts)   HOSTS_ONLY=1 ;;
+    --dry-run) DRY=1 ;;
     -h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
@@ -48,6 +50,11 @@ say()  { printf '%s\n' "$*"; }
 ok()   { printf '  ok    %s\n' "$*"; }
 warn() { printf '  warn  %s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
+# --dry-run prints what would be written and writes nothing. Reads still happen:
+# probing the Mac, listing its networks and reading back the three files are all
+# harmless, and a dry run that skipped them could not show what it would write.
+would() { printf '  would  %s\n' "$*"; }
+dry()   { [ "$DRY" = 1 ]; }
 
 ask() { # ask <prompt> [default] -> answer on stdout
   local prompt="$1" default="${2:-}" reply
@@ -190,9 +197,13 @@ phase_a() {
       # -N '' is not optional. Every script in this package passes
       # BatchMode=yes, under which a passphrase prompt is not a prompt but an
       # immediate failure with no explanation.
-      say "  Creating $key (ed25519, no passphrase)."
-      ssh-keygen -t ed25519 -N '' -f "$key" -C "maestro-remote-mac" >/dev/null
-      ok "created $key"
+      if dry; then
+        would "create $key: ssh-keygen -t ed25519 -N '' -f $key -C maestro-remote-mac"
+      else
+        say "  Creating $key (ed25519, no passphrase)."
+        ssh-keygen -t ed25519 -N '' -f "$key" -C "maestro-remote-mac" >/dev/null
+        ok "created $key"
+      fi
     fi
 
     say ""
@@ -206,6 +217,16 @@ phase_a() {
     say ""
     say "    ssh-copy-id -i $key.pub $mac_user@$addr"
     say ""
+    if dry; then
+      would "run: ssh-copy-id -i $key.pub $mac_user@$addr"
+      would "then verify with: ssh -i $key -o BatchMode=yes $mac_user@$addr true"
+      would "record phase A in $MARKER"
+      PHASE_A_USER="$mac_user"; PHASE_A_NAME="$mac_name"
+      PHASE_A_KEY="$key";       PHASE_A_ADDR="$addr"
+      export PHASE_A_USER PHASE_A_NAME PHASE_A_KEY PHASE_A_ADDR
+      return 0
+    fi
+
     # Foreground, output not captured, no BatchMode. ssh reads the password from
     # /dev/tty, so the prompt reaches the terminal as long as none of those
     # three is broken.
@@ -292,6 +313,7 @@ resolve_from_existing() {
 
 backup_of() { # backup_of <file> -> writes <file>.bak-<stamp>, prints the path
   local f="$1" b="$1.bak-$(date '+%Y%m%d-%H%M%S')"
+  if dry; then printf '%s' "(none taken, dry run)"; return 0; fi
   cp -p "$f" "$b"
   printf '%s' "$b"
 }
@@ -299,6 +321,7 @@ backup_of() { # backup_of <file> -> writes <file>.bak-<stamp>, prints the path
 ssh_block_hostname() { host_field "$1" Hostname; }
 
 ssh_block_set_hostname() { # <alias> <addr>
+  if dry; then would "set Hostname to $2 in the Host $1 block of $SSH_CONFIG"; return 0; fi
   local tmp; tmp=$(mktemp)
   awk -v alias="$1" -v addr="$2" '
     /^[[:space:]]*Host[[:space:]]+/ { inblock = ($2 == alias) }
@@ -310,6 +333,12 @@ ssh_block_set_hostname() { # <alias> <addr>
 }
 
 ssh_block_append() { # <alias> <addr> <user> <key>
+  if dry; then
+    would "append a Host $1 block to $SSH_CONFIG:"
+    printf '           Hostname %s / User %s / IdentityFile %s / ProxyCommand via socat\n' \
+      "$2" "$3" "${4/#$HOME/\~}"
+    return 0
+  fi
   # %s is doubled: ssh_config expands % itself, so a single %s never reaches the
   # shell. The ProxyCommand tunnels through the sandbox proxy when one is set
   # (inside a Claude session) and falls back to a direct connection when it is
@@ -357,6 +386,10 @@ allowed_domains_add() { # <value>...
   say "  $SETTINGS would change:"
   diff <(jq -S . "$SETTINGS") <(jq -S . "$tmp") | sed 's/^/    /' || true
   say ""
+  if dry; then
+    would "apply that to $SETTINGS"
+    rm -f "$tmp"; return 0
+  fi
   if confirm "Apply that?" y; then
     local b; b=$(backup_of "$SETTINGS")
     cat "$tmp" > "$SETTINGS"
@@ -408,14 +441,16 @@ phase_b() {
     else
       b=$(backup_of "$SSH_CONFIG")
       ssh_block_set_hostname "$alias" "$addr"
-      ok "Host $alias: $existing -> $addr (backup: $b)"
+      dry || ok "Host $alias: $existing -> $addr (backup: $b)"
       DROP_ADDR="$existing"
     fi
   else
-    [ -e "$SSH_CONFIG" ] || { mkdir -p "$(dirname "$SSH_CONFIG")"; : > "$SSH_CONFIG"; chmod 600 "$SSH_CONFIG"; }
+    if [ ! -e "$SSH_CONFIG" ] && ! dry; then
+      mkdir -p "$(dirname "$SSH_CONFIG")"; : > "$SSH_CONFIG"; chmod 600 "$SSH_CONFIG"
+    fi
     b=$(backup_of "$SSH_CONFIG")
     ssh_block_append "$alias" "$addr" "$MAC_USER" "$MAC_KEY"
-    ok "Host $alias added (backup: $b)"
+    dry || ok "Host $alias added (backup: $b)"
   fi
 
   # The name covers curl through the proxy; the address covers the SSH tunnel,
@@ -583,6 +618,14 @@ print(" ".join(servers))
   bash -n "$work" || { warn "the spliced script does not parse"; rm -f "$work"; return 1; }
 
   local stage="/tmp/network-change.sh.new"
+  if dry; then
+    would "copy the spliced script to $alias:$stage and the plist to $alias:/tmp/"
+    say ""
+    say "  The profile line it would add:"
+    say "    \"$ssid\") -> manual $static $mask $gw $dns"
+    rm -f "$work"
+    return 0
+  fi
   scp -o BatchMode=yes -q "$work" "$alias:$stage" || { warn "could not copy to the Mac"; rm -f "$work"; return 1; }
   scp -o BatchMode=yes -q "$VENDORED_PLIST" "$alias:/tmp/networkChange.plist" || true
   rm -f "$work"
@@ -738,6 +781,10 @@ PY
   say "  $HOSTS_FILE would change:"
   diff "$HOSTS_FILE" "$tmp" | sed 's/^/    /' || true
   say ""
+  if dry; then
+    would "back up $HOSTS_FILE and write the block above, with sudo"
+    rm -f "$tmp"; return 0
+  fi
   if confirm "Apply that?" n; then
     sudo cp -p "$HOSTS_FILE" "$HOSTS_FILE.bak-$(date '+%Y%m%d-%H%M%S')"
     sudo cp "$tmp" "$HOSTS_FILE"
@@ -751,6 +798,7 @@ PY
 # --- main -------------------------------------------------------------------
 
 say "== maestro-remote-mac setup wizard"
+dry && say "   --dry-run: everything is asked and read, nothing is written."
 
 command -v jq >/dev/null 2>&1 || {
   say "  jq is needed and is missing — install it and re-run."
