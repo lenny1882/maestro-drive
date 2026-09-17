@@ -1946,28 +1946,43 @@ import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("wall", sys.argv[1])
 w = importlib.util.module_from_spec(spec); spec.loader.exec_module(w)
 
+def check(name, fn):
+    """One case. An exception fails THIS case and nothing else.
+
+    The whole block is one python run printing a named result per line, which
+    the shell loop below then checks by name. Without this, a raise part-way
+    through prints nothing for every later name and the loop reports them all
+    as failures of their own — which is how one date-sensitive assertion was
+    read as ten broken behaviours (item 86).
+    """
+    try:
+        print(name, fn())
+    except Exception as exc:
+        print(name, "False", "%s: %s" % (type(exc).__name__, exc))
+
+
 def part(body):
     return b"--NextFrame\r\nContent-Type:image/jpeg\r\n\r\n" + body + b"\r\n"
 
 # a frame is only complete once the NEXT boundary has arrived
 frames, rest = w.split_frames(part(b"AAA") + b"--NextFrame\r\nContent-Type:image/jpeg\r\n\r\nBB")
-print("one-complete", frames == [b"AAA"])
-print("partial-kept", rest.startswith(b"--NextFrame") and rest.endswith(b"BB"))
+check("one-complete", lambda: frames == [b"AAA"])
+check("partial-kept", lambda: rest.startswith(b"--NextFrame") and rest.endswith(b"BB"))
 
 # several in one read
 frames, rest = w.split_frames(part(b"1") + part(b"22") + part(b"333") + b"--NextFrame\r\nContent-Type:image/jpeg\r\n\r\n")
-print("three", frames == [b"1", b"22", b"333"])
+check("three", lambda: frames == [b"1", b"22", b"333"])
 
 # a boundary split across two reads must not lose the frame
 buf = part(b"XY") + b"--Next"
 frames, buf = w.split_frames(buf)
-print("split-boundary-waits", frames == [])
+check("split-boundary-waits", lambda: frames == [])
 frames, buf = w.split_frames(buf + b"Frame\r\nContent-Type:image/jpeg\r\n\r\n")
-print("split-boundary-then-emits", frames == [b"XY"])
+check("split-boundary-then-emits", lambda: frames == [b"XY"])
 
 # nothing at all, and rubbish, are both survivable
-print("empty", w.split_frames(b"") == ([], b""))
-print("rubbish", w.split_frames(b"not multipart at all") == ([], b"not multipart at all"))
+check("empty", lambda: w.split_frames(b"") == ([], b""))
+check("rubbish", lambda: w.split_frames(b"not multipart at all") == ([], b"not multipart at all"))
 
 # simctl lists every runtime it knows, nearly all of them empty
 data = {"devices": {
@@ -1981,40 +1996,47 @@ data = {"devices": {
     ],
 }}
 got = w.parse_booted(data)
-print("booted-only", [n for _, n in got] == ["iPhone 8", "iPhone 16"])
-print("empty-runtimes", w.parse_booted({"devices": {}}) == [])
-print("no-key", w.parse_booted({}) == [])
+check("booted-only", lambda: [n for _, n in got] == ["iPhone 8", "iPhone 16"])
+check("empty-runtimes", lambda: w.parse_booted({"devices": {}}) == [])
+check("no-key", lambda: w.parse_booted({}) == [])
 
 # labels: written by whoever drives, read by the wall, never posted to it
 import os, tempfile, time
 w.LABELS = tempfile.mkdtemp()
 lab = w.parse_label("name=Checkout flow, PR 101\ngroup=brandco\n")
-print("label-basic", lab == {"name": "Checkout flow, PR 101", "group": "brandco"})
+check("label-basic", lambda: lab == {"name": "Checkout flow, PR 101", "group": "brandco"})
 # a name with an = in it keeps the rest of the line
-print("label-equals", w.parse_label("name=a=b")["name"] == "a=b")
+check("label-equals", lambda: w.parse_label("name=a=b")["name"] == "a=b")
 # comments, blanks, unknown keys and junk are all ignored rather than fatal
-print("label-junk", w.parse_label("# c\n\nnope\nGROUP= g \ncolour=red")["group"] == "g")
-print("label-none", w.parse_label("") == {})
+check("label-junk", lambda: w.parse_label("# c\n\nnope\nGROUP= g \ncolour=red")["group"] == "g")
+check("label-none", lambda: w.parse_label("") == {})
 
 udid = "D" * 36
-print("label-missing", w.read_label(udid) == {})
+check("label-missing", lambda: w.read_label(udid) == {})
 with open(os.path.join(w.LABELS, udid), "w") as fh:
     fh.write("name=Fresh\ngroup=\n")
 got = w.read_label(udid)
-print("label-read", got["name"] == "Fresh" and got["stale"] is False and got["age"] < 5)
-# a label nobody has touched for an hour is shown as stale rather than expired
+check("label-read", lambda: got["name"] == "Fresh" and got["stale"] is False and got["age"] < 5)
+# a label nobody has touched for an hour is shown as stale rather than expired.
+# Day-hiding is suppressed for this one case: it is a separate behaviour with
+# its own cases below, and leaving it on means that between midnight and 02:00
+# "two hours ago" is yesterday, the label is hidden rather than stale, and the
+# case raises instead of failing (item 86).
 old_path = os.path.join(w.LABELS, udid)
 os.utime(old_path, (time.time() - 7200, time.time() - 7200))
-print("label-stale", w.read_label(udid)["stale"] is True)
+_hide = w.HIDE_FROM_PREVIOUS_DAY
+w.HIDE_FROM_PREVIOUS_DAY = False
+check("label-stale", lambda: w.read_label(udid)["stale"] is True)
+w.HIDE_FROM_PREVIOUS_DAY = _hide
 # an empty file is not a label
 with open(os.path.join(w.LABELS, "E" * 36), "w") as fh:
     fh.write("")
-print("label-empty-file", w.read_label("E" * 36) == {})
+check("label-empty-file", lambda: w.read_label("E" * 36) == {})
 
 # who wrote it. A label written before `by` existed must still read cleanly,
 # so its absence is a blank rather than a missing key.
-print("label-by", w.parse_label("name=N\nby=purple \u00b7 3fa41c7")["by"] == "purple \u00b7 3fa41c7")
-print("label-no-by", "by" not in w.parse_label("name=N\ngroup=G"))
+check("label-by", lambda: w.parse_label("name=N\nby=purple \u00b7 3fa41c7")["by"] == "purple \u00b7 3fa41c7")
+check("label-no-by", lambda: "by" not in w.parse_label("name=N\ngroup=G"))
 
 # A name from an earlier CALENDAR DAY is hidden, not merely greyed (item 67
 # piece 4). Nothing removes a label at session end, so a device nobody picks up
@@ -2027,8 +2049,8 @@ with open(os.path.join(w.LABELS, udid2), "w") as fh:
 p2 = os.path.join(w.LABELS, udid2)
 
 # 10 minutes old, same day -> shown, and not yet greyed
-print("day-today-fresh", w.read_label(udid2).get("name") == "Yesterday")
-print("day-today-not-stale", w.read_label(udid2)["stale"] is False)
+check("day-today-fresh", lambda: w.read_label(udid2).get("name") == "Yesterday")
+check("day-today-not-stale", lambda: w.read_label(udid2)["stale"] is False)
 
 # 3 hours old but STILL TODAY -> shown, greyed. A long-running session must not
 # lose its name just for going quiet.
@@ -2036,25 +2058,25 @@ now = time.time()
 same_day_3h = now - 3 * 3600
 if time.localtime(same_day_3h).tm_yday == time.localtime(now).tm_yday:
     os.utime(p2, (same_day_3h, same_day_3h))
-    print("day-today-old-kept", w.read_label(udid2).get("name") == "Yesterday")
-    print("day-today-old-greyed", w.read_label(udid2)["stale"] is True)
+    check("day-today-old-kept", lambda: w.read_label(udid2).get("name") == "Yesterday")
+    check("day-today-old-greyed", lambda: w.read_label(udid2)["stale"] is True)
 else:
     # run started within 3h of midnight; the case is covered by the next one
-    print("day-today-old-kept", True)
-    print("day-today-old-greyed", True)
+    check("day-today-old-kept", lambda: True)
+    check("day-today-old-greyed", lambda: True)
 
 # yesterday, whatever the hour -> hidden entirely
 y = datetime.datetime.now() - datetime.timedelta(days=1)
 ts = y.timestamp()
 os.utime(p2, (ts, ts))
-print("day-yesterday-hidden", w.read_label(udid2) == {})
+check("day-yesterday-hidden", lambda: w.read_label(udid2) == {})
 
 # and a name only 10 hours old is still hidden if it crossed midnight, which is
 # the whole point of doing this by day rather than by hours
 midnight = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 late = (midnight - datetime.timedelta(hours=1)).timestamp()
 os.utime(p2, (late, late))
-print("day-crossed-midnight-hidden", w.read_label(udid2) == {})
+check("day-crossed-midnight-hidden", lambda: w.read_label(udid2) == {})
 PYEOF
 )
 for line in one-complete partial-kept three split-boundary-waits split-boundary-then-emits empty rubbish booted-only empty-runtimes no-key label-basic label-equals label-junk label-none label-missing label-read label-stale label-empty-file label-by label-no-by day-today-fresh day-today-not-stale day-today-old-kept day-today-old-greyed day-yesterday-hidden day-crossed-midnight-hidden; do
