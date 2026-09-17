@@ -30,7 +30,7 @@ set -euo pipefail
 
 LIB_DIR="${LIB_DIR:-$HOME/.local/share/maestro-remote-mac}"
 MARKER="$LIB_DIR/phase-a-done"
-SSH_CONFIG="$HOME/.ssh/config"
+SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 DEFAULT_KEY="$HOME/.ssh/mac_rc"
 
 STATUS_ONLY=0
@@ -263,31 +263,225 @@ phase_a_followup() {
   fi
 }
 
-# --- phases B and C ---------------------------------------------------------
+# --- phase B ----------------------------------------------------------------
+# One network. The Host block and the allowedDomains entry are written here
+# because phase C needs both to reach the Mac at all. /etc/hosts waits until the
+# address is final, which is after C has had its chance to change it.
+
+SETTINGS="${SETTINGS:-$HOME/.claude/settings.json}"
+
+# Phase A exports these on a fresh run. On a re-run they come back out of the
+# files, which are the record — there is no cache to go stale.
+resolve_from_existing() {
+  local a
+  MAC_USER="${PHASE_A_USER:-}"; MAC_KEY="${PHASE_A_KEY:-}"; MAC_NAME="${PHASE_A_NAME:-}"
+  for a in $(configured_aliases || true); do
+    [ -n "$MAC_USER" ] || MAC_USER=$(host_field "$a" User)
+    [ -n "$MAC_KEY" ]  || MAC_KEY=$(host_field "$a" IdentityFile)
+    [ -n "$MAC_USER" ] && [ -n "$MAC_KEY" ] && break
+  done
+  MAC_KEY="${MAC_KEY/#\~/$HOME}"
+  # The .local name is in allowedDomains already if any network was set up.
+  if [ -z "$MAC_NAME" ] && [ -r "$SETTINGS" ]; then
+    MAC_NAME=$(jq -r '(.sandbox.network.allowedDomains // [])[]
+                      | select(endswith(".local"))' "$SETTINGS" 2>/dev/null | head -1)
+  fi
+}
+
+backup_of() { # backup_of <file> -> writes <file>.bak-<stamp>, prints the path
+  local f="$1" b="$1.bak-$(date '+%Y%m%d-%H%M%S')"
+  cp -p "$f" "$b"
+  printf '%s' "$b"
+}
+
+ssh_block_hostname() { host_field "$1" Hostname; }
+
+ssh_block_set_hostname() { # <alias> <addr>
+  local tmp; tmp=$(mktemp)
+  awk -v alias="$1" -v addr="$2" '
+    /^[[:space:]]*Host[[:space:]]+/ { inblock = ($2 == alias) }
+    inblock && tolower($1) == "hostname" { print "\tHostname " addr; next }
+    { print }
+  ' "$SSH_CONFIG" > "$tmp"
+  cat "$tmp" > "$SSH_CONFIG"
+  rm -f "$tmp"
+}
+
+ssh_block_append() { # <alias> <addr> <user> <key>
+  # %s is doubled: ssh_config expands % itself, so a single %s never reaches the
+  # shell. The ProxyCommand tunnels through the sandbox proxy when one is set
+  # (inside a Claude session) and falls back to a direct connection when it is
+  # not (an ordinary terminal, including this wizard).
+  local key_short="${4/#$HOME/\~}"
+  cat >> "$SSH_CONFIG" <<BLOCK
+
+Host $1
+	Hostname $2
+	User $3
+	IdentityFile $key_short
+	ConnectTimeout 15
+	ServerAliveInterval 30
+	ProxyCommand sh -c 'if [ -n "\$grpc_proxy" ]; then A=\$(printf "%%s" "\$grpc_proxy" | sed -e "s|^http://||" -e "s|@.*||"); exec socat - PROXY:localhost:%h:%p,proxyport=3128,proxyauth=\$A; else exec nc %h %p; fi'
+BLOCK
+}
+
+# $DROP_ADDR, if set, is removed in the same pass. An address that a Host block
+# no longer points at is not the Mac any more, and leaving it behind means the
+# list grows by one every time a network changes address.
+allowed_domains_add() { # <value>...
+  [ -r "$SETTINGS" ] || { warn "$SETTINGS does not exist — create it first"; return 1; }
+  jq empty "$SETTINGS" 2>/dev/null || { warn "$SETTINGS is not valid JSON"; return 1; }
+  local tmp; tmp=$(mktemp)
+  local d
+  cp "$SETTINGS" "$tmp"
+  if [ -n "${DROP_ADDR:-}" ]; then
+    jq --arg d "$DROP_ADDR" '
+      .sandbox.network.allowedDomains =
+        ((.sandbox.network.allowedDomains // []) | map(select(. != $d)))
+    ' "$tmp" > "$tmp.next" && mv "$tmp.next" "$tmp"
+  fi
+  for d in "$@"; do
+    jq --arg d "$d" '
+      .sandbox.network.allowedDomains =
+        ((.sandbox.network.allowedDomains // [])
+         | if index($d) then . else . + [$d] end)
+    ' "$tmp" > "$tmp.next" && mv "$tmp.next" "$tmp"
+  done
+  if diff -q <(jq -S . "$SETTINGS") <(jq -S . "$tmp") >/dev/null; then
+    ok "allowedDomains already covers: $*"
+    rm -f "$tmp"; return 0
+  fi
+  say ""
+  say "  $SETTINGS would change:"
+  diff <(jq -S . "$SETTINGS") <(jq -S . "$tmp") | sed 's/^/    /' || true
+  say ""
+  if confirm "Apply that?" y; then
+    local b; b=$(backup_of "$SETTINGS")
+    cat "$tmp" > "$SETTINGS"
+    ok "written (backup: $b)"
+  else
+    warn "left unchanged — the Mac will read as switched off from inside a session"
+  fi
+  rm -f "$tmp"
+}
 
 phase_b() {
   step "Phase B — a network"
+  resolve_from_existing
+  if [ -z "${MAC_USER:-}" ] || [ -z "${MAC_KEY:-}" ]; then
+    warn "no Mac user or key found — run phase A first"
+    return 1
+  fi
+
+  mac_needed
+
+  local alias addr existing
+  say "  Name the alias for where the Mac is, not for the Mac: mac-a, mac-b."
+  alias=$(ask "alias for this network")
+  [ -n "$alias" ] || { warn "no alias given"; return 1; }
+
+  existing=$(ssh_block_hostname "$alias" || true)
+  [ -n "$existing" ] && say "  $alias already points at $existing."
+  addr=$(ask "the Mac's address on this network" "$existing")
+  [ -n "$addr" ] || { warn "no address given"; return 1; }
+
+  say ""
+  say "  Checking the Mac answers there before writing anything."
+  if ssh -i "$MAC_KEY" -o BatchMode=yes -o ConnectTimeout=8 \
+         -o StrictHostKeyChecking=accept-new "$MAC_USER@$addr" true 2>/dev/null; then
+    ok "$addr answers and the key works"
+  else
+    warn "$addr did not answer. Refused means Remote Login is off; timed out means"
+    warn "the wrong address, or the Mac is not on this network."
+    confirm "Write the configuration anyway?" n || return 1
+  fi
+
+  # ~/.ssh/config is the user's file. Two blocks with the same Host name are not
+  # merged — ssh takes the first value it obtains for each keyword, so the second
+  # is silently dead. Hence update in place rather than append when one exists.
+  local b
+  if [ -n "$existing" ]; then
+    if [ "$existing" = "$addr" ]; then
+      ok "Host $alias already has Hostname $addr"
+    else
+      b=$(backup_of "$SSH_CONFIG")
+      ssh_block_set_hostname "$alias" "$addr"
+      ok "Host $alias: $existing -> $addr (backup: $b)"
+      DROP_ADDR="$existing"
+    fi
+  else
+    [ -e "$SSH_CONFIG" ] || { mkdir -p "$(dirname "$SSH_CONFIG")"; : > "$SSH_CONFIG"; chmod 600 "$SSH_CONFIG"; }
+    b=$(backup_of "$SSH_CONFIG")
+    ssh_block_append "$alias" "$addr" "$MAC_USER" "$MAC_KEY"
+    ok "Host $alias added (backup: $b)"
+  fi
+
+  # The name covers curl through the proxy; the address covers the SSH tunnel,
+  # which asks the proxy for a numeric host because that is what Hostname says.
+  if [ -n "${MAC_NAME:-}" ]; then
+    allowed_domains_add "$MAC_NAME" "$addr" || true
+  else
+    allowed_domains_add "$addr" || true
+  fi
+  DROP_ADDR=""
+
+  B_ALIAS="$alias"; B_ADDR="$addr"
+}
+
+phase_c() {
+  step "Phase C — a fixed address on the Mac"
   warn "not built yet. See BACKLOG.md item 85 for the settled design."
-  say  "  It writes a Host block and an allowedDomains entry for one network,"
-  say  "  then offers phase C, then writes /etc/hosts last."
+  say  "  It installs network-change.sh and the plist on the Mac, sets a static"
+  say  "  address, cycles Wi-Fi and polls the new address."
+}
+
+write_etc_hosts() {
+  step "/etc/hosts"
+  warn "not built yet — it is written last, once the address is final."
 }
 
 # --- main -------------------------------------------------------------------
 
 say "== maestro-remote-mac setup wizard"
 
+command -v jq >/dev/null 2>&1 || {
+  say "  jq is needed and is missing — install it and re-run."
+  exit 1
+}
+
 if [ "$STATUS_ONLY" = 1 ]; then
   step "Phase A"
   [ -e "$MARKER" ] && ok "marker: $(cat "$MARKER")" || warn "no marker at $MARKER"
   phase_a_status || true
+  step "Networks"
+  for a in $(configured_aliases || true); do
+    ok "$a -> $(ssh_block_hostname "$a")"
+  done
   exit 0
 fi
 
 phase_a
 phase_a_followup
 
-if confirm "Set up a network now?" y; then
-  phase_b
+# One pass per network. C is offered only after a network is added, because it
+# can only configure the network the Mac is currently joined to, and /etc/hosts
+# is written once at the end with whatever address ended up being final.
+ADDED=0
+while confirm "Set up a network now?" "$([ "$ADDED" = 0 ] && echo y || echo n)"; do
+  if phase_b; then
+    ADDED=1
+    say ""
+    say "  Phase C gives the Mac a fixed address on this network, so the address"
+    say "  just written stays true. Skip it if your router does DHCP reservations."
+    if confirm "Run phase C for $B_ALIAS?" n; then
+      phase_c
+    fi
+  fi
+  say ""
+done
+
+if [ "$ADDED" = 1 ]; then
+  write_etc_hosts
 else
   say ""
   say "  Nothing else to do. Re-run this any time you join a new network."
