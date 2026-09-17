@@ -439,7 +439,10 @@ phase_b() {
 
   existing=$(ssh_block_hostname "$alias" || true)
   [ -n "$existing" ] && say "  $alias already points at $existing."
-  addr=$(ask "the Mac's address on this network" "$existing")
+  # Phase A asked where the Mac is and proved the key against it, so that
+  # address is both fresher and already verified. It wins over whatever the
+  # block recorded on an earlier run; the line above still shows the difference.
+  addr=$(ask "the Mac's address on this network" "${PHASE_A_ADDR:-$existing}")
   [ -n "$addr" ] || { warn "no address given"; return 1; }
 
   say ""
