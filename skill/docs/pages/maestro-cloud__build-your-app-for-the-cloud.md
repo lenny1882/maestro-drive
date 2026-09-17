@@ -1,0 +1,162 @@
+> For the complete documentation index, see [llms.txt](https://docs.maestro.dev/llms.txt). Markdown versions of documentation pages are available by appending `.md` to page URLs; this page is available as [Markdown](https://docs.maestro.dev/maestro-cloud/build-your-app-for-the-cloud.md).
+
+# Build your app for the cloud
+
+Before you can execute tests on Maestro Cloud, you must provide a mobile application binary (APK or `.app` directory). This page provides the specific technical requirements and build instructions for the most common development environments to ensure your app is compatible with Maestro's cloud infrastructure.
+
+{% hint style="info" %}
+**Project-specific build requirements**
+
+The instructions on this page cover typical ways to build mobile applications. However, your project may have unique pipelines, specific command-line switches, or environment configurations (e.g., specialized Expo or React Native build scripts).
+
+We recommend checking your project's README, internal developer documentation, or the official documentation for your chosen framework for exact build steps.
+{% endhint %}
+
+{% hint style="success" %}
+This feature requires a Cloud plan. Start for free at [**maestro.dev**](https://signin.maestro.dev/sign-up).
+{% endhint %}
+
+### Android build instructions
+
+Maestro Cloud now uses ARM architectures for Android. Ensure your app binary meets the following requirements:
+
+* **Format:** APK only. Android App Bundles (.aab) are not currently supported.
+* **Architecture:** Must be compatible with ARM or be a multi-architecture build. x86-only APKs will fail to launch in the cloud environment.
+* **Build Type:** Both Release and Debug builds are supported.
+
+To build your app, use one of the following approaches:
+
+{% tabs %}
+{% tab title="Build with Gradle" %}
+Run the following commands from your project root to generate the APK.
+
+```bash
+# To generate a Debug build
+./gradlew assembleDebug
+
+# To generate a Release build
+./gradlew assembleRelease
+```
+
+Once finished, find the file in the `app/build/outputs/apk/` directory.
+{% endtab %}
+
+{% tab title="Build with Flutter" %}
+Use the Flutter CLI to create a compatible APK. You can use anyone of the following commands:
+
+```bash
+# Debug build (Recommended for initial testing)
+flutter build apk --debug
+
+# Release build
+flutter build apk
+```
+
+The result will be located in the `build/app/outputs/flutter-apk/` folder.
+{% endtab %}
+{% endtabs %}
+
+### iOS build instructions
+
+Maestro Cloud runs iOS tests on Simulators. Do not upload binaries built for physical iOS devices.
+
+* **Format:** `.app` bundle.
+* **Target:** Must be built for the iOS Simulator.
+
+To build your app, use one of the following options:
+
+{% tabs %}
+{% tab title="Build with Xcode CLI" %}
+Use the `xcodebuild` command to create a simulator build. The following example builds a project named `MyApp` and saves the output to a `build/` folder:
+
+```bash
+xcodebuild -project MyApp.xcodeproj \
+  -scheme MyApp \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  CONFIGURATION_BUILD_DIR=$PWD/build
+```
+
+The `.app` bundle will be available in the `build/` directory.
+{% endtab %}
+
+{% tab title="Build with Fastlane" %}
+If you use [Fastlane](https://fastlane.tools/) for automation, the script should look the following one to generate the app file:
+
+```ruby
+xcodebuild(
+    configuration: build_config[:configuration],
+    scheme: build_config[:scheme],
+    workspace: build_config[:xcode_workspace],
+    xcargs: "-quiet -sdk 'iphonesimulator' -destination 'generic/platform=iOS Simulator'",
+    derivedDataPath: IOS_DERIVED_DATA_PATH # this will contain the .app which we need later on
+)
+```
+
+{% endtab %}
+
+{% tab title="Building with Flutter" %}
+Use the following command to create a simulator-compatible debug build:
+
+```bash
+flutter build ios --debug --simulator
+```
+
+The app bundle is located in the `build/ios/iphonesimulator/` directory.
+{% endtab %}
+{% endtabs %}
+
+### Run the build
+
+Once your binary is ready, you can upload it to Maestro Cloud using the Maestro CLI or Maestro Studio:
+
+{% tabs %}
+{% tab title="Maestro CLI" %}
+Use the command:
+
+```bash
+maestro cloud --app-binary [your-app-binary] --flows [your-flow-directory]
+```
+
+{% endtab %}
+
+{% tab title="Maestro Studio" %}
+You can choose to run all or a single Flow on Maestro Cloud:
+
+* **Run all Flows:** Click on the **Run on Cloud** button in the sidebar and then select your app binary.
+* **Run a single Flow**: Open the Flow file, click on the **Run on Cloud** button at the top of the file, and then select your app binary.
+  {% endtab %}
+  {% endtabs %}
+
+#### Next steps
+
+Now that you know how to build your app, you can explore one of the following guide categories to improve your use of Maestro Cloud:
+
+* [CI/CD integration](/maestro-cloud/ci-cd-integration.md): Move your tests out of your local terminal and into your deployment pipeline.
+* [Environment configuration](/maestro-cloud/environment-configuration.md): Customize the cloud hardware to match your users' real-world conditions.
+* [Notifications](/maestro-cloud/notifications.md): Set up Slack, Email, or Webhooks to keep your team informed of every pass or failure.
+* [Advanced features](/maestro-cloud/advanced-features.md): Use binary reuse to speed up iterations and manage secrets via environment variables.
+
+If you haven’t tested the Maestro CLI yet, check the [Run tests on Maestro Cloud](/maestro-cloud/run-tests-on-maestro-cloud.md) guide.
+
+
+---
+
+# Agent Instructions
+This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
+
+## Querying This Documentation
+If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+
+Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+
+```
+GET https://docs.maestro.dev/maestro-cloud/build-your-app-for-the-cloud.md?ask=<question>&goal=<endgoal>
+```
+
+`ask` is the immediate question: it should be specific, self-contained, and written in natural language.
+`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+
+The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
+
+Use this mechanism when the answer is not explicitly present in the current page, you need clarification or additional context, or you want to retrieve related documentation sections.

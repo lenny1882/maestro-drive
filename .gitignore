@@ -1,0 +1,21 @@
+# Editor and OS noise
+*.bak
+*.bak-*
+.DS_Store
+
+# Sandbox bookkeeping the Claude Code sandbox writes into the repo root. Not
+# part of the package — but .claude/skills/ holds real project skills (the
+# release process), so that one is tracked deliberately.
+.claude/*
+!.claude/skills/
+.mcp.json
+
+# Compiled Python. Running the skill writes these into whatever directory it
+# loaded from, including a --link install, where that directory is this repo.
+# manifest.sh ignores them when it checks the live tree for the same reason.
+__pycache__/
+*.pyc
+
+# Where bin/notes.sh promote parks a project's tooling findings until someone
+# folds them into reference/. Work in progress, not payload.
+skill/reference/staging/
