@@ -58,7 +58,10 @@ cards — and 64, 65 and 66 were done on 15 Sep. All four are in
 **85 was raised on 17 Sep** and is the first item about setting the skill up
 rather than running it.
 
-**Next item number: 86.** Items 1–85 are allocated; new items start from 86.
+**86 was raised on 18 Sep** by the suite going red with no code change — a
+test that is only correct when it is not shortly after midnight.
+
+**Next item number: 87.** Items 1–86 are allocated; new items start from 87.
 
 ---
 
@@ -433,5 +436,55 @@ had. Both should cross-reference this one.
 **Why a wizard and not more prose.** The same argument items 51 and 56 made: the
 instructions exist, are correct, and are read at a moment when they cannot be
 acted on.
+
+**Gates.** None.
+
+---
+
+## 86. Ten test cases fail for two hours every night — **OPEN, raised 18 Sep**
+
+The package suite went from **52 passed, 0 failed** to **49 passed, 3 failed**
+with no code change between the two runs, and the skill's own suite from 360 to
+350. The variable was the clock: the second run was shortly after midnight.
+
+**One assertion is date-sensitive and nine more are collateral.**
+`skill/test/run-tests.sh:2007` backdates a label's mtime by two hours and expects
+`read_label` to report it stale:
+
+```python
+os.utime(old_path, (time.time() - 7200, time.time() - 7200))
+print("label-stale", w.read_label(udid)["stale"] is True)
+```
+
+`read_label` in `skill/remote/wall.py` returns `{}` for any label whose mtime
+falls on a different calendar day, because `HIDE_FROM_PREVIOUS_DAY` is on — which
+is correct behaviour and has its own cases further down the same block. Between
+00:00 and 02:00, "two hours ago" is yesterday, so the label is hidden rather than
+stale and `["stale"]` raises `KeyError`.
+
+**The other nine are not separate failures.** The whole wall section is one
+`python3` heredoc printing a named result per line, which a shell loop then
+checks by name. An exception part-way through means every name after it prints
+nothing and is reported as "no result". `label-read` passes, `label-stale`
+raises, and `label-empty-file`, `label-by`, `label-no-by`, `day-today-fresh`,
+`day-today-not-stale`, `day-today-old-kept`, `day-today-old-greyed`,
+`day-yesterday-hidden` and `day-crossed-midnight-hidden` are all collateral.
+
+**Two separate problems, then.** The brittle assertion, and a harness shape where
+one exception silently takes out nine unrelated cases and reports them as
+failures of their own. The second is the worse of the two: it makes the output
+lie about which behaviour broke.
+
+**Fix.** For the assertion, set `w.HIDE_FROM_PREVIOUS_DAY = False` around the
+staleness case — staleness and day-hiding are separate behaviours and the
+day-hiding ones are already tested on their own, so suppressing one while
+checking the other is what the case means. For the harness, either wrap each
+`print` so an exception is attributed to its own case, or split the block. The
+first is smaller and keeps the single-process design.
+
+**Why it matters beyond the two hours.** `test/run-tests.sh` is the release gate
+— item 17 put it there so a release cannot be cut past it. A gate that fails on
+the clock is one that gets overridden, and the habit of overriding it is the
+thing that lets a real failure through.
 
 **Gates.** None.
