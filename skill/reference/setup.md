@@ -15,7 +15,7 @@ needs changing:
 | `<mac>.local` | the Mac's own name — `scutil --get LocalHostName` on it, plus `.local` |
 | `<mac-ip>` | the Mac's address on that network — `ipconfig getifaddr en0` on it |
 | `<mac-user>` | the login account on the Mac |
-| `<key>` | the SSH key file this uses |
+| `<key>` | the SSH key file this uses — `mac_rc` unless you chose another |
 | `<java-home>` | wherever step 1 found a JDK |
 | `<bundle-id>` | the app under test |
 
@@ -48,17 +48,32 @@ Generate one for this purpose rather than reusing a personal key, and install
 it on the Mac:
 
 ```sh
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/<key> -C "maestro-remote-mac"
-ssh-copy-id -i ~/.ssh/<key>.pub <mac-user>@<mac-ip>
-chmod 600 ~/.ssh/<key>
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/mac_rc -C "maestro-remote-mac"
+ssh-copy-id -i ~/.ssh/mac_rc.pub <mac-user>@<mac-ip>
 ```
 
-Password authentication is not an option here. Every script passes
-`BatchMode=yes`, so a password prompt is not a prompt — it is an immediate
-failure with no explanation.
+`ed25519` because there is no key size to choose and so none to get wrong. An
+existing RSA key is fine and does not need replacing — 3072 is strong enough and
+the Mac already trusts it.
 
-`ssh-copy-id` from inside a Claude session will not work; run it in your own
-terminal, where the network is unrestricted.
+`-N ''` gives the key an empty passphrase. **Two different things fail
+identically here.** Password authentication — the Mac's login password — is not
+an option, because every script passes `BatchMode=yes` and a password prompt is
+then not a prompt but an immediate failure with no explanation. A *key
+passphrase* fails the same way, and `ssh-keygen` asks for one by default, so
+without `-N ''` the key is unusable by anything in this package unless
+`ssh-agent` is holding it.
+
+No `chmod` needed: `ssh-keygen` creates the private key `0600` already.
+
+`mac_rc` is only a name; use another if you prefer. Nothing stores the path —
+the `IdentityFile` line in the `Host` block below is the record.
+
+`ssh-copy-id` authenticates with the Mac's **login password**, prompted at your
+terminal; `-i` only names the key to copy. It will not work from inside a Claude
+session — run it in your own terminal, where the network is unrestricted. Once
+per machine, not per network: `authorized_keys` is one file on the Mac whatever
+address reaches it.
 
 ## 3. `~/.ssh/config`
 
@@ -131,6 +146,11 @@ Both, deliberately. The resolver returns both addresses and the client tries
 them in turn, so the same name follows the Mac between networks with nothing to
 change. It also means a lookup always "succeeds" with one dead address in the
 list — a slow first connection that then works is this, not a fault.
+
+**File order is try order.** Every address ahead of the live one costs a full
+connect timeout before anything happens, so put the network you are on most
+often first. With three networks listed, being on the third is two timeouts on
+every first connection.
 
 Nothing in the skill hardcodes an address. `MAC_FQDN` holds this name for URLs;
 `bin/macip.sh` asks the Mac directly (`ipconfig getifaddr en0`) on the rare
