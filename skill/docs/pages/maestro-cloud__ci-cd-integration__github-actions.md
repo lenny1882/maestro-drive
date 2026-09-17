@@ -1,0 +1,157 @@
+> For the complete documentation index, see [llms.txt](https://docs.maestro.dev/llms.txt). Markdown versions of documentation pages are available by appending `.md` to page URLs; this page is available as [Markdown](https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions.md).
+
+# GitHub Actions
+
+Maestro Cloud has a integration with GitHub Actions that allows you to automate your mobile and web testing pipelines. By using the official [Maestro Cloud GitHub Action](https://github.com/marketplace/actions/maestro-cloud-upload-action), you can trigger tests on every push or pull request and view results directly in the Maestro Console.
+
+{% hint style="info" %}
+**Maestro Cloud Plan required.**
+
+GitHub Actions integration is available on the [Maestro Cloud Plan](https://signin.maestro.dev/sign-up).
+{% endhint %}
+
+### Configuration and usage
+
+The following steps describe how to configure and use the GitHub Action to run Maestro tests.
+
+{% stepper %}
+{% step %}
+**Add your API key secret**
+
+The GitHub Action requires an API key to authenticate with Maestro Cloud. You must expose your API key as a [GitHub Repository Secret](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets):
+
+1. Navigate to your GitHub repository and click **Settings**.
+2. In the sidebar, click **Secrets and variables** > **Actions**.
+3. Click **New repository secret**.
+4. Name the secret `MAESTRO_API_KEY` and paste your API key from the [Maestro Dashboard](https://app.maestro.dev/) into the **Secret** field.
+5. Click **Add secret**.
+   {% endstep %}
+
+{% step %}
+**Add your Project ID**
+
+You can find your Project ID in the **Settings** section of the [Maestro Dashboard](https://app.maestro.dev/). Open the **Settings** menu and select the desired project to have access to the ID. While not a secret, you can also store it as a Repository Secret (e.g., `MAESTRO_PROJECT_ID`) for convenience.
+
+<figure><img src="/files/HHnuXLDCqiiMZqtefbBn" alt=""><figcaption></figcaption></figure>
+{% endstep %}
+
+{% step %}
+**Update your action**
+
+Add the following step to your workflow `.yaml` file. This basic configuration uploads your app and runs all Flows found in the `.maestro` directory.
+
+```yaml
+- name: Run Maestro Cloud
+- uses: mobile-dev-inc/action-maestro-cloud@v2.0.2
+  with:
+    api-key: ${{ secrets.MAESTRO_API_KEY }}
+    project-id: ${{ secrets.MAESTRO_PROJECT_ID }}
+    app-file: app/build/outputs/apk/debug/app-debug.apk
+```
+
+To help you, the following code snippet shows an example of a complete GItHub Action used to build and run Maestro tests:
+
+```yaml
+name: Build and run Maestro tests (Native Android)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  maestro-cloud:
+    runs-on: ubuntu-latest
+    outputs:
+      app: app/build/outputs/apk/debug
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: 'temurin'
+      - run: ./gradlew assembleDebug
+      - uses: mobile-dev-inc/action-maestro-cloud@v2.0.2
+        with:
+          api-key: ${{ secrets.MAESTRO_API_KEY }}
+          project-id: ${{ secrets.MAESTRO_PROJECT_ID }}
+          app-file: app/build/outputs/apk/debug/app-debug.apk
+```
+
+{% endstep %}
+{% endstepper %}
+
+### Inputs reference
+
+Below are all available inputs for the `mobile-dev-inc/action-maestro-cloud` action.
+
+#### Required inputs
+
+| Input        | Description                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api-key`    | Your Maestro Cloud API Key.                                                                                                                     |
+| `project-id` | The Project ID to run tests against.                                                                                                            |
+| `app-file`   | <p>Path to the app binary (APK, AAB, or ZIP of .app) to upload.<br><br><strong>Required</strong> unless <code>app-binary-id</code> is used.</p> |
+
+#### Optional configuration
+
+| Input           | Description                                         | Default    |
+| --------------- | --------------------------------------------------- | ---------- |
+| `app-binary-id` | ID of a previously uploaded binary to reuse.        | `null`     |
+| `async`         | If `true`, starts the upload and exits immediately. | `false`    |
+| `env`           | Environment variables to pass to the Flow run.      | `null`     |
+| `exclude-tags`  | Comma-separated list of tags to **exclude**.        | `null`     |
+| `include-tags`  | Comma-separated list of tags to **include**.        | `null`     |
+| `name`          | Friendly name for the upload.                       | Commit Msg |
+| `timeout`       | Max time (in minutes) to wait for completion.       | `30`       |
+| `workspace`     | Path to the directory containing Flows.             | `.maestro` |
+
+#### Device configuration
+
+| Input           | Description                                                                                | Example                    |
+| --------------- | ------------------------------------------------------------------------------------------ | -------------------------- |
+| `device-model`  | Device model to run against. Run `maestro list-cloud-devices` to see all supported values. | `iPhone-17-Pro`, `pixel_6` |
+| `device-os`     | OS version to run against. Run `maestro list-cloud-devices` to see all supported values.   | `iOS-26-2`, `android-34`   |
+| `device-locale` | Device locale (ISO-639-1 + ISO-3166-1).                                                    | `de_DE`                    |
+| `mapping-file`  | Path to ProGuard map (Android) or dSYM (iOS).                                              | `./MyApp.dSYM`             |
+
+{% hint style="warning" %}
+The `android-api-level` and `ios-version` inputs are **deprecated** in favor of `device-os`. Existing workflows that set them continue to work but emit a deprecation warning. Migrate to `device-os` (e.g. `device-os: android-34` or `device-os: iOS-26-2`) when convenient.
+{% endhint %}
+
+{% hint style="info" %}
+Access the [Configure the OS](/maestro-cloud/environment-configuration/configure-the-os.md) page for more information.
+{% endhint %}
+
+### Next steps
+
+Explore the complementary content to improve your GitHub Action to run Maestro tests exploring the following pages:
+
+* [Maestro Cloud Action](https://github.com/marketplace/actions/maestro-cloud-upload-action): Official GitHub Action for you to upload your app to Maestro Cloud to run your Flows in CI.
+* [Platform guides](/maestro-cloud/ci-cd-integration/github-actions/platform-guides.md): Explore the guides to use the official GitHub Action for Android, iOS, and Flutter.
+* [Advanced configurations](/maestro-cloud/ci-cd-integration/github-actions/advanced-configuration.md): Learn how to configure async mode, environment variables, and custom workspaces.
+* [Outputs and triggers](/maestro-cloud/ci-cd-integration/github-actions/outputs-and-triggers.md): Learn how to use action outputs and configure CI triggers.
+* Explore all the [subcommand options for cloud.](/maestro-cli/maestro-cli-commands-and-options.md#cloud)
+
+
+---
+
+# Agent Instructions
+This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
+
+## Querying This Documentation
+If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+
+Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+
+```
+GET https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions.md?ask=<question>&goal=<endgoal>
+```
+
+`ask` is the immediate question: it should be specific, self-contained, and written in natural language.
+`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+
+The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
+
+Use this mechanism when the answer is not explicitly present in the current page, you need clarification or additional context, or you want to retrieve related documentation sections.
