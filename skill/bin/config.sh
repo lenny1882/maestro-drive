@@ -250,9 +250,10 @@ fi
 # --- permission allows for ssh and scp --------------------------------------
 # Every call this skill makes to the Mac is an `ssh` or `scp` through the Bash
 # tool, and without an allow entry each one waits for a permission prompt. The
-# entry is two lines, nothing in the package writes them and nothing documented
-# them, so on a new machine or in a new project they are simply absent and the
-# cost is paid on every call until someone notices.
+# entry is two lines. `reference/setup.md` § 6 documents them and gives the
+# wildcard-prefix advice, but nothing in the package writes them and nothing
+# checked whether they were there, so on a new machine or in a new project they
+# are simply absent and the cost is paid on every call until someone notices.
 #
 # Here rather than in a hook, for three reasons. This is already the first thing
 # a project runs and it happens before any SSH. A hook could not write the
