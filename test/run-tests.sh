@@ -183,6 +183,60 @@ grep -q "something-unrelated" "$TMP/wiz/hosts.new" && grep -q "127.0.0.1" "$TMP/
   && ok "the hosts rewrite honours the requested try order" \
   || no "the hosts rewrite honours the requested try order" "first line is not the one asked for"
 
+# A machine with nothing configured is the one this wizard exists for, and was
+# the one path never exercised: every earlier test ran against a ~/.ssh/config
+# that already had three Host blocks, so the lookups always found something.
+# Running it empty aborted at the first prompt with "known_user: unbound
+# variable" — `local x` under `set -u` leaves x UNSET, and the loop that would
+# assign it never ran.
+FR="$TMP/fresh"; mkdir -p "$FR"
+: > "$FR/ssh_config"; echo '{}' > "$FR/settings.json"
+printf '127.0.0.1\tlocalhost\n10.0.0.5\tsomething-unrelated\n' > "$FR/hosts"
+mkdir -p "$FR/lib"
+fresh_out=$(printf 'macuser\nsomemac\n\n10.1.1.5\ny\nmac-newplace\n\ny\nn\n\nn\n' | \
+  SSH_CONFIG="$FR/ssh_config" SETTINGS="$FR/settings.json" HOSTS_FILE="$FR/hosts" \
+  LIB_DIR="$FR/lib" timeout 120 "$W" --dry-run 2>&1)
+fresh_rc=$?
+
+[ "$fresh_rc" = 0 ] \
+  && ok "fresh machine: the wizard runs to completion" \
+  || no "fresh machine: the wizard runs to completion" "exit $fresh_rc: $(printf '%s' "$fresh_out" | tail -3)"
+
+printf '%s' "$fresh_out" | grep -q "unbound variable" \
+  && no "fresh machine: no unbound variable" "$(printf '%s' "$fresh_out" | grep 'unbound')" \
+  || ok "fresh machine: no unbound variable"
+
+# Nothing is configured, so nothing can be offered. A default here would be
+# invented rather than derived.
+printf '%s' "$fresh_out" | grep -q "the Mac's username:" \
+  && ok "fresh machine: no username default is invented" \
+  || no "fresh machine: no username default is invented" "a default was offered"
+
+printf '%s' "$fresh_out" | grep -q "read as somemac.local" \
+  && ok "fresh machine: a short name gains .local" \
+  || no "fresh machine: a short name gains .local" "$(printf '%s' "$fresh_out" | grep -i 'local name')"
+
+# settings.json is {} — the whole sandbox.network path has to be created, not
+# assumed to exist.
+printf '%s' "$fresh_out" | grep -q '"allowedDomains"' \
+  && printf '%s' "$fresh_out" | grep -q '"sandbox"' \
+  && ok "fresh machine: the whole sandbox.network path is created" \
+  || no "fresh machine: the whole sandbox.network path is created" "$(printf '%s' "$fresh_out" | grep -A6 'would change')"
+
+# The /etc/hosts step reads Host blocks off disk, and a dry run describes the
+# block rather than writing it — so on a fresh machine it saw nothing and said
+# "no configured networks" immediately after configuring one.
+printf '%s' "$fresh_out" | grep -q "10.1.1.5 somemac.local" \
+  && ok "fresh machine: /etc/hosts counts the network configured in this run" \
+  || no "fresh machine: /etc/hosts counts the network configured in this run" "$(printf '%s' "$fresh_out" | sed -n '/etc\/hosts/,$p' | head -5)"
+
+# Dry run means dry run, on every file it was pointed at.
+if [ -s "$FR/ssh_config" ] || [ "$(cat "$FR/settings.json")" != "{}" ] || [ -n "$(ls -A "$FR/lib")" ]; then
+  no "fresh machine: --dry-run wrote nothing" "one of ssh_config, settings.json or the marker changed"
+else
+  ok "fresh machine: --dry-run wrote nothing"
+fi
+
 echo "installer"
 # Two pre-existing hooks from some other package, to prove we leave them alone.
 # The second is on matcher "Bash", which is the one this package also wants:
