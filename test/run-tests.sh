@@ -38,7 +38,7 @@ echo "the skill's own scripts, before anything is published"
 # A broken script here breaks every session that loads the skill, not just the
 # one that shipped it. This was the first half of ship.sh.
 bad=""
-for f in "$REPO"/skill/bin/*.sh "$REPO"/skill/remote/*.sh "$REPO"/skill/hooks/*.sh; do
+for f in "$REPO"/skill/bin/*.sh "$REPO"/skill/remote/*.sh "$REPO"/skill/hooks/*.sh "$REPO"/skill/setup/*.sh; do
   [ -e "$f" ] || continue
   bash -n "$f" 2>/dev/null || bad="$bad $(basename "$f")"
 done
@@ -57,7 +57,8 @@ done
 # Three sightings in one afternoon on 17 Sep 2026, in code written beside a
 # comment warning about it. This was the second half of ship.sh.
 python3 "$REPO/skill/bin/lint-stdin.py" \
-  "$REPO"/skill/bin/*.sh "$REPO"/skill/remote/*.sh "$REPO"/skill/hooks/*.sh >"$TMP/lint" 2>&1 \
+  "$REPO"/skill/bin/*.sh "$REPO"/skill/remote/*.sh "$REPO"/skill/hooks/*.sh \
+  "$REPO"/skill/setup/*.sh >"$TMP/lint" 2>&1 \
   && ok "no ssh call sits inside a loop reading from stdin" \
   || no "no ssh call sits inside a loop reading from stdin" "$(cat "$TMP/lint")"
 
@@ -67,6 +68,120 @@ python3 "$REPO/skill/bin/lint-stdin.py" \
 # a recovery path died with "Permission denied" on a live device (item 46).
 unx=$(find "$REPO/skill" -type f -name "*.sh" ! -perm -u+x | sed "s|$REPO/||" | tr '\n' ' ')
 [ -z "$unx" ] && ok "every shell script is executable" || no "every shell script is executable" "not executable: $unx"
+
+echo "the setup wizard (item 85)"
+# The wizard writes four things a person owns — ~/.ssh/config, settings.json,
+# /etc/hosts and a script on the Mac — so what is tested here is the part that
+# decides WHAT to write. Everything below runs against copies in $TMP; nothing
+# talks to a Mac and nothing touches the real files.
+W="$REPO/skill/setup/wizard.sh"
+WFN="$TMP/wizard-fns.sh"
+sed -n "/^static_default() {/,/^}/p;/^splice_profile() {/,/^}/p;/^drop_profile() {/,/^}/p" "$W" > "$WFN"
+# shellcheck disable=SC1090
+. "$WFN"
+
+# The static address is proposed, never derived: the router's DHCP pool is not
+# visible from the Mac. .250 is what all three existing networks use.
+[ "$(static_default 192.168.1.13)" = "192.168.1.250" ] \
+  && ok "static address keeps the network and takes .250" \
+  || no "static address keeps the network and takes .250" "got $(static_default 192.168.1.13)"
+[ "$(static_default 10.0.0.99)" = "10.0.0.250" ] \
+  && ok "static address works on a /24 in another range" \
+  || no "static address works on a /24 in another range" "got $(static_default 10.0.0.99)"
+[ -z "$(static_default not-an-ip)" ] \
+  && ok "static address declines to guess from a non-address" \
+  || no "static address declines to guess from a non-address" "got $(static_default not-an-ip)"
+
+cp "$REPO/skill/setup/network-change.sh" "$TMP/nc.sh"
+drop_profile "$TMP/nc.sh" "Example Network Name"
+grep -q "Example Network Name" "$TMP/nc.sh" \
+  && no "the example SSID is dropped on a fresh install" "it is still there" \
+  || ok "the example SSID is dropped on a fresh install"
+
+splice_profile "$TMP/nc.sh" "Somewhere" "manual 10.1.2.250 255.255.255.0 10.1.2.1 10.1.2.1" >/dev/null
+# A trailing space in an SSID is real — one of the three on this machine has
+# them — and the script compares the name literally, so it has to survive.
+splice_profile "$TMP/nc.sh" "Trailing Spaces   " "manual 10.1.3.250 255.255.255.0 10.1.3.1 10.1.3.1" >/dev/null
+grep -q '"Trailing Spaces   ")' "$TMP/nc.sh" \
+  && ok "an SSID with trailing spaces survives splicing" \
+  || no "an SSID with trailing spaces survives splicing" "the arm is missing or trimmed"
+# Count case arms only: a line that is a quoted SSID followed by ")". A looser
+# pattern catches the printf continuations inside ipv4_config().
+arms(){ grep -cE '^    ".*"\)$' "$1"; }
+[ "$(arms "$TMP/nc.sh")" = 2 ] \
+  && ok "a second network adds an arm rather than replacing the table" \
+  || no "a second network adds an arm rather than replacing the table" "$(arms "$TMP/nc.sh") arms"
+
+# ssh takes the first value it obtains for each keyword, so a duplicate arm is
+# dead code that silently wins nothing. Same reasoning as the Host block.
+r=$(splice_profile "$TMP/nc.sh" "Somewhere" "manual 10.1.2.251 255.255.255.0 10.1.2.1 10.1.2.1")
+[ "$r" = "replaced" ] && [ "$(grep -c '"Somewhere")' "$TMP/nc.sh")" = 1 ] \
+  && ok "re-adding a network replaces its arm instead of duplicating it" \
+  || no "re-adding a network replaces its arm instead of duplicating it" "$r, $(grep -c '"Somewhere")' "$TMP/nc.sh") arms"
+grep -q "10.1.2.251" "$TMP/nc.sh" \
+  && ok "the replacement carries the new values" \
+  || no "the replacement carries the new values" "old values still present"
+bash -n "$TMP/nc.sh" \
+  && ok "the spliced script still parses" \
+  || no "the spliced script still parses" "syntax error after splicing"
+
+# --status reads the three files and changes nothing. Given a config it has
+# never seen, it should report what is there and exit clean.
+mkdir -p "$TMP/wiz"
+printf 'Host mac-somewhere\n\tHostname 10.9.9.9\n\tUser someone\n\tIdentityFile ~/.ssh/somekey\n' > "$TMP/wiz/ssh_config"
+touch "$HOME/.ssh_somekey"
+out=$(SSH_CONFIG="$TMP/wiz/ssh_config" LIB_DIR="$TMP/wiz/lib" "$W" --status 2>&1)
+printf '%s' "$out" | grep -q "mac-somewhere" \
+  && ok "--status finds a configured network" \
+  || no "--status finds a configured network" "$out"
+printf '%s' "$out" | grep -q "no marker" \
+  && ok "--status reports phase A as not done when the marker is absent" \
+  || no "--status reports phase A as not done when the marker is absent" "$out"
+[ ! -e "$TMP/wiz/lib/phase-a-done" ] \
+  && ok "--status writes nothing" \
+  || no "--status writes nothing" "it created the marker"
+
+# The /etc/hosts block is replaced wholesale and the rest of the file is not
+# touched. File order is try order, so the order it writes is the order asked
+# for, not the order the aliases happen to be in.
+cat > "$TMP/wiz/hosts" <<'HOSTS'
+127.0.0.1	localhost
+10.0.0.5	something-unrelated
+# mac for ios simulator work
+192.168.1.10 the-mac.local
+10.0.0.10 the-mac.local
+HOSTS
+cp "$TMP/wiz/hosts" "$TMP/wiz/hosts.orig"
+MARKER_TEXT="# mac for ios simulator work" \
+BLOCK="# mac for ios simulator work
+10.0.0.10 the-mac.local
+192.168.1.10 the-mac.local
+" python3 - "$TMP/wiz/hosts" > "$TMP/wiz/hosts.new" <<'PY'
+import os, sys
+marker = os.environ["MARKER_TEXT"]; block = os.environ["BLOCK"]
+lines = open(sys.argv[1]).read().split("\n")
+out, i, replaced = [], 0, False
+while i < len(lines):
+    if lines[i].strip() == marker.strip():
+        i += 1
+        while i < len(lines) and lines[i].strip() and not lines[i].lstrip().startswith("#"):
+            i += 1
+        out.append(block.rstrip("\n")); replaced = True; continue
+    out.append(lines[i]); i += 1
+if not replaced:
+    while out and not out[-1].strip(): out.pop()
+    out.append(""); out.append(block.rstrip("\n"))
+sys.stdout.write("\n".join(out).rstrip("\n") + "\n")
+PY
+grep -q "something-unrelated" "$TMP/wiz/hosts.new" && grep -q "127.0.0.1" "$TMP/wiz/hosts.new" \
+  && ok "the hosts rewrite leaves unrelated entries alone" \
+  || no "the hosts rewrite leaves unrelated entries alone" "$(cat "$TMP/wiz/hosts.new")"
+[ "$(grep -c "the-mac.local" "$TMP/wiz/hosts.new")" = 2 ] \
+  && ok "the hosts rewrite does not duplicate the block" \
+  || no "the hosts rewrite does not duplicate the block" "$(grep -c "the-mac.local" "$TMP/wiz/hosts.new") lines"
+[ "$(grep -n "the-mac.local" "$TMP/wiz/hosts.new" | head -1 | cut -d: -f2- | cut -d' ' -f1)" = "10.0.0.10" ] \
+  && ok "the hosts rewrite honours the requested try order" \
+  || no "the hosts rewrite honours the requested try order" "first line is not the one asked for"
 
 echo "installer"
 # Two pre-existing hooks from some other package, to prove we leave them alone.
