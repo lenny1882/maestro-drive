@@ -174,6 +174,76 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 86. Ten test cases fail for two hours every night — **DONE 18 Sep**
+
+The package suite went from **52 passed, 0 failed** to **49 passed, 3 failed**
+with no code change between the two runs, and the skill's own suite from 360 to
+350. The variable was the clock: the second run was shortly after midnight.
+
+**One assertion is date-sensitive and nine more are collateral.**
+`skill/test/run-tests.sh:2007` backdates a label's mtime by two hours and expects
+`read_label` to report it stale:
+
+```python
+os.utime(old_path, (time.time() - 7200, time.time() - 7200))
+print("label-stale", w.read_label(udid)["stale"] is True)
+```
+
+`read_label` in `skill/remote/wall.py` returns `{}` for any label whose mtime
+falls on a different calendar day, because `HIDE_FROM_PREVIOUS_DAY` is on — which
+is correct behaviour and has its own cases further down the same block. Between
+00:00 and 02:00, "two hours ago" is yesterday, so the label is hidden rather than
+stale and `["stale"]` raises `KeyError`.
+
+**The other nine are not separate failures.** The whole wall section is one
+`python3` heredoc printing a named result per line, which a shell loop then
+checks by name. An exception part-way through means every name after it prints
+nothing and is reported as "no result". `label-read` passes, `label-stale`
+raises, and `label-empty-file`, `label-by`, `label-no-by`, `day-today-fresh`,
+`day-today-not-stale`, `day-today-old-kept`, `day-today-old-greyed`,
+`day-yesterday-hidden` and `day-crossed-midnight-hidden` are all collateral.
+
+**Two separate problems, then.** The brittle assertion, and a harness shape where
+one exception silently takes out nine unrelated cases and reports them as
+failures of their own. The second is the worse of the two: it makes the output
+lie about which behaviour broke.
+
+**Fix.** For the assertion, set `w.HIDE_FROM_PREVIOUS_DAY = False` around the
+staleness case — staleness and day-hiding are separate behaviours and the
+day-hiding ones are already tested on their own, so suppressing one while
+checking the other is what the case means. For the harness, either wrap each
+`print` so an exception is attributed to its own case, or split the block. The
+first is smaller and keeps the single-process design.
+
+**Why it matters beyond the two hours.** `test/run-tests.sh` is the release gate
+— item 17 put it there so a release cannot be cut past it. A gate that fails on
+the clock is one that gets overridden, and the habit of overriding it is the
+thing that lets a real failure through.
+
+**Gates.** None.
+
+**Fixed 18 Sep, both halves.**
+
+The assertion now suppresses day-hiding for its own case only —
+`w.HIDE_FROM_PREVIOUS_DAY = False` around it, restored afterwards — so staleness
+is tested every run rather than skipped near midnight. The precedent was already
+in the same file two dozen lines below: `day-today-old-kept` carries a guard for
+exactly this, added by whoever hit it last time and did not look upwards.
+
+The harness now runs each case through a `check(name, fn)` helper that catches
+its own exception and prints `<name> False <ExcType>: <msg>`. Twenty-eight cases
+converted. Verified by injecting a `KeyError` into `label-stale`: it fails alone
+and names the cause, where the same injection previously produced ten failures
+reading "no result".
+
+367 passed, 0 failed in the skill's suite; 52 passed, 0 failed in the package's.
+
+One thing left alone deliberately: `day-today-old-kept` and `day-today-old-greyed`
+still print `True` without testing anything when the run starts within three
+hours of midnight. That is a silently skipped case rather than a wrong one, and
+the behaviour it checks genuinely needs a same-day mtime, so suppressing
+day-hiding there would defeat the case rather than fix it.
+
 ## Prioritisation matrix (9 Sep 2026)
 
 Every open item scored against your core considerations — read from what you
