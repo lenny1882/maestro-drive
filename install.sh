@@ -171,6 +171,33 @@ if declare -F verify_probe >/dev/null; then
   else warn "the probe in manifest.sh failed — it installed, but does not work"; fail=1; fi
 fi
 
+# The skill is installed but cannot reach anything until the SSH and network
+# side exists: a key on the Mac, a Host block per network, /etc/hosts and
+# allowedDomains. setup.md describes all of it and it still gets done wrong,
+# which is what the wizard is for. The marker is a phase A flag — networks
+# themselves are discoverable from the three files, so nothing else is tracked.
+step "SSH and network setup"
+WIZARD="$CLAUDE_DIR/skills/maestro-remote-mac/setup/wizard.sh"
+[ -x "$WIZARD" ] || WIZARD="$REPO/skill/setup/wizard.sh"
+if [ -e "$LIB_DIR/phase-a-done" ]; then
+  ok "phase A done $(cat "$LIB_DIR/phase-a-done" 2>/dev/null)"
+  say "  Re-run $WIZARD when you join a new network."
+elif [ ! -x "$WIZARD" ]; then
+  warn "no wizard found at $WIZARD"
+else
+  say "  Not set up on this machine yet — no key, no Host block, nothing to talk to."
+  if [ "$ASSUME_YES" -eq 1 ] || [ ! -t 0 ]; then
+    say "  Run it when you are ready:  $WIZARD"
+  else
+    printf '  Run the setup wizard now? [Y/n]: '
+    read -r reply
+    case "${reply:-y}" in
+      [Yy]*) "$WIZARD" || warn "the wizard exited non-zero — re-run it with $WIZARD" ;;
+      *)     say "  Run it later:  $WIZARD" ;;
+    esac
+  fi
+fi
+
 say
 if [ "$fail" -eq 0 ]; then
   say "Done. If Claude Code is already running, /hooks forces a settings reload;"
