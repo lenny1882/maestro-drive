@@ -151,7 +151,7 @@ one does. Nothing in this package changes.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, NOT YET RUN LIVE; part 6b still open**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, NOT YET RUN LIVE**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -213,15 +213,14 @@ it instead.
    (`install.sh:51`), and `install.sh:97-108`'s write-to-temp, `diff`, move
    pattern is what to copy, diff preview included.
 
-6. **Per project — not the wizard's. Half covered, half designed and not built.**
+6. **Per project — not the wizard's. Both halves now covered.**
    `.maestro-mac.conf` is already covered by `bin/init.sh`, which `bin/config.sh`
    routes into when no conf is found. The permission allows are the uncovered
    half: nothing writes them and nothing documents them, so every `ssh` and `scp`
    waits for a prompt until someone adds them by hand.
 
-   **Agreed design, 17 Sep — a check in `bin/config.sh`, not a hook.** It goes
-   immediately after the conf check, which is the same moment and before any SSH
-   happens. Read `permissions.allow` from `~/.claude/settings.json` and the
+   **Built 17 Sep in `bin/config.sh`, not a hook.** It sits immediately after the
+   conf check, which is the same moment and before any SSH happens. Read `permissions.allow` from `~/.claude/settings.json` and the
    project's `.claude/settings.local.json`, strip `Bash(…)` and a trailing `:*`,
    and glob-match the patterns against the real `ssh <host>` and `scp <host>`
    command strings for every alias in `MAC_HOST`. Print what is uncovered, once
@@ -236,13 +235,19 @@ it instead.
    to test a condition true once per project, and would need a third registration
    in `install.sh`. See item 67 for how a registration goes missing.
 
-   **Two findings from a prototype that was written, tested and reverted.** The
+   **Verified against five cases**: nothing configured anywhere warns and names
+   both files; a wide `Bash(ssh mac-*:*)` in the global file silences it; a
+   project file covering one alias reports only the uncovered one; a second
+   call in the same session is silent; and a malformed `settings.json` is
+   survived rather than crashing the skill on load.
+
+   **Two findings from the first attempt, which was written, tested and reverted.** The
    suggested entry should use the longest common prefix of the aliases, not the
    first alias: `mac-a mac-b` gives `Bash(ssh mac-*:*)`, which is exactly
    what the two projects on this machine already have by hand, whereas per-alias
    suggestions produce an entry that does not match. And this machine's `python3`
-   is **3.8.10**, so `str.removesuffix` is unavailable — worth checking what else
-   under `skill/` assumes 3.9+.
+   is **3.8.10**, so `str.removesuffix` is unavailable and the suffix strip is
+   manual — worth checking what else under `skill/` assumes 3.9+.
 
    **State on this machine.** `~/.claude/settings.json` has no `ssh` or `scp`
    allow at all. `brandco-flutter-runner` and `claude-sandbox` each carry
