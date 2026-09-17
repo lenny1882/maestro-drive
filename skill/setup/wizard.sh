@@ -428,11 +428,196 @@ phase_b() {
   B_ALIAS="$alias"; B_ADDR="$addr"
 }
 
+# --- phase C ----------------------------------------------------------------
+# Optional. It gives the Mac a fixed address on this network, so the address
+# phase B just wrote stays true. A router doing DHCP reservations achieves the
+# same thing with nothing installed on the Mac.
+#
+# Two files go on the Mac, both needing root there, so the install itself is a
+# command the user runs — sudo on the Mac has no passwordless path.
+#
+# The SSID table is per-machine configuration, not package content: it is the
+# LAN layout of every network that Mac joins. The vendored script carries one
+# example block; the real entries are spliced in here and never enter the repo.
+
+REMOTE_SCRIPT="/usr/local/bin/network-change.sh"
+REMOTE_PLIST="/Library/LaunchDaemons/networkChange.plist"
+VENDORED_SCRIPT="$(dirname "$0")/network-change.sh"
+VENDORED_PLIST="$(dirname "$0")/networkChange.plist"
+
+mac_run() { # mac_run <alias> <command> -> stdout
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$1" "$2" 2>/dev/null
+}
+
+static_default() { # <address> -> same network, last octet 250
+  printf '%s' "$1" | awk -F. 'NF==4 { print $1"."$2"."$3".250" }'
+}
+
+# Insert or replace one SSID arm, immediately before the `*)` default. Replacing
+# matters as much as inserting: a second run for the same network must not leave
+# two arms, because the first one wins and the second is dead.
+splice_profile() { # splice_profile <script-file> <ssid> <profile-line>
+  SSID="$2" PROFILE="$3" python3 - "$1" <<'PY'
+import os, re, sys
+
+path = sys.argv[1]
+ssid = os.environ["SSID"]
+profile = os.environ["PROFILE"]
+
+with open(path) as fh:
+    text = fh.read()
+
+arm = '    "%s")\n      echo "%s"\n      ;;\n' % (ssid, profile)
+
+# Drop any existing arm for this SSID, then insert before the default.
+pattern = re.compile(
+    r'[ \t]*"%s"\)\n(?:.*\n)*?[ \t]*;;\n' % re.escape(ssid))
+text, dropped = pattern.subn('', text)
+
+marker = "    *)\n"
+if marker not in text:
+    sys.stderr.write("no default arm found in %s\n" % path)
+    raise SystemExit(1)
+text = text.replace(marker, arm + marker, 1)
+
+with open(path, "w") as fh:
+    fh.write(text)
+print("replaced" if dropped else "added")
+PY
+}
+
+# The vendored script ships one example arm so the file makes sense on its own.
+# It has no business on a real Mac.
+drop_profile() { # drop_profile <script-file> <ssid>
+  SSID="$2" python3 - "$1" <<'PY'
+import os, re, sys
+path, ssid = sys.argv[1], os.environ["SSID"]
+with open(path) as fh:
+    text = fh.read()
+text, n = re.subn(r'[ \t]*"%s"\)\n(?:.*\n)*?[ \t]*;;\n' % re.escape(ssid), '', text)
+with open(path, "w") as fh:
+    fh.write(text)
+PY
+}
+
 phase_c() {
   step "Phase C — a fixed address on the Mac"
-  warn "not built yet. See BACKLOG.md item 85 for the settled design."
-  say  "  It installs network-change.sh and the plist on the Mac, sets a static"
-  say  "  address, cycles Wi-Fi and polls the new address."
+  local alias="$B_ALIAS" addr="$B_ADDR"
+
+  mac_needed
+  say "  Phase C can only configure the network the Mac is joined to right now,"
+  say "  because every value below is read from the live interface."
+  say ""
+
+  local dev ssid ssid_list mask gw dns
+  dev=$(mac_run "$alias" 'networksetup -listallhardwareports | awk "/Hardware Port: Wi-Fi/ { getline; print \$2; exit }"')
+  [ -n "$dev" ] || { warn "no Wi-Fi device found on the Mac"; return 1; }
+  ok "Wi-Fi device: $dev"
+
+  ssid=$(mac_run "$alias" "ipconfig getsummary $dev | awk -F' SSID : ' '/ SSID : / { print \$2; exit }'")
+  ssid_list=$(mac_run "$alias" "networksetup -listpreferredwirelessnetworks $dev | sed '1d;s/^[[:space:]]*//'")
+
+  if [ -n "$ssid_list" ]; then
+    say ""
+    say "  Networks this Mac knows:"
+    printf '%s\n' "$ssid_list" | sed 's/^/    /'
+  fi
+  say ""
+  say "  The name must match exactly, trailing spaces included — the script"
+  say "  compares it literally and a near miss falls through to plain DHCP."
+  ssid=$(ask "SSID for this network" "$ssid")
+  [ -n "$ssid" ] || { warn "no SSID given"; return 1; }
+
+  local info
+  info=$(mac_run "$alias" "networksetup -getinfo \"\$(networksetup -listnetworkserviceorder | awk -v d=$dev '/^\\([0-9]+\\)/ { name = substr(\$0, index(\$0, \")\") + 2) } index(\$0, \"Device: \" d \")\") { print name; exit }')\"")
+  mask=$(printf '%s\n' "$info" | awk -F': ' '/^Subnet mask:/ { print $2; exit }')
+  gw=$(printf '%s\n' "$info"   | awk -F': ' '/^Router:/ { print $2; exit }')
+  [ -n "$gw" ] || gw=$(mac_run "$alias" "netstat -rn -f inet | awk '/^default/ { print \$2; exit }'")
+  dns=$(mac_run "$alias" "scutil --dns | awk '/nameserver\\[[0-9]+\\]/ { print \$3 }' | sort -u | tr '\\n' ' '")
+
+  mask=$(ask "subnet mask" "$mask")
+  gw=$(ask "gateway" "$gw")
+  dns=$(ask "DNS servers, space separated" "${gw} 1.1.1.1 8.8.8.8")
+
+  # The router's DHCP pool is not visible from the Mac, so the address cannot be
+  # derived — only proposed. .250 is high enough to sit above most pools.
+  local static
+  static=$(ask "static address for the Mac" "$(static_default "$addr")")
+  [ -n "$static" ] || { warn "no address given"; return 1; }
+  if [ "$static" != "$addr" ] && mac_run "$alias" "ping -c 2 -t 3 $static >/dev/null 2>&1 && echo taken" | grep -q taken; then
+    warn "$static already answers — something else holds it. Pick another."
+    return 1
+  fi
+  say "  It must sit outside the router's DHCP pool, which the Mac cannot see."
+  confirm "Is $static outside the pool?" y || { warn "pick one that is, and re-run phase C"; return 1; }
+
+  # Start from what the Mac already has, so a second network adds an arm rather
+  # than replacing the first network's profile with a one-entry table.
+  local work; work=$(mktemp)
+  if mac_run "$alias" "test -r $REMOTE_SCRIPT" && mac_run "$alias" "cat $REMOTE_SCRIPT" > "$work" && [ -s "$work" ]; then
+    ok "starting from the script already on the Mac"
+  else
+    cp "$VENDORED_SCRIPT" "$work"
+    drop_profile "$work" "Example Network Name"
+    ok "starting from the vendored script"
+  fi
+
+  local action
+  action=$(splice_profile "$work" "$ssid" "manual $static $mask $gw $dns") || {
+    warn "could not splice the profile"; rm -f "$work"; return 1; }
+  ok "profile $action for \"$ssid\""
+  bash -n "$work" || { warn "the spliced script does not parse"; rm -f "$work"; return 1; }
+
+  local stage="/tmp/network-change.sh.new"
+  scp -o BatchMode=yes -q "$work" "$alias:$stage" || { warn "could not copy to the Mac"; rm -f "$work"; return 1; }
+  scp -o BatchMode=yes -q "$VENDORED_PLIST" "$alias:/tmp/networkChange.plist" || true
+  rm -f "$work"
+
+  say ""
+  say "  Both files need root on the Mac, and sudo there has no passwordless"
+  say "  path. Run this in a terminal on the Mac, or over your own ssh:"
+  say ""
+  say "    sudo cp -p $REMOTE_SCRIPT $REMOTE_SCRIPT.bak 2>/dev/null"
+  say "    sudo install -m 755 -o root -g wheel $stage $REMOTE_SCRIPT"
+  say "    sudo install -m 644 -o root -g wheel /tmp/networkChange.plist $REMOTE_PLIST"
+  say "    sudo launchctl bootout system $REMOTE_PLIST 2>/dev/null"
+  say "    sudo launchctl bootstrap system $REMOTE_PLIST"
+  say ""
+  confirm "Done?" n || { warn "phase C stopped — nothing on the Mac has changed"; return 1; }
+
+  c_cycle_and_verify "$alias" "$dev" "$static"
+}
+
+# The cycle proves the WatchPaths trigger fires, which RunAtLoad alone does not.
+# It drops the connection it runs over, by design.
+c_cycle_and_verify() { # <alias> <device> <static>
+  say ""
+  say "  Cycling Wi-Fi on the Mac. This drops the connection on purpose."
+  # Detached, or SIGHUP kills it between off and on and the Mac stays off the
+  # network. The leading sleep lets ssh return an exit code rather than a
+  # broken pipe.
+  ssh -o BatchMode=yes "$1" \
+    "nohup /bin/sh -c 'sleep 2; networksetup -setairportpower $2 off; sleep 5; networksetup -setairportpower $2 on' >/dev/null 2>&1 </dev/null &" \
+    || warn "the cycle command did not return cleanly; continuing to poll"
+
+  # Wait for the drop before waiting for the recovery. A poll that starts
+  # immediately succeeds on the connection it is about to lose, which reads as
+  # success and is not.
+  local i seen_down=0
+  for i in $(seq 1 40); do
+    if ssh -o BatchMode=yes -o ConnectTimeout=6 "$1" true 2>/dev/null; then
+      if [ "$seen_down" = 1 ]; then
+        ok "back up at $3"
+        mac_run "$1" 'tail -4 /tmp/netchange.log' | sed 's/^/    /'
+        return 0
+      fi
+    else
+      seen_down=1
+    fi
+  done
+  warn "the Mac did not come back within the poll window."
+  warn "Check it is associated, and that $2 is the address it now holds."
+  return 1
 }
 
 write_etc_hosts() {
