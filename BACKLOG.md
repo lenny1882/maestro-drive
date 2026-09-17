@@ -328,11 +328,26 @@ ssh <alias> 'nohup /bin/sh -c "sleep 2; \
 ```
 
 The leading `sleep 2` lets ssh return an exit code rather than a broken pipe.
-The wizard then polls the **new** address for up to two minutes; a normal
-recovery is 15–30 seconds. Note `RunAtLoad` already applies the profile on
-`launchctl load` — the cycle proves the `WatchPaths` trigger fires, which is the
-part that must work unattended. **Unverified**: whether
-`networksetup -setairportpower` needs sudo. Reading power does not.
+Note `RunAtLoad` already applies the profile on `launchctl load` — the cycle
+proves the `WatchPaths` trigger fires, which is the part that must work
+unattended.
+
+**Tested live 17 Sep, 23:07.** Four results:
+
+- **`networksetup -setairportpower` needs no sudo**, to read or to set. Exit 0 as
+  the ordinary user. That was the last unverified point in phase C.
+- **The detached form survives the drop.** The `nohup … &` above returned exit 0
+  and the `off`/`on` pair completed after the connection died.
+- **One cycle fired the daemon three times** — 23:07:09 not associated, 23:07:18
+  and 23:07:28 both `already static … no change`. Exactly the "2-3 times per real
+  change" its own header predicts; the lock and the idempotence check absorbed
+  it, nothing was written and `/tmp/netchange.err` stayed 0 bytes.
+- **Recovery took 19 seconds** end to end. The two-minute poll is slack.
+
+**The poll must wait for the drop before waiting for recovery.** A poll started
+immediately succeeds on the connection it is about to lose — observed: the first
+attempt returned "up" one second in, before the `sleep 2` had elapsed, which
+reads as success and is not. Wait for a failure first, then for the recovery.
 
 **Re-runs of phase A assume the Mac is reachable, but a failure does not prove
 it is not.** Compare this machine's current network against the addresses
