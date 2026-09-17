@@ -155,7 +155,7 @@ one does. Nothing in this package changes.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, NOT YET RUN LIVE**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, DRY-RUN AGAINST THE MAC 18 Sep; the real write path is still untested**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -420,6 +420,86 @@ sequence. The cycle command itself was verified live — see the test record abo
 fixed: `allowedDomains` accumulated a stale address on every address change, and
 the DNS ordering above. A third was a bad test rather than bad code — the case-arm
 count matched the `printf` continuations inside `ipv4_config()`.
+
+**Run live 18 Sep, in `--dry-run`, against the real Mac. Eleven defects, all
+found by running it rather than by reading it.**
+
+`--dry-run` was built first, precisely so the run could be made without writing
+anything: it asks everything and reads everything — probing the Mac, listing its
+networks, reading back the three files — and writes nothing. Reads stay on
+because a dry run that skipped them could not show what it would write.
+
+**Three that stopped the run dead.**
+
+- **Phase C appeared to hang at its own header.** It was not a hang. Under
+  `set -euo pipefail`, `dev=$(mac_run …)` against an unreachable Mac takes the
+  whole script down before the caller can check whether the value came back
+  empty, so the "no Wi-Fi device found" warning never printed and the exit code
+  was 255. `mac_run` now always succeeds and prints nothing when the Mac cannot
+  be reached, which is what a read helper should do.
+- **The same bug one level up.** `phase_c` returning non-zero was the last
+  command of its `then` branch, so the shell exited at the `fi`. Both that call
+  and `write_etc_hosts` now report and carry on: one phase failing is not the
+  run failing.
+- **Phase C talked to the alias**, which `--dry-run` describes without writing,
+  so `ssh <alias>` tried to resolve the alias as a hostname. It now picks its
+  target — the alias once its block exists and this is not a dry run, otherwise
+  the key and the address, which need nothing written yet.
+
+**Four about values that were guesses dressed as facts.**
+
+- The `.local` name defaulted to **this machine's own hostname** with `.local`
+  appended, which is never the Mac's.
+- A name with no dot was taken as given. `oi-james-mac` was about to be written
+  into `allowedDomains`, where it would resolve to nothing while `curl` on the
+  real name kept failing. The suffix is added when absent, and a name differing
+  from the one already configured is challenged.
+- The **key path** was a hardcoded `~/.ssh/mac_rc`. `IdentityFile` in an
+  existing block is the real answer and is now preferred; the literal name
+  survives only as a fallback for a machine with nothing configured.
+- **"Network to try first"** defaulted to the first `Host` block in the file —
+  the one thing that prompt exists to change. It now probes each alias and
+  offers the one that answers, and offers nothing when none does.
+
+**Two about the shape of the run.**
+
+- **The network loop had no memory and no end in sight.** It asked "set up a
+  network now?" after every pass, because the prompt was its condition; the same
+  alias was typed and the whole thing ran again, which read as being stuck.
+- **So the loop was removed.** A second network cannot be finished in the same
+  run anyway: phase C reads every value off the interface the Mac is joined to
+  right now, and phase B's probe against an address the Mac is not on fails, so
+  the block would be written unverified. One network per run, then `/etc/hosts`,
+  then a line saying to re-run after joining the next one.
+
+**Two more, from running it against a machine with nothing configured — the case
+it exists for, and the one path never exercised.**
+
+- It **aborted at the first prompt**: `local known_user` under `set -u` leaves
+  the variable UNSET rather than empty, and the loop that would assign it never
+  runs when no `Host` block exists.
+- The `/etc/hosts` step reported **"no configured networks" immediately after
+  phase B configured one**, because it reads blocks off disk and a dry run
+  describes rather than writes. It now counts the network configured in this
+  run.
+
+**What the run confirmed, which nothing else could.** Phase C's discovery is
+correct against the real Mac: the Wi-Fi device, the preferred-network list
+including the SSID with trailing spaces, and mask, gateway and DNS defaults that
+reproduce the live table exactly. The splice started from the Mac's own script
+and reported `profile replaced`, so a second network extends the table rather
+than replacing it. The profile line it would write is byte-identical to the one
+running. The subnet comparison in phase A also works outside the sandbox, where
+`ip -o -4 addr` returns real interfaces.
+
+**Still untested: the real write path.** `ssh-copy-id` with a password, the
+actual writes to `~/.ssh/config`, `settings.json` and `/etc/hosts`, and phase C's
+install-and-cycle on the Mac. The cycle command itself was verified live on
+17 Sep; the wizard's wrapping of it was not.
+
+**Coverage: 59 package cases, up from 37 when this started.** Seven of them are
+the fresh-machine path, which had none, and they were checked against the bug
+they exist for — reintroducing the unassigned `local` turns six of the seven red.
 
 **Why 3, 4 and 5 belong in one tool: they must all three be right or none is.**
 `setup.md:159-161` already says it — *"Add a new address when the Mac joins a new
