@@ -535,11 +535,23 @@ phase_c() {
   mask=$(printf '%s\n' "$info" | awk -F': ' '/^Subnet mask:/ { print $2; exit }')
   gw=$(printf '%s\n' "$info"   | awk -F': ' '/^Router:/ { print $2; exit }')
   [ -n "$gw" ] || gw=$(mac_run "$alias" "netstat -rn -f inet | awk '/^default/ { print \$2; exit }'")
-  dns=$(mac_run "$alias" "scutil --dns | awk '/nameserver\\[[0-9]+\\]/ { print \$3 }' | sort -u | tr '\\n' ' '")
+  # Deduped but NOT sorted. Resolvers are tried in order and the gateway belongs
+  # first, so local names resolve before anything leaves the network; sorting
+  # puts 1.1.1.1 in front of it and quietly changes what the Mac does.
+  dns=$(mac_run "$alias" "scutil --dns | awk '/nameserver\\[[0-9]+\\]/ && !seen[\$3]++ { print \$3 }' | tr '\\n' ' '")
+  # If the gateway is in the list, it leads.
+  dns=$(GW="$gw" DNS="$dns" python3 -c '
+import os
+gw = os.environ["GW"].strip()
+servers = os.environ["DNS"].split()
+if gw in servers:
+    servers = [gw] + [x for x in servers if x != gw]
+print(" ".join(servers))
+')
 
   mask=$(ask "subnet mask" "$mask")
   gw=$(ask "gateway" "$gw")
-  dns=$(ask "DNS servers, space separated" "${gw} 1.1.1.1 8.8.8.8")
+  dns=$(ask "DNS servers, space separated, in try order" "${dns:-$gw 1.1.1.1 8.8.8.8}")
 
   # The router's DHCP pool is not visible from the Mac, so the address cannot be
   # derived — only proposed. .250 is high enough to sit above most pools.
