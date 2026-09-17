@@ -432,7 +432,19 @@ phase_b() {
   local alias addr existing
   say "  Name the alias for where the Mac is, not for the Mac: mac-a, mac-b."
   alias=$(ask "alias for this network")
+  # Trailing whitespace on an alias is invisible here and fatal later: the Host
+  # block would carry it and `ssh <alias>` would not match.
+  alias=$(printf '%s' "$alias" | tr -d '[:space:]')
   [ -n "$alias" ] || { warn "no alias given"; return 1; }
+
+  # A network already done in this run is almost always a mistake — the loop
+  # asks again after each one, and the obvious answer to "another?" is the
+  # alias just typed.
+  case " ${DONE_ALIASES:-} " in
+    *" $alias "*)
+      warn "$alias was already set up in this run."
+      confirm "Do it again?" n || return 1 ;;
+  esac
 
   existing=$(ssh_block_hostname "$alias" || true)
   [ -n "$existing" ] && say "  $alias already points at $existing."
@@ -482,6 +494,7 @@ phase_b() {
   DROP_ADDR=""
 
   B_ALIAS="$alias"; B_ADDR="$addr"
+  DONE_ALIASES="${DONE_ALIASES:-} $alias"
 }
 
 # --- phase C ----------------------------------------------------------------
@@ -867,7 +880,9 @@ phase_a_followup
 # can only configure the network the Mac is currently joined to, and /etc/hosts
 # is written once at the end with whatever address ended up being final.
 ADDED=0
-while confirm "Set up a network now?" "$([ "$ADDED" = 0 ] && echo y || echo n)"; do
+while confirm "$([ "$ADDED" = 0 ] && echo "Set up a network now?" \
+                                 || echo "Set up ANOTHER network?")" \
+              "$([ "$ADDED" = 0 ] && echo y || echo n)"; do
   if phase_b; then
     ADDED=1
     say ""
@@ -880,6 +895,8 @@ while confirm "Set up a network now?" "$([ "$ADDED" = 0 ] && echo y || echo n)";
     if confirm "Run phase C for $B_ALIAS?" n; then
       phase_c || warn "phase C did not complete for $B_ALIAS"
     fi
+    say ""
+    ok "$B_ALIAS is done. Say no below to finish and write /etc/hosts."
   fi
   say ""
 done
