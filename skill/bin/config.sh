@@ -245,3 +245,102 @@ value rather than guessing:
 MSG
   return 1 2>/dev/null || exit 1
 fi
+
+
+# --- permission allows for ssh and scp --------------------------------------
+# Every call this skill makes to the Mac is an `ssh` or `scp` through the Bash
+# tool, and without an allow entry each one waits for a permission prompt. The
+# entry is two lines, nothing in the package writes them and nothing documented
+# them, so on a new machine or in a new project they are simply absent and the
+# cost is paid on every call until someone notices.
+#
+# Here rather than in a hook, for three reasons. This is already the first thing
+# a project runs and it happens before any SSH. A hook could not write the
+# settings file either, so it had no advantage — only a per-Bash-call cost for a
+# condition that is true once per project, and a third registration in
+# install.sh to keep alive (see item 67 for how that goes).
+#
+# Detection only. A shell script cannot write either settings file; the session
+# asks which file the user wants and writes it with Edit.
+#
+# Both files count, and global counts for every project: ~/.claude/settings.json
+# covers everything, the project's .claude/settings.local.json covers this one.
+# The check matches the actual command, so a narrow Bash(ssh mac-a:*) passes
+# for MAC_HOST=mac-a and a wide Bash(ssh mac-*:*) passes for all of them.
+_PERM_WARNED="${LDIR:-${TMPDIR:-/tmp}}/perm-warned"
+
+if [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
+  # First line is the wildcard to suggest; the rest are the uncovered commands.
+  _perm_out=$(
+    MAC_HOST="$MAC_HOST" PROJECT_DIR="$PROJECT_DIR" python3 - <<'PY' 2>/dev/null
+import fnmatch, json, os
+
+hosts = os.environ.get("MAC_HOST", "").split()
+files = [
+    os.path.expanduser("~/.claude/settings.json"),
+    os.path.join(os.environ.get("PROJECT_DIR", ""), ".claude", "settings.local.json"),
+]
+
+patterns = []
+for f in files:
+    try:
+        with open(f) as fh:
+            data = json.load(fh)
+    except Exception:
+        continue                      # absent, unreadable or not JSON: no cover
+    for entry in data.get("permissions", {}).get("allow", []) or []:
+        if entry.startswith("Bash(") and entry.endswith(")"):
+            # Bash(ssh mac-*:*) means "commands starting with `ssh mac-*`".
+            # str.removesuffix is 3.9+; this machine's python3 is 3.8.
+            pat = entry[5:-1]
+            if pat.endswith(":*"):
+                pat = pat[:-2]
+            patterns.append(pat)
+
+missing = [
+    "%s %s" % (tool, host)
+    for host in hosts
+    for tool in ("ssh", "scp")
+    if not any(fnmatch.fnmatch("%s %s" % (tool, host), p + "*") for p in patterns)
+]
+
+# One entry should cover every alias, because MAC_HOST is a list of them —
+# the common prefix of "mac-a mac-b" is "mac-". A single alias gives
+# itself, which is correct if narrower.
+prefix = os.path.commonprefix(hosts) if hosts else ""
+if len(prefix) < 2:
+    prefix = hosts[0] if hosts else "<alias>"
+
+print(prefix)
+print("\n".join(missing))
+PY
+  )
+
+  _perm_prefix=$(printf '%s\n' "$_perm_out" | sed -n 1p)
+  _perm_missing=$(printf '%s\n' "$_perm_out" | sed -n '2,$p' | sed '/^$/d')
+
+  if [ -n "$_perm_missing" ]; then
+    : > "$_PERM_WARNED"
+    cat >&2 <<MSG
+maestro-remote-mac: no permission allow covers these calls, so each one will
+wait for a prompt:
+
+$(printf '%s\n' "$_perm_missing" | sed 's/^/  /; s/$/ .../')
+
+  searched: ~/.claude/settings.json ........... covers every project
+            $PROJECT_DIR/.claude/settings.local.json ... covers this one
+
+Ask which file the user wants, then write permissions.allow in it:
+
+  "Bash(ssh ${_perm_prefix}*:*)"
+  "Bash(scp ${_perm_prefix}*:*)"
+
+The wildcard is deliberate: MAC_HOST takes several aliases, one per network,
+and a Mac that moves should not need a second answer. Choosing the project file
+means being asked again the first time another project drives.
+
+Said once per session. Nothing is blocked; this is the cost, not a failure.
+MSG
+  fi
+  unset _perm_out _perm_prefix _perm_missing
+fi
