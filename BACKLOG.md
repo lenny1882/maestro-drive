@@ -151,7 +151,7 @@ one does. Nothing in this package changes.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **OPEN, raised 17 Sep**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, NOT YET RUN LIVE; part 6b still open**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -369,6 +369,46 @@ it, and checks a **phase A completion marker** in
 networks are discoverable from the `Host` block, the `/etc/hosts` line and the
 `allowedDomains` entry, which are the record.
 
+
+**Built 17 Sep — `skill/setup/wizard.sh`, 673 lines.** Phases A, B and C and the
+`/etc/hosts` write all exist, and `install.sh` offers the wizard when the phase A
+marker is absent. `skill/` installs wholesale, so `setup/` ships with it and the
+wizard lands at `~/.claude/skills/maestro-remote-mac/setup/wizard.sh` with no
+manifest change. Modes: no argument runs it, `--status` reports what is
+configured and writes nothing, `--hosts` re-runs the `/etc/hosts` step alone,
+because reordering is a reason to come back without adding a network.
+
+**Tested — 52 package cases, up from 37, plus the skill's 360.** `skill/setup/`
+was in none of the three sweeps before this, so the wizard was not even
+parse-checked. Fifteen cases now cover what it decides to write, against copies
+in `$TMP`: the static address proposal, the SSID table gaining an arm per
+network rather than being replaced, an SSID with trailing spaces surviving
+splicing, a re-add replacing its arm rather than duplicating it, `--status`
+writing nothing, and the `/etc/hosts` rewrite leaving unrelated entries alone
+while honouring the requested order. Phase B was exercised by hand against
+copies of the real `~/.ssh/config`: a new alias appends a block that `ssh -G`
+parses with the `ProxyCommand` byte-identical to the hand-written ones, an
+existing alias has its `Hostname` updated in place with no duplicate stanza, and
+an address change drops the old entry from `allowedDomains` in the same diff.
+
+**Discovery was run against the Mac and matched the live table** — address, mask
+and gateway exact, and the service-name `awk` survived two layers of SSH
+quoting. It found one defect: `sort -u` reordered the DNS list, putting a public
+resolver ahead of the gateway, which is the opposite of what the table does and
+would quietly change what the Mac resolves locally. Now deduped in place with
+the gateway promoted, and the discovered line is byte-identical to the Mac's.
+
+**Not yet exercised, and all of it needs a live run.** Phase A's fresh branch
+(`ssh-copy-id` with a real password, writing `authorized_keys`), phase A's
+subnet comparison (`ip -o -4 addr` returns nothing inside the sandbox, because
+every Bash call gets its own network namespace), and phase C's install-and-cycle
+sequence. The cycle command itself was verified live — see the test record above
+— but not the wizard's wrapping of it.
+
+**Two defects found in this package's own new code while testing it**, both
+fixed: `allowedDomains` accumulated a stale address on every address change, and
+the DNS ordering above. A third was a bad test rather than bad code — the case-arm
+count matched the `printf` continuations inside `ipv4_config()`.
 
 **Why 3, 4 and 5 belong in one tool: they must all three be right or none is.**
 `setup.md:159-161` already says it — *"Add a new address when the Mac joins a new
