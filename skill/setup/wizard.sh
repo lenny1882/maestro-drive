@@ -3,6 +3,7 @@
 #
 #   ./wizard.sh            run it
 #   ./wizard.sh --status   what is already in place, change nothing
+#   ./wizard.sh --hosts    rewrite the /etc/hosts block only, to reorder it
 #
 # Why this exists rather than more prose. reference/setup.md describes all of
 # this correctly and it still gets done wrong, because it spans three files that
@@ -33,10 +34,11 @@ MARKER="$LIB_DIR/phase-a-done"
 SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 DEFAULT_KEY="$HOME/.ssh/mac_rc"
 
-STATUS_ONLY=0
+STATUS_ONLY=0; HOSTS_ONLY=0
 for a in "$@"; do
   case "$a" in
     --status)  STATUS_ONLY=1 ;;
+    --hosts)   HOSTS_ONLY=1 ;;
     -h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
@@ -620,9 +622,118 @@ c_cycle_and_verify() { # <alias> <device> <static>
   return 1
 }
 
+# --- /etc/hosts -------------------------------------------------------------
+# Written last, once every address is final. It is the only one of the three
+# files nothing else needs: SSH reaches the Mac by the Host block's literal
+# Hostname, and the sandbox proxy needs the address in allowedDomains. Only curl
+# on the .local name needs this.
+#
+# Every address is listed at once, deliberately: the resolver returns them all
+# and the client tries each in turn, so the name follows the Mac between
+# networks with nothing to change. The cost is that all but one are dead on any
+# given network and each one ahead of the live address is a connect timeout —
+# file order is try order, so the network used most often goes first.
+
+HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
+HOSTS_MARKER="# mac for ios simulator work"
+
 write_etc_hosts() {
   step "/etc/hosts"
-  warn "not built yet — it is written last, once the address is final."
+  resolve_from_existing
+  if [ -z "${MAC_NAME:-}" ]; then
+    warn "no .local name known, so there is nothing to map — skipping"
+    return 0
+  fi
+
+  local aliases addr first ordered=""
+  aliases=$(configured_aliases || true)
+  [ -n "$aliases" ] || { warn "no configured networks — skipping"; return 0; }
+
+  say "  Every configured address maps to $MAC_NAME. The first one listed is"
+  say "  tried first, so name the network you are on most often."
+  say ""
+  for a in $aliases; do
+    printf '    %-18s %s\n' "$a" "$(ssh_block_hostname "$a")"
+  done
+  say ""
+  first=$(ask "network to try first" "$(printf '%s\n' "$aliases" | head -1)")
+
+  for a in $first $aliases; do
+    case " $ordered " in *" $a "*) continue ;; esac
+    addr=$(ssh_block_hostname "$a")
+    [ -n "$addr" ] || continue
+    ordered="$ordered $a"
+  done
+
+  local block; block="$HOSTS_MARKER"$'\n'
+  for a in $ordered; do
+    block="$block$(ssh_block_hostname "$a") $MAC_NAME"$'\n'
+  done
+
+  say ""
+  say "  These lines, replacing whatever sits under the marker now:"
+  say ""
+  printf '%s' "$block" | sed 's/^/    /'
+  say ""
+
+  # Needs root, and it is the one file outside the user's home directory that
+  # this touches. Default is no: printing the lines is always safe, writing
+  # them is a decision.
+  if ! confirm "Write $HOSTS_FILE with sudo?" n; then
+    say ""
+    say "  Add them yourself — sudo \$EDITOR $HOSTS_FILE — replacing any existing"
+    say "  block under the same marker."
+    return 0
+  fi
+
+  local tmp; tmp=$(mktemp)
+  MARKER_TEXT="$HOSTS_MARKER" BLOCK="$block" python3 - "$HOSTS_FILE" > "$tmp" <<'PY'
+import os, sys
+
+marker = os.environ["MARKER_TEXT"]
+block = os.environ["BLOCK"]
+
+try:
+    with open(sys.argv[1]) as fh:
+        lines = fh.read().split("\n")
+except OSError:
+    lines = []
+
+out, i, replaced = [], 0, False
+while i < len(lines):
+    if lines[i].strip() == marker.strip():
+        # Drop the marker and the contiguous address lines under it; anything
+        # else in the file is untouched.
+        i += 1
+        while i < len(lines) and lines[i].strip() and not lines[i].lstrip().startswith("#"):
+            i += 1
+        out.append(block.rstrip("\n"))
+        replaced = True
+        continue
+    out.append(lines[i])
+    i += 1
+
+if not replaced:
+    while out and not out[-1].strip():
+        out.pop()
+    out.append("")
+    out.append(block.rstrip("\n"))
+
+sys.stdout.write("\n".join(out).rstrip("\n") + "\n")
+PY
+
+  say ""
+  say "  $HOSTS_FILE would change:"
+  diff "$HOSTS_FILE" "$tmp" | sed 's/^/    /' || true
+  say ""
+  if confirm "Apply that?" n; then
+    sudo cp -p "$HOSTS_FILE" "$HOSTS_FILE.bak-$(date '+%Y%m%d-%H%M%S')"
+    sudo cp "$tmp" "$HOSTS_FILE"
+    ok "written"
+  else
+    warn "left unchanged — curl on $MAC_NAME will not resolve"
+  fi
+  rm -f "$tmp"
 }
 
 # --- main -------------------------------------------------------------------
@@ -633,6 +744,11 @@ command -v jq >/dev/null 2>&1 || {
   say "  jq is needed and is missing — install it and re-run."
   exit 1
 }
+
+if [ "$HOSTS_ONLY" = 1 ]; then
+  write_etc_hosts
+  exit 0
+fi
 
 if [ "$STATUS_ONLY" = 1 ]; then
   step "Phase A"
