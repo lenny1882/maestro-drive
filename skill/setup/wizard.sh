@@ -33,7 +33,11 @@ set -euo pipefail
 LIB_DIR="${LIB_DIR:-$HOME/.local/share/maestro-remote-mac}"
 MARKER="$LIB_DIR/phase-a-done"
 SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
-DEFAULT_KEY="$HOME/.ssh/mac_rc"
+# Only a fallback for a machine with nothing configured yet. Once any Host block
+# exists, its IdentityFile is the real answer and is preferred — the name is a
+# convention, not a fact, and assuming it is wrong on any machine that chose
+# another.
+FALLBACK_KEY="$HOME/.ssh/mac_rc"
 
 STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0
 for a in "$@"; do
@@ -207,7 +211,12 @@ phase_a() {
     say ""
     say "  A key for this and nothing else. An existing one is fine — the Mac only"
     say "  has to trust it, and its type does not matter."
-    key=$(ask "key path, or blank to create one" "$DEFAULT_KEY")
+    local known_key=""
+    for _a in $(configured_aliases || true); do
+      known_key=$(host_field "$_a" IdentityFile); [ -n "$known_key" ] && break
+    done
+    known_key="${known_key/#\~/$HOME}"
+    key=$(ask "key path, or blank to create one" "${known_key:-$FALLBACK_KEY}")
     key="${key/#\~/$HOME}"
 
     if [ -r "$key" ]; then
@@ -756,7 +765,16 @@ write_etc_hosts() {
     printf '    %-18s %s\n' "$a" "$(ssh_block_hostname "$a")"
   done
   say ""
-  first=$(ask "network to try first" "$(printf '%s\n' "$aliases" | head -1)")
+  # File order is not an answer to "which do you use most" — it is just whichever
+  # Host block happens to be first. Offer the one the Mac is reachable on right
+  # now, which is at least a fact, and no default when none answers.
+  local live=""
+  for a in $aliases; do
+    if ssh -o BatchMode=yes -o ConnectTimeout=4 "$a" true 2>/dev/null; then
+      live="$a"; say "  $a answers right now."; break
+    fi
+  done
+  first=$(ask "network to try first" "$live")
 
   for a in $first $aliases; do
     case " $ordered " in *" $a "*) continue ;; esac
