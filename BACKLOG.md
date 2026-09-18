@@ -716,7 +716,7 @@ acted on.
 
 ---
 
-## 87. Flutter and iOS are wired in, not plugged in — **OPEN, raised 18 Sep**
+## 87. Flutter and iOS are wired in, not plugged in — **OPEN, raised 18 Sep; seam designed 18 Sep, nothing wired to it yet**
 
 The driving half of this skill does not care what built the app. Maestro taps a
 coordinate, reads a hierarchy, runs a journey and takes a screenshot the same way
@@ -786,3 +786,115 @@ is the sister package and is Flutter by definition — it is not in scope here, 
 whatever seam this item settles on is the one it would plug into.
 
 **Gates.** None. Item 85 touches none of these files.
+
+---
+
+### The seam, as designed 18 Sep. `skill/runners/README.md` is the contract.
+
+**The grep above overcounts.** Recounted by reading the files rather than
+grepping them: **eight** hold Flutter *logic* — `remote/build.sh`,
+`remote/vmservice.sh`, `bin/net.sh`, `bin/publish.sh`, `remote/net.py`,
+`remote/gitstate.sh`, `bin/preflight.sh` and `bin/prefs.sh`. Every other hit in
+the table is a comment explaining a measurement. `driver.sh`'s two, `hier.sh`'s,
+`resolve.py`'s, `secrets.sh`'s, `wall.py`'s and `relay.py`'s all survive the word
+being deleted, so they are not work. `bin/prefs.sh` was missed by the grep
+entirely — its default filter is `flutter`, because `shared_preferences`
+prefixes every NSUserDefaults key — which is the reverse error and worth the
+same note.
+
+**Two modules, confirmed.** The four names the seam is wanted for split cleanly
+across the two axes this item already identified: `flutter` and `react-native`
+are frameworks, `ios` and `android` are platforms. A single
+`RUNNER=flutter|react-native|ios|android` cannot work, because it would make
+`flutter` and `android` alternatives to each other when both are true at once.
+`ios` and `android` also answer the framework questions for a project with no
+framework above the platform.
+
+A module is one POSIX `sh` script per axis, dispatching on its first argument.
+**Exit 2 means "this framework does not have that verb"**, and it is not a
+failure — it is what lets `net.sh` say "native apps have no traffic endpoint"
+instead of "the relay is broken", which is the same distinction `vmservice.sh`
+already draws and which cost a session six minutes before it did.
+
+- framework: `claim describe variants variant-for-appid build residue
+  devsession inspect traffic-arm traffic-list traffic-one prefs-prefix`
+- platform: `claim devices boot shutdown install container data-container
+  prefs-read prefs-flush orientations screenshot driver-up driver-down
+  driver-scan capture-cmd`
+
+**Written.** `skill/runners/README.md` (the contract, the seven call sites, and
+what the stubs found), `runners/TEMPLATE/` (the module to copy),
+`runners/flutter/framework.sh` and `runners/ios/platform.sh` (worked, delegating
+to today's scripts), `runners/react-native/framework.sh` and
+`runners/android/platform.sh` (stubs — **nothing in either has been run**, and
+each verb says whether it is documented-not-measured or unanswered),
+`bin/runner.sh` (the dispatcher: `which`, `path`, `rpath`, `detect`).
+
+**Applied to the existing code**, behaviour unchanged and Flutter still coupled:
+
+- `remote/build.sh` prints `artifact <path>` on a successful build and gains
+  `--build-only`. This is the one real change the seam demanded and it is done:
+  the simulator install is `_install_sim`, a named unit `runners/ios` mirrors,
+  and on the physical-device path `--build-only` emits the build half of the
+  script handed to the GUI session without the `devicectl` half. Five tests.
+- `remote/gitstate.sh` — the residue list is `$RESIDUE_GLOBS`, defaulting to the
+  same five patterns. Verified against a React-Native-shaped override.
+- `bin/preflight.sh` — the dev-session heading, pgrep pattern and consequence
+  text are variables, still holding the Flutter values.
+- `bin/config.sh` — `RUNNER=flutter`, `PLATFORM=ios`. Nothing reads them yet.
+- `bin/install.sh` pushes `runners/` to `$RDIR`; `bin/build.sh --no-install`
+  passes `--build-only` through.
+
+**Six verbs left unanswered on purpose, and they are the useful part.** Each is
+a hole in the contract, not work nobody got round to. `android boot` — an AVD
+name and an emulator serial are not the same identifier, and the contract
+assumes they are. `android container` — `appcheck`'s timestamp-and-plist
+comparison, the single most valuable check in `preflight.sh`, has no Android
+equivalent. `android driver-up`/`driver-down`/`driver-scan` — Maestro's Android
+driver is an instrumented APK behind `adb forward`, and whether its port can be
+chosen per device at all decides whether several-devices-at-once crosses.
+`react-native variants` — iOS schemes and Android product flavours are two
+lists, which makes it the one verb where the axes are not independent.
+
+**Done 18 Sep: `bin/build.sh` splits into two SSH calls, not one.** Call site 3
+is the first of the seven wired, and it is the only one that needed a decision
+rather than a substitution. `framework.sh build` then `platform.sh install`,
+both reached through `runner.sh rpath`; `platform.sh claim` replaces the
+UUID-shape test, `platform.sh devices --booted` replaces the inline `simctl`
+parse behind `--all`, `framework.sh describe` answers `--detect`, and
+`--install-only <path>` is new. Verified live against the Mac: `runner.sh
+detect` claims the real checkout as Flutter, `--detect` reports through the
+module, and a build returns 22s with the artefact path parsed back out. **The
+install half is not verified live — no simulator was booted.**
+`framework build` returns `artifact <path>` to this side, then one
+`platform install` loops over the target devices on the Mac. Concatenating the
+two verbs into a single remote command would save one round trip — 0.35s
+against a 36s incremental build, about 1% — and would leave the artefact path
+as a shell variable on the Mac.
+
+Keeping the path here is what lets a *second* install skip the build. Not the
+several-simulators case: `--all` already builds once and installs to every
+booted simulator in one call, so devices present at build time cost the same
+either way. It is every install of an artefact already built — a simulator
+booted after the build (item 24), a reinstall after `simctl erase`, an
+uninstall to test first launch, a driver or device replaced mid-session.
+
+**A no-op build is 21-22s, measured 18 Sep 2026.** Three consecutive
+`bin/build.sh --no-install` runs against an unchanged tree on the Mac: 34s
+(19.6s Xcode), 22s (13.2s), 21s (12.4s). The first also re-confirms the 13 Aug
+figure of 36s. It does not collapse to nothing, because Xcode re-runs Flutter's
+script phase every time whatever the staleness of its outputs, and ~9s goes on
+`pub get` resolution before Xcode starts at all.
+
+So each repeat install saves 21s rather than the 36s first claimed here, and
+one of them still pays for sixty builds' worth of the single-call saving.
+
+Left open by that: the physical-device path polls a GUI-session build for up to
+1200s and keeps its own `TMO`, so the two paths do not share a timeout rule.
+
+**Still to do.** Six of the seven call sites. Only 3 actually calls a runner; 1
+and 2 are parameterised but still hold the Flutter defaults themselves, so
+nothing passes the module's answer to them yet, and 4 to 7 are untouched.
+Answer the six unanswered verbs. Verify the install half of call site 3 against
+a booted simulator. `runners/README.md` has each call site and the shape of its
+change.
