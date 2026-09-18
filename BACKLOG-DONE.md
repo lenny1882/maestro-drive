@@ -1800,35 +1800,12 @@ the state moved). Real values stay in the project's notes; the section points at
 entered the skill. The item-51 hook already exempts the no-selector case (raw
 `tap` once per session), so no hook change was needed.
 
-## 28. Machine and client data left in this directory, and two files that should go — **OPEN, and deliberate, raised 19 Aug**
+## 28. Machine and client data left in this directory, and two files that should go — **DONE 18 Sep 2026**
 
-The 12 Aug sweep read all 573 files and found no credentials. Client and machine
-data was in eight places; four were removed or redacted and four remain by
-The maintainer's decision, because a handoff that will not name the Mac it talks to is
-less useful:
-
-| file | what it carries |
-| --- | --- |
-| `RULES-STALE-pre-skill.md` | the full set — 11 alias mentions, 2 `/Users/dev` paths, banner-marked |
-| `HANDOFF.md` | 4 alias mentions and 3 ticket keys |
-| `README.md` | 2 alias mentions and a `/Users/dev` path |
-| `BACKLOG.md` | a project path, a ticket key and the Mac's alias |
-
-None of it ships — `ship.sh` publishes `src/`, and none of these four is under
-it — so this is only about what the directory looks like the moment it leaves
-this machine. **Item 17 is that moment**, since it is the one that gives the
-package git and a remote, so this is decided then and not before.
-
-Two leftovers were flagged on 12 Aug and not acted on. The top-level `docs/`
-duplicates `src/docs` — both 1.2 MB, the same mirror, differing only in that the
-top-level copy has `llms.txt` and no `VERSION`, so it is the copy whose
-provenance cannot be checked. And `RULES-STALE-pre-skill.md` should be deleted
-when `README.md` is dealt with, since it is the pre-skill rules document and is
-wrong in two places its banner does not name.
-
-**Fix.** Nothing until 17 is taken. Then: delete the duplicate `docs/`, delete
-`RULES-STALE-pre-skill.md` with `README.md`, and ask about the two that are
-left rather than redacting them.
+Kept here in number order as a pointer only, the same way item 17 is. A copy of
+this item sat in both files, marked `OPEN` in this one and `DONE` in the other;
+the body and the fold are at the end of this file, with the rest of 18
+September's work.
 
 ## 29. `tapon` cannot take `--anyway`, and the refusal it prints tells you to use it — **DONE 11 Sep**
 
@@ -4485,7 +4462,7 @@ rather than guessed at.
 
 ---
 
-## 71. Three facts about detached work, all learned the hard way, none of them in the skill — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 71. Three facts about detached work, all learned the hard way, none of them in the skill — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 Item 70 depends on this, and on its own it explains a day of "is it actually
 running?".
@@ -4553,7 +4530,7 @@ anything the toolkit spawns finds the project without being told.
 
 ---
 
-## 72. Nothing extracts a list of rows from the hierarchy — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 72. Nothing extracts a list of rows from the hierarchy — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 `driver.sh nodes` dumps every node, `bin/tree.py` renders an indented tree, and
 `bin/resolve.py` finds **one** element. There is no verb for *"every row matching
@@ -4602,7 +4579,7 @@ signature that proved `/swipe` moves that screen came out of `rows`.
 
 ---
 
-## 70. Nothing watches a device for a change over time — **BUILT IN src/ 17 Sep, VERIFIED LIVE, NOT YET SHIPPED**
+## 70. Nothing watches a device for a change over time — **DONE 17 Sep, VERIFIED LIVE; SHIPPED in v1.0.0**
 
 The whole of 15 and 16 Sep was one question — *does a row leave the screen when
 nobody is touching it* — and the toolkit has no verb for it. Every session built
@@ -4726,7 +4703,7 @@ claim. 11 samples, 0 failed reads, 1 change.
 
 ---
 
-## 74. The wall costs a capture process per device — but what costs the Mac is booting, not having — **MEASURED AND BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 74. The wall costs a capture process per device — but what costs the Mac is booting, not having — **DONE 17 Sep, MEASURED; SHIPPED in v1.0.0**
 
 Raised 17 Sep off `ef0f7ede` (16 Sep 09:43), which had five simulators booted,
 five XCUITest drivers up and the wall running, reported **508 CoreSimulator
@@ -4791,7 +4768,7 @@ should account for.
 
 ---
 
-## 73. `drivers.sh up` with no udid reshuffles every device's ports, including other sessions' — **BUILT IN src/ 17 Sep, VERIFIED LIVE, NOT YET SHIPPED**
+## 73. `drivers.sh up` with no udid reshuffles every device's ports, including other sessions' — **DONE 17 Sep, VERIFIED LIVE; SHIPPED in v1.0.0**
 
 Ports are assigned by walking the booted simulators, so a bare `drivers.sh up`
 re-numbers devices it was never asked about. Three sightings in two days:
@@ -4868,7 +4845,7 @@ together.
 
 ---
 
-## 76. There is no rig — bring-up, state and teardown of several devices is hand-assembled every time — **BUILT IN src/ 17 Sep, VERIFIED LIVE, NOT YET SHIPPED**
+## 76. There is no rig — bring-up, state and teardown of several devices is hand-assembled every time — **DONE 17 Sep, VERIFIED LIVE; SHIPPED in v1.0.0**
 
 "Get the rig set up" (`ef0f7ede`, 09:32) and "tear the rig down" (`178236e9`,
 13:22) were the units of work on 16 Sep, and neither is a thing the toolkit has.
@@ -4945,7 +4922,7 @@ step (`build.sh --all`), by design.
 
 ---
 
-## 75. A wedged simulator answers every tap with success — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 75. A wedged simulator answers every tap with success — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 `ef0f7ede`, 16 Sep 09:51, after the load spike of item 74: *"Taps report ok but
 nothing reaches the app — hierarchy reads fine, touch injection is dead."* Two
@@ -4984,7 +4961,7 @@ injection is alive, so this is inferred rather than asked.
 
 ---
 
-## 77. Journey edits are blind string replacement, and units cannot be composed without a temp file — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 77. Journey edits are blind string replacement, and units cannot be composed without a temp file — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 **(a) Editing.** `f13f0e13` made five inline `python3 - <<'PY'` edits to two
 journey files between 14:06 and 14:17, including one revert — switching the store
@@ -5027,7 +5004,7 @@ no-match.
 
 ---
 
-## 78. `app-notes.md` reached 169 KB with nothing measuring it — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 78. `app-notes.md` reached 169 KB with nothing measuring it — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 `maestro/app-notes.md` in `brandco-flutter-runner` is **169,005 bytes across
 1,302 lines** as of 16 Sep. `SKILL.md` is unambiguous that this must not happen:
@@ -5069,7 +5046,7 @@ keeping them readable without keeping them loaded. The project's own
 
 ---
 
-## 79. `/tmp/maestro-mac/` does not survive a Mac reboot — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 79. `/tmp/maestro-mac/` does not survive a Mac reboot — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 `aee7e1ad`, 15 Sep 13:51, after the Mac came back up: *"`/tmp/maestro-mac/` is
 gone entirely. The Mac reboot wiped it (it's under `/tmp`)."* With it went the
@@ -5098,7 +5075,7 @@ it presents as a first run rather than as a reboot.
 
 ---
 
-## 80. Two live sessions on one Mac have no protocol — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 80. Two live sessions on one Mac have no protocol — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 On 16 Sep two sessions drove the same Mac all afternoon and it worked, entirely
 improvised. `2f46cc6a` took store 4001 and the iPads, `f13f0e13` took 4002 and
@@ -5134,7 +5111,7 @@ one.
 
 ---
 
-## 81. Nothing says to establish whether a timed state can be forced before waiting for it — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 81. Nothing says to establish whether a timed state can be forced before waiting for it — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 15 Sep went from 12:46 to 21:56 across two sessions waiting for request TTLs to
 expire so a list would shed rows. At 18:55 the maintainer found out it had never been
@@ -5173,7 +5150,7 @@ rediscovered. Item 58's warning is cross-referenced on the third route.
 
 ---
 
-## 83. A journey edit is a blind string replacement — a no-match rewrites the file unchanged and says nothing — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 83. A journey edit is a blind string replacement — a no-match rewrites the file unchanged and says nothing — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 The half of item 77 that was not built. 77 gave `script --steps` for *composing*
 units inline; *editing* a journey is still `s.replace(old, new)` against a
@@ -5399,7 +5376,7 @@ predated the package having a release at all.
 
 ---
 
-## 84. An `_ssh` inside a loop reading from stdin eats the loop's input — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
+## 84. An `_ssh` inside a loop reading from stdin eats the loop's input — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 `_ssh` passes stdin to the remote command by design. A loop fed by a pipe or a
 file redirect therefore loses every line not yet read the moment an ssh call
@@ -5753,3 +5730,85 @@ name, the client app's repository name and its Jira ticket keys, in `SKILL.md`,
 `physical-device.md`, `bin/init.sh` and `test/run-tests.sh`. Item 28 said to
 decide that when 17 was taken. There is no remote yet, so nothing has left the
 machine, but it is the question to answer before one exists.
+
+---
+
+## 28. Machine and client data left in this directory, and two files that should go — **DONE 18 Sep for everything this repo controls; the four deletions are not this repo's to make**
+
+The 12 Aug sweep read all 573 files and found no credentials. Client and machine
+data was in eight places; four were removed or redacted and four remain by
+The maintainer's decision, because a handoff that will not name the Mac it talks to is
+less useful:
+
+| file | what it carries |
+| --- | --- |
+| `RULES-STALE-pre-skill.md` | the full set — 11 alias mentions, 2 `/Users/dev` paths, banner-marked |
+| `HANDOFF.md` | 4 alias mentions and 3 ticket keys |
+| `README.md` | 2 alias mentions and a `/Users/dev` path |
+| `BACKLOG-DONE.md` | a project path, a ticket key and the Mac's alias |
+
+None of the four is in the package — they sit in `~/claude-sandbox/maestro-remote-mac/`
+and the repo took only `src/`, now `skill/` — so this is only about what leaves
+the machine. **Item 17 was that moment and it has passed**, half of it: the
+package has git, one commit and no remote. Nothing is exposed yet, and the
+decision is now due rather than gated.
+
+**17 Sep adds a fifth file, and this one *is* in the package.** `skill/` carries
+client identifiers of its own — the employer name, the client app's repository
+name and its Jira ticket keys, in `SKILL.md`, `physical-device.md`,
+`bin/init.sh` and `test/run-tests.sh`. The 12 Aug sweep did not count these, because at the time
+nothing under `src/` was going anywhere. A remote changes that, so they belong
+in the same decision as the four above.
+
+Two leftovers were flagged on 12 Aug and not acted on. The top-level `docs/`
+duplicates the docs mirror now in the repo at `skill/docs` — both 1.2 MB, the
+same pages, differing only in that the top-level copy has `llms.txt` and no
+`VERSION`, so it is the copy whose provenance cannot be checked. And
+`RULES-STALE-pre-skill.md` should be deleted when `README.md` is dealt with,
+since it is the pre-skill rules document and is wrong in two places its banner
+does not name. `build/` and `ship.sh` join that list — superseded by the repo,
+source of truth for nothing, and still here.
+
+**Fix, as it was written.** Delete the duplicate top-level `docs/`; delete
+`RULES-STALE-pre-skill.md` with `README.md`; delete `build/` and `ship.sh`; and
+ask about the rest rather than redacting them — the two the maintainer kept
+deliberately, and the identifiers inside `skill/`, which are the ones a remote
+would actually publish.
+
+**The four deletions are out of scope and this item should never have carried
+them.** Every one of them — the top-level `docs/`, `RULES-STALE-pre-skill.md`,
+`build/` and `ship.sh` — lives in `~/claude-sandbox/maestro-remote-mac/`, the
+pre-repo working directory. Nothing in this repository references them, nothing
+ships them, and no change here can remove them: a session working in this repo
+can only write to its own working directory. They were listed when this item was
+written on 19 Aug, before item 17 moved the toolkit into a repo of its own, and
+at that point this directory and that one were the same place. They are not any
+more. Deleting that folder is housekeeping on a machine, not work on this
+package, and the item does not wait on it.
+
+**Everything this repo does control is done, 18 Sep.**
+
+- **The identifiers in `skill/` are gone.** A sweep of every tracked file found
+  what the 17 Sep pass had missed: `mac-home`/`mac-office` in eight fixture
+  strings in `skill/test/run-tests.sh`, four comments in `skill/bin/config.sh`
+  and one line of `skill/setup/wizard.sh`'s printed prose; `192.168.4.x` and
+  `10.0.52.x`, the Mac's real addresses on two networks, in `test/run-tests.sh`;
+  and the client repo name in this file. Renamed to `mac-a`/`mac-b` and
+  `192.168.1.x`/`10.0.0.x`, which is what the rest of the repo already used.
+- **The pass had been applied inconsistently inside single files**, which is why
+  a count was never a safe stopping point: `skill/bin/config.sh:90` already read
+  `mac-a mac-b` while `:269` and `:309` still read `mac-home`, and
+  `test/run-tests.sh` carried the sanitised `192.168.1.10` forty lines from the
+  real `192.168.4.250`.
+- **The decision this item asked for was overtaken.** It assumed nothing had
+  left the machine and that a remote was the moment to decide. The repo was
+  already public and pushed. So the choice was not "redact before pushing" but
+  "rewrite what is already there", and the rewrite was run: all 31 commits
+  across `main`, `release/v1.x` and the `v1.0.0` tag, verified to leave the tip
+  tree byte-identical, with the five values at zero afterwards where they had
+  been 28 and 87 and 20 and 20 blobs before. The `v1.0.0` release asset was
+  rebuilt from the rewritten tag and checked by download.
+- **What a rewrite cannot reach, and nothing here can.** GitHub still serves the
+  pre-rewrite commits by SHA, content intact, until it garbage-collects the
+  repository — confirmed by fetching `skill/bin/config.sh` at the old commit
+  over plain HTTPS. That is a support request, not a change to this package.
