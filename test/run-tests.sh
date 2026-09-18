@@ -342,6 +342,38 @@ printf '%s' "$rw_noname" | grep -q "cannot be written" \
   || no "write path: an unknown .local name names what it costs" \
         "$(printf '%s' "$rw_noname" | sed -n '/etc\/hosts/,$p' | head -3)"
 
+# Re-running for an alias that already exists is what a live run does — every
+# case above adds a NEW one. The block must be updated in place, not appended
+# beside itself, and the address it replaces must leave allowedDomains rather
+# than accumulating there.
+UP="$TMP/update"; mkdir -p "$UP/lib" "$UP/bin"
+printf '#!/bin/sh\nexit 1\n' > "$UP/bin/sudo"; chmod +x "$UP/bin/sudo"
+: > "$UP/key"
+printf 'Host mac-test\n\tHostname 192.168.99.50\n\tUser testuser\n\tIdentityFile %s\n' \
+  "$UP/key" > "$UP/ssh_config"
+printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local","192.168.99.50"]}}}\n' > "$UP/settings.json"
+printf '127.0.0.1 localhost\n' > "$UP/hosts"
+date +%F > "$UP/lib/phase-a-done"
+printf 'y\nmac-test\n192.168.99.77\ny\ny\nn\ny\nn\n' | \
+  PATH="$UP/bin:$PATH" SSH_CONFIG="$UP/ssh_config" SETTINGS="$UP/settings.json" \
+  HOSTS_FILE="$UP/hosts" LIB_DIR="$UP/lib" timeout 120 "$W" >/dev/null 2>&1
+
+[ "$(grep -c '^Host mac-test$' "$UP/ssh_config")" = 1 ] \
+  && ok "re-run: an existing Host block is updated, not duplicated" \
+  || no "re-run: an existing Host block is updated, not duplicated" \
+        "$(grep -c '^Host mac-test$' "$UP/ssh_config") blocks named mac-test"
+
+grep -qE '^[[:space:]]*Hostname 192\.168\.99\.77$' "$UP/ssh_config" \
+  && ok "re-run: the Host block carries the new address" \
+  || no "re-run: the Host block carries the new address" "$(grep -i hostname "$UP/ssh_config" | tr '\n' '/')"
+
+up_dom=$(python3 -c "import json,sys;print(' '.join(json.load(open(sys.argv[1]))['sandbox']['network']['allowedDomains']))" "$UP/settings.json")
+case " $up_dom " in
+  *" 192.168.99.50 "*) no "re-run: the address it replaced leaves allowedDomains" "still there: $up_dom" ;;
+  *" 192.168.99.77 "*) ok "re-run: the address it replaced leaves allowedDomains" ;;
+  *) no "re-run: the address it replaced leaves allowedDomains" "new address missing: $up_dom" ;;
+esac
+
 echo "installer"
 # Two pre-existing hooks from some other package, to prove we leave them alone.
 # The second is on matcher "Bash", which is the one this package also wants:

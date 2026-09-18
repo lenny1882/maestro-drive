@@ -456,12 +456,37 @@ first written — it matched `ok    written` loosely and caught settings.json's 
 `written (backup: …)` from the same run — which is the same class of mistake as
 the defect it was written for.
 
+**A sixth defect, found by running `--hosts` against a copy of the real
+`/etc/hosts` with the answers piped in: every `ssh` in the file needed `-n`.** A
+successful ssh reads and discards whatever is on stdin, and stdin here is where
+`ask` and `confirm` get their answers — so the `/etc/hosts` liveness probe
+reached a Mac that answered and swallowed every answer after it. Reduced to a
+three-line stream through one `ssh <alias> true`, after which `read` returned
+nothing. Invisible interactively, because a person has not typed ahead, and only
+reproducible when the Mac is actually reachable: both are the real-machine case
+this item is about. Six calls, not the four a manual sweep found — the static
+test caught two more in phase C, one inside a 40-iteration poll. `ssh-copy-id`
+keeps its stdin, because it reads the password through it.
+
+**The re-run path is now covered too.** Every other case adds a NEW alias; a
+live run updates one that exists. Three cases assert the Host block is updated
+rather than appended beside itself, that it carries the new address, and that
+the address it replaced leaves `allowedDomains` instead of accumulating there.
+
+**This machine needs no preparation, which is also why B cannot be exercised on
+it.** Checked 18 Sep: the three Host blocks, `allowedDomains` and the
+`/etc/hosts` marker block all agree, so a run would find nothing to change — a
+rehearsal against a copy of the real file produced one whitespace difference and
+nothing else. Exercising B for real means deliberately removing one network's
+three entries and letting the wizard restore them, or joining the Mac to a
+fourth network.
+
 **Still unexercised, and not exercisable from a sandbox.** `ssh-copy-id` connects
 to a raw address rather than an alias, so it gets no `ProxyCommand` and has no
 route out; phase C installs and cycles a script on the Mac. Both need a person at
 the terminal on a machine with a route to it.
 
-**Coverage: 67 package cases, up from 37 when this started.** Seven of them are
+**Coverage: 71 package cases, up from 37 when this started.** Seven of them are
 the fresh-machine path, which had none, and they were checked against the bug
 they exist for — reintroducing the unassigned `local` turns six of the seven red.
 
