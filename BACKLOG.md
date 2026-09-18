@@ -347,13 +347,32 @@ and `/tmp/maestro-mac`; locally to the checkout's `runners/` and `remote/`;
 `devices` and `claim` verbs run through `_ssh` and exit 0, where before the
 split the same call exited 127; suite 144 passed, 0 failed.
 
-**2.3 `bin/install.sh` has nothing to push.** Once 2.2 lands, the helpers and
-the runner modules are already where a local verb looks for them. The unit is
-the skip and the message: a local `install.sh` should say the code is in place,
-not print an empty `ls -la`. Its `_ssh "mkdir -p '$RDIR'"` at `lib.sh:298` still
-has to make the scratch directory. *Files:* `skill/bin/install.sh`. *Done when:*
-a local `install.sh` copies nothing, creates the scratch directory, and exits 0
-with a line saying which checkout the modules are being read from.
+**2.3 DONE 18 Sep — `bin/install.sh` has nothing to push.** After 2.2 the
+helpers and the runner modules are already where a local verb looks for them.
+The unit is the skip, the scratch directory, and a message naming the three
+paths in play.
+
+**Two ways it would have damaged the checkout, not one.** `$RHELP` and `$RMODS`
+in local transport ARE the checkout's `remote/` and `runners/`, so every copy in
+this script is a file onto itself — and the form here is `cat > dst < src`,
+which truncates `dst` before the read begins. Run converted rather than skipped,
+it empties `hier.py` and every runner module in the working tree. The `chmod +x`
+on the last line is the second: `hier.py`, `relay.py` and `wall.py` are `100644`
+in git and the `.sh` files are already `100755`, so the only thing it achieves
+locally is three mode changes in `git status`.
+
+**The scratch directory stays this script's to make.** `$RDIR` is the scratch in
+both transports and nothing else creates it, so the local branch still runs the
+`mkdir -p` before returning.
+
+*Files:* `skill/bin/install.sh`. *Verified:* a local run copies nothing, creates
+`$RDIR` and `$RDIR/flows`, exits 0, and names the modules directory, the helpers
+directory and the scratch; `git status` over `skill/` afterwards shows only the
+edit to `install.sh` itself; suite 144 passed, 0 failed.
+
+**Stage 2 is complete.** A local conf now loads, `_ssh` runs the script here,
+and the module paths resolve to the checkout. What a local session still cannot
+do is anything that moves a file — Stage 3.
 
 **Stage 3 — the sixteen raw calls, by shape.** Four shapes, not sixteen
 problems. Each unit does every call site of its shape, because a half-converted
