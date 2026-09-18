@@ -374,6 +374,96 @@ case " $up_dom " in
   *) no "re-run: the address it replaced leaves allowedDomains" "new address missing: $up_dom" ;;
 esac
 
+# --- the remove path, the anti-wizard ----------------------------------------
+# Adding writes three things that must agree, so removing has to unwrite the
+# same three. A round trip is the test that matters: add a network, take it out,
+# and every file is back where it started.
+RM="$TMP/remove"; mkdir -p "$RM/lib" "$RM/bin"
+printf '#!/bin/sh\ncase "$1" in -p) shift;; esac\nexec "$@"\n' > "$RM/bin/sudo"
+chmod +x "$RM/bin/sudo"
+: > "$RM/key"
+rm_reset() {
+  printf 'Host mac-keep\n\tHostname 10.0.0.10\n\tUser testuser\n\tIdentityFile %s\n' \
+    "$RM/key" > "$RM/ssh_config"
+  printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local","10.0.0.10"]}}}\n' \
+    > "$RM/settings.json"
+  printf '127.0.0.1 localhost\n\n# mac for ios simulator work\n10.0.0.10 the-mac.local\n' \
+    > "$RM/hosts"
+  date +%F > "$RM/lib/phase-a-done"
+  rm -f "$RM"/*.bak-*
+}
+rm_wiz() { # rm_wiz <answers> [args...]
+  local answers="$1"; shift
+  printf '%b' "$answers" | PATH="$RM/bin:$PATH" SSH_CONFIG="$RM/ssh_config" \
+    SETTINGS="$RM/settings.json" HOSTS_FILE="$RM/hosts" LIB_DIR="$RM/lib" \
+    timeout 120 "$W" "$@" 2>&1
+}
+rm_domains() { python3 -c "import json,sys;print(' '.join(json.load(open(sys.argv[1]))['sandbox']['network']['allowedDomains']))" "$RM/settings.json"; }
+
+rm_reset
+cp "$RM/ssh_config" "$RM/ssh_config.orig"; cp "$RM/hosts" "$RM/hosts.orig"
+orig_domains=$(rm_domains)
+rm_wiz 'y\nmac-gone\n10.0.0.99\ny\ny\nn\ny\ny\ny\n' >/dev/null
+rm_wiz 'y\ny\n\ny\ny\n' --remove mac-gone >/dev/null
+
+diff -q "$RM/ssh_config.orig" "$RM/ssh_config" >/dev/null \
+  && ok "remove: a round trip leaves the ssh config where it started" \
+  || no "remove: a round trip leaves the ssh config where it started" \
+        "$(diff "$RM/ssh_config.orig" "$RM/ssh_config" | head -4 | tr '\n' '/')"
+
+diff -q "$RM/hosts.orig" "$RM/hosts" >/dev/null \
+  && ok "remove: a round trip leaves /etc/hosts where it started" \
+  || no "remove: a round trip leaves /etc/hosts where it started" \
+        "$(diff "$RM/hosts.orig" "$RM/hosts" | head -4 | tr '\n' '/')"
+
+# jq rewrites the file, so the bytes change and the values must not.
+[ "$(rm_domains)" = "$orig_domains" ] \
+  && ok "remove: a round trip leaves allowedDomains where it started" \
+  || no "remove: a round trip leaves allowedDomains where it started" "now: $(rm_domains)"
+
+# Removing the last network takes the key path and the Mac's username with it,
+# because both are read back FROM a Host block.
+rm_reset
+rm_last=$(rm_wiz 'y\n' --remove mac-keep); rm_last_rc=$?
+printf '%s' "$rm_last" | grep -q "only configured network" \
+  && [ "$rm_last_rc" != 0 ] \
+  && ok "remove: the last network is refused" \
+  || no "remove: the last network is refused" "rc=$rm_last_rc: $(printf '%s' "$rm_last" | tail -2 | tr '\n' '/')"
+grep -q "^Host mac-keep$" "$RM/ssh_config" \
+  && ok "remove: a refusal writes nothing" \
+  || no "remove: a refusal writes nothing" "the block is gone"
+
+# An alias that is not there is a typo, and the useful answer is the list.
+rm_unknown=$(rm_wiz '' --remove not-a-network); rm_unknown_rc=$?
+[ "$rm_unknown_rc" = 2 ] \
+  && printf '%s' "$rm_unknown" | grep -q "mac-keep" \
+  && ok "remove: an unknown alias exits 2 and lists what is configured" \
+  || no "remove: an unknown alias exits 2 and lists what is configured" "rc=$rm_unknown_rc"
+
+# One Host line can name several aliases; removing "the block" would take them
+# all, silently.
+rm_reset
+printf 'Host mac-a mac-b\n\tHostname 10.0.0.77\n\tUser testuser\n\tIdentityFile %s\n' \
+  "$RM/key" >> "$RM/ssh_config"
+rm_multi=$(rm_wiz 'y\n' --remove mac-a); rm_multi_rc=$?
+printf '%s' "$rm_multi" | grep -q "names other aliases too" \
+  && [ "$rm_multi_rc" != 0 ] \
+  && ok "remove: a Host line naming several aliases is refused" \
+  || no "remove: a Host line naming several aliases is refused" "rc=$rm_multi_rc"
+
+# An address two aliases share is not this one's to withdraw.
+rm_reset
+printf 'Host mac-twin\n\tHostname 10.0.0.10\n\tUser testuser\n\tIdentityFile %s\n' \
+  "$RM/key" >> "$RM/ssh_config"
+rm_shared=$(rm_wiz 'y\n\ny\ny\n' --remove mac-twin)
+case " $(rm_domains) " in
+  *" 10.0.0.10 "*) ok "remove: an address another alias still uses is kept" ;;
+  *) no "remove: an address another alias still uses is kept" "domains now: $(rm_domains)" ;;
+esac
+printf '%s' "$rm_shared" | grep -q "still uses it" \
+  && ok "remove: it says which alias is keeping the address" \
+  || no "remove: it says which alias is keeping the address" "$(printf '%s' "$rm_shared" | grep -A3 'What goes' | tr '\n' '/')"
+
 echo "installer"
 # Two pre-existing hooks from some other package, to prove we leave them alone.
 # The second is on matcher "Bash", which is the one this package also wants:
