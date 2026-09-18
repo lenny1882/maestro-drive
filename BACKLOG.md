@@ -77,7 +77,7 @@ rather than how it works.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; WRITE PATH RUN AND TESTED 18 Sep; only `ssh-copy-id` and phase C are still unexercised**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; WRITE PATH TESTED and PHASE A RUN LIVE 18 Sep; phases B and C still unexercised**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -481,10 +481,27 @@ nothing else. Exercising B for real means deliberately removing one network's
 three entries and letting the wizard restore them, or joining the Mac to a
 fourth network.
 
-**Still unexercised, and not exercisable from a sandbox.** `ssh-copy-id` connects
-to a raw address rather than an alias, so it gets no `ProxyCommand` and has no
-route out; phase C installs and cycles a script on the Mac. Both need a person at
-the terminal on a machine with a route to it.
+**Phase A was run live against the real Mac on 18 Sep at 13:18 and passed.** The
+marker at `~/.local/share/maestro-remote-mac/phase-a-done` is the proof, and it
+proves more than that the phase ran: it is written only after the `BatchMode=yes`
+verification returns 0, which is after `ssh-copy-id` has returned 0. So both
+halves of the one thing that had never run are now exercised — against a key
+already on the Mac, so `ssh-copy-id` reported the keys as already installed and
+never prompted, which is what makes it safe to re-run.
+
+Declining the network question stopped it cleanly: `~/.ssh/config`, `/etc/hosts`
+and `settings.json` were all untouched afterwards, timestamps unchanged from
+14 Sep, 14 Sep and this morning's install. `--status` now reports `ok marker`
+where it reported `warn no marker`, so the re-run branch — "Phase A ran on …,
+nothing to do" — is live from here, and that is the branch every subsequent
+network depends on.
+
+**Still unexercised: phases B and C.** B needs something to write, and this
+machine has nothing — see above. C cannot be reached on its own: it is offered
+only inside `if phase_b; then … if confirm "Run phase C"`, so a successful B has
+to happen first. C also cycles the Mac's Wi-Fi on purpose, taking down every SSH
+session, the wall and any running driver with it, and polls up to 40 times for
+recovery — so it wants a moment when nothing else on the Mac matters.
 
 **Coverage: 71 package cases, up from 37 when this started.** Seven of them are
 the fresh-machine path, which had none, and they were checked against the bug
