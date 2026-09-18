@@ -237,6 +237,27 @@ _push() {
   scp "${SSH_OPTS[@]}" "${srcs[@]}" "$MAC_HOST:$dest" >/dev/null || return 1
 }
 
+# _pull <source> <destination>   — bring one file back FROM the device machine.
+#
+# The source is a path on that machine with no host prefix; the destination is
+# here. Across ssh that is one scp. Locally it is a cp, and a real one: $RDIR
+# and $LDIR do NOT collapse into one directory (see below), so the two paths
+# genuinely differ.
+#
+# Callers that already have an _ssh open for another reason fold the fetch into
+# it with base64 instead, to save a round trip. That is why this is not the only
+# way a file comes back — see bin/shot.sh, which does both.
+_pull() {
+  local src=${1:?_pull <source> <destination>} dst=${2:?_pull <source> <destination>}
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    [ "$src" -ef "$dst" ] && return 0
+    mkdir -p "$(dirname "$dst")" || return 1
+    cp "$src" "$dst" || return 1
+    return 0
+  fi
+  scp "${SSH_OPTS[@]}" "$MAC_HOST:$src" "$dst" >/dev/null || return 1
+}
+
 # Who is driving, for a wall label. The session colour first, because it is what
 # the terminal is already showing and is the only one of these a person reads at
 # a glance; seven characters of the session id break a tie between two sessions

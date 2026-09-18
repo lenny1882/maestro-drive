@@ -42,7 +42,7 @@ ls -1 pages | wc -l
 " || { echo "download failed on the Mac" >&2; exit 1; }
 
 mkdir -p "$DEST"
-scp "${SSH_OPTS[@]}" "$MAC_HOST:$RDIR/mdocs/docs.tgz" "$LDIR/docs.tgz" >/dev/null || exit 1
+_pull "$RDIR/mdocs/docs.tgz" "$LDIR/docs.tgz" || exit 1
 # replace the pages wholesale — a page deleted upstream should disappear here too
 rm -rf "$DEST/pages.new" && mkdir -p "$DEST/pages.new"
 tar xzf "$LDIR/docs.tgz" -C "$DEST/pages.new" || exit 1
