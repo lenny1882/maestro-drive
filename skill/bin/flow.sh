@@ -76,7 +76,7 @@ python3 '$RDIR/hier.py' '$RDIR/hier.json'"
 
 [ -n "$SHOT" ] && POST="$POST
 echo '--- screenshot ---'
-xcrun simctl io $d screenshot '$RDIR/$SHOT.png' >/dev/null 2>&1 && echo '$RDIR/$SHOT.png'"
+sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$SHOT.png' && echo '$RDIR/$SHOT.png'"
 
 # Body goes over stdin, so quotes and \$ in the YAML survive intact.
 printf '%s\n' "$BODY" | _ssh "cat > '$RDIR/flows/_adhoc.yaml'
