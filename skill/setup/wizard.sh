@@ -452,6 +452,24 @@ probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address
       say ""
       remote_login_help "$user"
       return 1 ;;
+    *"Bad Gateway"*|*"Forbidden"*|*"E CONNECT"*)
+      # Inside a Claude session every connection goes through the sandbox proxy,
+      # and the proxy carries only what sandbox.network.allowedDomains lists. An
+      # address that is not there is refused at the proxy, before anything
+      # reaches the network — so this says nothing about the Mac at all.
+      warn "the sandbox proxy would not carry a connection to $addr."
+      say ""
+      say "  That is this machine's allowlist, not the Mac. The address has to be"
+      say "  in sandbox.network.allowedDomains in $SETTINGS"
+      say "  before anything can reach it from inside a Claude session."
+      say ""
+      say "  This phase writes that entry before it probes, so seeing this means"
+      say "  the entry was declined, or the session was already running when it"
+      say "  was added — a session reads the allowlist when it starts."
+      say ""
+      say "  Either restart the session, or run this wizard from an ordinary"
+      say "  terminal, where there is no proxy and no allowlist in the way."
+      return 0 ;;
     *"kex_exchange_identification"*|*"Connection closed by remote host"*|*"closed by remote host"*)
       # Something is listening on 22 and hangs up mid-handshake, so this is not
       # a wrong address and not a dead network. On macOS the usual cause is
@@ -532,7 +550,14 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
       return 0
     fi
     say ""
-    [ -n "$err" ] && say "  ssh said: $(printf '%s' "$err" | grep -v '^$' | tail -1)"
+    # Not tail -1. The line that says what happened is often the ProxyCommand's,
+    # and ssh's own summary comes after it — "Bad Gateway" from socat, then
+    # kex_exchange_identification from ssh, and only the second survived. That
+    # cost an afternoon: the proxy refusing an address reads exactly like a Mac
+    # refusing a login.
+    if [ -n "$err" ]; then
+      printf '%s' "$err" | grep -v '^$' | tail -3 | sed 's/^/  ssh said: /' >&2
+    fi
     if probe_diagnosis "$err" "$addr" "$user"; then suspect=1; else suspect=0; fi
     say ""
     say "  Nothing has been written yet, so there is nothing to undo."
@@ -584,6 +609,40 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
 # and is written at the end of the run rather than here.
 HOSTS_DIRTY=0
 
+# Which blocks a change reaches. The first version wrote every block on the
+# argument that one Mac has one account name — true of this machine and not of
+# the file, which is the user's and may name a second Mac, a work account or a
+# host that only looks like ours because it borrows the key. So the blocks that
+# would change are listed and the answer is editable, with all of them as the
+# default because that is still the common case.
+# Prints the chosen aliases, space separated. Empty means change nothing.
+choose_blocks() { # choose_blocks <Keyword> <current value> -> aliases
+  local kw="$1" cur="$2" a hit="" chosen bad=""
+  for a in $(configured_aliases || true); do
+    [ "$(host_field "$a" "$kw")" = "$cur" ] && hit="$hit $a"
+  done
+  hit="${hit# }"
+  [ -n "$hit" ] || { printf '%s' ""; return 0; }
+  # One block is not a choice.
+  case "$hit" in *" "*) ;; *) printf '%s' "$hit"; return 0 ;; esac
+  say "" >&2
+  say "  These blocks carry $kw $cur:" >&2
+  say "    $hit" >&2
+  chosen=$(ask "change it in which" "$hit")
+  for a in $chosen; do
+    case " $hit " in *" $a "*) ;; *) bad="$bad $a" ;; esac
+  done
+  if [ -n "$bad" ]; then
+    warn "not blocks carrying $kw $cur:$bad — ignored" >&2
+    local keep="" a2
+    for a2 in $chosen; do
+      case " $hit " in *" $a2 "*) keep="$keep $a2" ;; esac
+    done
+    chosen="${keep# }"
+  fi
+  printf '%s' "$chosen"
+}
+
 phase_a_facts() { # print what is recorded, and where each value comes from
   local a src_user="" src_key=""
   for a in $(configured_aliases || true); do
@@ -619,19 +678,26 @@ phase_a_edit() {
   # The username first and on its own: every check below reaches the Mac, and
   # none of them can while the account name is wrong.
   if [ -n "$new_user" ] && [ "$new_user" != "$MAC_USER" ]; then
-    local b; b=$(backup_of "$SSH_CONFIG")
-    ssh_all_set_field User "$new_user"
-    dry || ok "username: $MAC_USER -> $new_user, in every Host block (backup: $b)"
-    MAC_USER="$new_user"; changed=1
+    local blocks; blocks=$(choose_blocks User "$MAC_USER")
+    if [ -z "$blocks" ]; then
+      warn "no blocks chosen — the username is unchanged."
+    else
+      local b; b=$(backup_of "$SSH_CONFIG")
+      ssh_all_set_field User "$new_user" $blocks
+      dry || ok "username: $MAC_USER -> $new_user in $blocks (backup: $b)"
+      MAC_USER="$new_user"; changed=1
+    fi
   fi
 
   if [ -n "$new_key" ] && [ "$new_key" != "$MAC_KEY" ]; then
     if [ ! -r "$new_key" ]; then
       warn "$new_key is not readable — leaving the key as it was."
     else
+      local kblocks; kblocks=$(choose_blocks IdentityFile "${MAC_KEY/#$HOME/~}")
+      [ -n "$kblocks" ] || kblocks=$(choose_blocks IdentityFile "$MAC_KEY")
       local b; b=$(backup_of "$SSH_CONFIG")
-      ssh_all_set_field IdentityFile "${new_key/#$HOME/~}"
-      dry || ok "key: $MAC_KEY -> $new_key, in every Host block (backup: $b)"
+      ssh_all_set_field IdentityFile "${new_key/#$HOME/~}" $kblocks
+      dry || ok "key: $MAC_KEY -> $new_key in $kblocks (backup: $b)"
       MAC_KEY="$new_key"; changed=1
       # A key the Mac does not trust is not a key. Copying it is phase A's own
       # job, so the marker goes and the fresh path runs on the next pass.
@@ -707,9 +773,14 @@ ssh_block_set_hostname() { # <alias> <addr>
 #
 # A Host line may name several aliases, so every field on it is checked, not
 # just the second: a block serving mac-a and mac-b is still one of ours.
-ssh_all_set_field() { # ssh_all_set_field <Keyword> <value>
+ssh_all_set_field() { # ssh_all_set_field <Keyword> <value> [alias...]
   local kw="$1" val="$2" aliases tmp
-  aliases=$(configured_aliases | tr '\n' ' ')
+  shift 2
+  if [ "$#" -gt 0 ]; then
+    aliases="$*"
+  else
+    aliases=$(configured_aliases | tr '\n' ' ')
+  fi
   [ -n "$aliases" ] || return 0
   if dry; then would "set $kw to $val in every Host block that names a key"; return 0; fi
   tmp=$(mktemp)
@@ -820,6 +891,32 @@ phase_b() {
   addr=$(ask "the Mac's address on this network" "${PHASE_A_ADDR:-$existing}")
   [ -n "$addr" ] || { warn "no address given"; return 1; }
 
+  # allowedDomains goes FIRST, and only this file does. Inside a Claude session
+  # every connection goes through the sandbox proxy, which carries only what
+  # that list names — so until the address is in it, the probe cannot reach the
+  # Mac however healthy the Mac is, and it fails as a closed connection that
+  # reads like a Mac fault. Probing first and writing after is the right order
+  # for the other two files and an unsatisfiable one for this.
+  #
+  # It is also the safe one to write early: an extra entry permits a host, it
+  # does not route anything and it does not make `ssh <alias>` hang. The Host
+  # block and the /etc/hosts line are the ones that must wait for proof.
+  if [ -n "${grpc_proxy:-}" ]; then
+    say ""
+    say "  This is running inside a Claude session, so the connection goes through"
+    say "  the sandbox proxy, which carries only what allowedDomains names."
+    say "  That entry is therefore written before the probe rather than after it."
+    if [ -n "${MAC_NAME:-}" ]; then
+      allowed_domains_add "$MAC_NAME" "$addr" || true
+    else
+      allowed_domains_add "$addr" || true
+    fi
+    say ""
+    say "  A session reads that list when it starts, so if this session was"
+    say "  already running, the probe below still cannot get out. Restarting the"
+    say "  session, or using an ordinary terminal, is what makes it take effect."
+  fi
+
   say ""
   # Printed rather than assumed. The username and the key are read back out of
   # an existing Host block and are the two values this phase never asks for, so
@@ -831,9 +928,12 @@ phase_b() {
     # Proven, so now it can be written. One Mac has one account name, so a
     # correction belongs in every block, not only the one about to be added.
     if [ "$PROBE_USER" != "$MAC_USER" ]; then
-      local ub; ub=$(backup_of "$SSH_CONFIG")
-      ssh_all_set_field User "$PROBE_USER"
-      dry || ok "username: $MAC_USER -> $PROBE_USER, in every Host block (backup: $ub)"
+      local ublocks; ublocks=$(choose_blocks User "$MAC_USER")
+      if [ -n "$ublocks" ]; then
+        local ub; ub=$(backup_of "$SSH_CONFIG")
+        ssh_all_set_field User "$PROBE_USER" $ublocks
+        dry || ok "username: $MAC_USER -> $PROBE_USER in $ublocks (backup: $ub)"
+      fi
       MAC_USER="$PROBE_USER"
     fi
   else

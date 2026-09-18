@@ -18,6 +18,14 @@
 #      is the difference between "the files arrived" and "the thing works".
 set -uo pipefail
 
+# Unset for the whole suite, and set again by the one case that is about it.
+# Phase B writes the allowedDomains entry before it probes when this is set,
+# because inside a Claude session every connection goes through the sandbox
+# proxy and the proxy carries only what that list names. That is a prompt, and
+# not one the other cases are testing — inheriting the variable from whatever
+# ran the suite would make every fixed answer stream depend on where it was run.
+unset grpc_proxy
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
@@ -276,6 +284,7 @@ bad_ssh=$(grep -nE '(^|[^-[:alnum:]_])ssh ' "$W" \
           | grep -v 'ssh-copy-id' \
           | grep -vE '^[0-9]+:[[:space:]]*#' \
           | grep -vE '(say|warn|would|ok|no) "' \
+          | grep -v 'ssh said' \
           | grep -v 'ssh -n ' || true)
 [ -z "$bad_ssh" ] \
   && ok "wizard: every ssh passes -n so it cannot eat the answers" \
@@ -353,7 +362,7 @@ fi
 DIAG="$TMP/diag"; mkdir -p "$DIAG"
 diag() { # diag <ssh stderr> -> output; exit status is "the address is suspect"
   ( say() { printf '%s\n' "$*"; }; warn() { printf '%s\n' "$*"; }; ok() { :; }
-    MARKER=/dev/null
+    MARKER=/dev/null; SETTINGS=/dev/null
     eval "$(sed -n '/^remote_login_help() {/,/^}/p;/^probe_diagnosis() {/,/^}/p' "$W")"
     probe_diagnosis "$1" 10.9.9.9 macuser )
 }
@@ -439,6 +448,61 @@ done
   && ok "every arm that could be Remote Login says how to turn it on" \
   || no "every arm that could be Remote Login says how to turn it on" "missed:$missing"
 
+# The sandbox proxy refusing an address, which is not the Mac at all. Measured
+# 18 Sep against a real Mac on a new network: an address in allowedDomains gets
+# a connection the Mac then answers, one that is not gets "Bad Gateway" from
+# socat before anything leaves this machine — and ssh reports that as
+# kex_exchange_identification, which reads as a Mac refusing a login.
+d=$(diag "socat[6] E CONNECT 10.9.9.9:22: Bad Gateway") || true
+printf '%s' "$d" | grep -q "sandbox proxy" \
+  && printf '%s' "$d" | grep -q "allowedDomains" \
+  && ok "a proxy refusal is named as this machine's allowlist, not the Mac" \
+  || no "a proxy refusal is named as this machine's allowlist, not the Mac" "$d"
+
+# --- inside a session, allowedDomains comes first -----------------------------
+# The ordering this whole item argues for — probe, then write — is unsatisfiable
+# for one of the three files. Inside a Claude session every connection goes
+# through the sandbox proxy, and the proxy carries only what allowedDomains
+# names, so until the address is in it the probe cannot reach the Mac however
+# healthy the Mac is. It is also the safe one to write early: an entry permits a
+# host, it does not route anything and it cannot make `ssh <alias>` hang.
+PX="$TMP/proxyfirst"; mkdir -p "$PX/lib" "$PX/bin"
+ssh_stub "$PX/bin"; printf '#!/bin/sh\nexit 1\n' > "$PX/bin/sudo"; chmod +x "$PX/bin/sudo"
+: > "$PX/key"
+printf 'Host mac-keep\n\tHostname 10.0.0.10\n\tUser testuser\n\tIdentityFile %s\n' \
+  "$PX/key" > "$PX/ssh_config"
+printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local"]}}}\n' > "$PX/settings.json"
+printf '127.0.0.1 localhost\n' > "$PX/hosts"
+date +%F > "$PX/lib/phase-a-done"
+px=$(printf 'n\ny\nmac-proxy\n10.7.7.7\ny\nn\nn\nmac-proxy\nn\n' | \
+  grpc_proxy="http://user:pw@localhost:3128" PATH="$PX/bin:$PATH" \
+  SSH_CONFIG="$PX/ssh_config" SETTINGS="$PX/settings.json" \
+  HOSTS_FILE="$PX/hosts" LIB_DIR="$PX/lib" timeout 120 "$W" 2>&1)
+
+# Order is the whole point, so it is the order that is asserted.
+px_dom=$(printf '%s' "$px" | grep -n "would change" | head -1 | cut -d: -f1)
+px_probe=$(printf '%s' "$px" | grep -n "Checking the Mac answers" | head -1 | cut -d: -f1)
+if [ -n "$px_dom" ] && [ -n "$px_probe" ] && [ "$px_dom" -lt "$px_probe" ]; then
+  ok "in a session: allowedDomains is offered before the probe, not after"
+else
+  no "in a session: allowedDomains is offered before the probe, not after" \
+     "allowedDomains at line ${px_dom:-none}, probe at line ${px_probe:-none}"
+fi
+
+printf '%s' "$px" | grep -q "reads that list when it starts" \
+  && ok "in a session: it says a running session will not see the new entry" \
+  || no "in a session: it says a running session will not see the new entry" \
+        "$(printf '%s' "$px" | head -20)"
+
+# Outside a session there is no proxy and no allowlist, so the original order
+# stands and nothing is written before the probe.
+npx=$(printf 'n\ny\nmac-proxy\n10.7.7.7\nn\nn\n' | \
+  PATH="$PX/bin:$PATH" SSH_CONFIG="$PX/ssh_config" SETTINGS="$PX/settings.json" \
+  HOSTS_FILE="$PX/hosts" LIB_DIR="$PX/lib" timeout 120 "$W" 2>&1)
+printf '%s' "$npx" | grep -q "sandbox proxy" \
+  && no "outside a session: nothing is written before the probe" "it wrote allowedDomains first" \
+  || ok "outside a session: nothing is written before the probe"
+
 # --- and offers the way back --------------------------------------------------
 # The fix happens on the Mac while the wizard waits, so the retry is the whole
 # point: every answer given so far is still in hand and a retry costs one key.
@@ -477,6 +541,14 @@ printf '%s' "$r" | grep -q "Try again?" \
 printf '%s' "$r" | grep -q "ssh said: .*Connection refused" \
   && ok "retry: ssh's own line is printed, not just the verdict" \
   || no "retry: ssh's own line is printed, not just the verdict" "$(printf '%s' "$r" | tail -6)"
+
+# ssh prints its own summary after the ProxyCommand's line, so the line that
+# says what happened is not the last one — socat's "Bad Gateway" then ssh's
+# kex_exchange_identification, and keeping only the last hid the first.
+[ "$(printf '%s' "$r" | grep -c 'ssh said:')" -ge 1 ] \
+  && ok "retry: ssh's output is kept by the line, not just its last one" \
+  || no "retry: ssh's output is kept by the line, not just its last one" \
+        "$(printf '%s' "$r" | head -20)"
 
 printf '%s' "$r" | grep -q "answers and the key works" \
   && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
@@ -669,12 +741,14 @@ cmp -s "$ED/ssh_config" "$ED/ssh_config.before" \
   && ok "edit: declining changes nothing" \
   || no "edit: declining changes nothing" "$(diff "$ED/ssh_config.before" "$ED/ssh_config" | head -4)"
 
-# The change that started this. One Mac, one account name, every block.
+# The change that started this. Every block carrying the old name is offered and
+# the default is all of them — one Mac with one account is still the common
+# case. The blank after the key answer accepts that default.
 ed_reset
-ed_wiz 'y\nnewuser\n\n\nn\n' --edit >/dev/null
+ed_wiz 'y\nnewuser\n\n\n\n' --edit >/dev/null
 [ "$(grep -c '	User newuser$' "$ED/ssh_config")" = 2 ] \
-  && ok "edit: a new username lands in every block that names the key" \
-  || no "edit: a new username lands in every block that names the key" \
+  && ok "edit: a new username lands in every block offered, by default" \
+  || no "edit: a new username lands in every block offered, by default" \
         "$(grep -n User "$ED/ssh_config" | tr '\n' '/')"
 
 grep -q "User someoneelse" "$ED/ssh_config" \
@@ -690,6 +764,27 @@ grep -qE '^\s*Hostname 10\.0\.0\.1$' "$ED/ssh_config" \
 ls "$ED"/ssh_config.bak-* >/dev/null 2>&1 \
   && ok "edit: the ssh config is backed up before the username changes" \
   || no "edit: the ssh config is backed up before the username changes" "no .bak-* beside it"
+
+# ~/.ssh/config is the user's file and may name a second Mac, a work account, or
+# a host that only looks like ours because it borrows the key. So the list is
+# editable rather than only confirmable.
+ed_reset
+ed_wiz 'y\nnewuser\n\n\nmac-a\n' --edit >/dev/null
+[ "$(grep -c '	User newuser$' "$ED/ssh_config")" = 1 ] \
+  && grep -q '	User olduser$' "$ED/ssh_config" \
+  && ok "edit: naming one block changes that one and leaves the other" \
+  || no "edit: naming one block changes that one and leaves the other" \
+        "$(grep -n User "$ED/ssh_config" | tr '\n' '/')"
+
+# A name that is not one of the blocks offered is a typo, and a typo that
+# quietly changed nothing would read as the edit having worked.
+ed_reset
+e=$(ed_wiz 'y\nnewuser\n\n\nmac-nope\n' --edit)
+printf '%s' "$e" | grep -q "ignored" \
+  && grep -q '	User olduser$' "$ED/ssh_config" \
+  && ok "edit: a block name that is not on offer is named and ignored" \
+  || no "edit: a block name that is not on offer is named and ignored" \
+        "$(printf '%s' "$e" | tail -5)"
 
 # The .local name lives in allowedDomains and in /etc/hosts, so changing it has
 # to reach both — and /etc/hosts is written at the end of the run, not here.
