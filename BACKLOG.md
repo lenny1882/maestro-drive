@@ -37,11 +37,13 @@ looks like — was decided and built on 17 Sep: `remote/wall.py:96` sets
 `HIDE_FROM_PREVIOUS_DAY` and `:136` applies it, so a name from an earlier
 calendar day is not shown and the tile falls back to the handset.
 
-**75, 77, 78, 79, 80 and 81 are done** and in `BACKLOG-DONE.md`, and **67 and 69
-are closed** — see their entries there. **28 is done for everything this
-repository controls**; the four deletions it listed are in the pre-repo working
-directory and are not this package's to make. What remains of the earlier run is
-**82**, a hook in the sister skill and so not this package's to take either.
+**Nothing from the earlier run is still open here.** 75, 77, 78, 79, 80 and 81
+are done, and 67 and 69 are closed — see their entries in `BACKLOG-DONE.md`.
+**28 is done for everything this repository controls**; the four deletions it
+listed are in the pre-repo working directory and are not this package's to make.
+**82 is closed here and owned by `flutter-hot-reload-mac` item 16** — the fix is
+a hook on that skill's entry points, so nothing in this package was ever going to
+change for it.
 
 **Where the toolkit now lives.** Item 17 moved it into its own git repo — the
 one this file is in — where `src/` became
@@ -72,51 +74,6 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works.
 
 **Next item number: 90.** Items 1–89 are allocated; new items start from 90.
-
----
-
-## 82. Four sessions opened with `flutter-hot-reload-mac` when asked to drive — **OPEN, raised 17 Sep**
-
-15 Sep, four separate sessions: `6d3227d1` (*"You made this same mistake
-yesterday. Did I ask for hot reload?"*), `397ef6f2` (*"Right, you keep jumping
-straight to hot reload, why?"*), `17b1a3ca` (*"Cunt, stop with the fucking hot
-reload skill."*), `78615f38` (*"The fuck are you doing? maestro skill."*).
-
-The description already says it. `SKILL.md`'s frontmatter carries *"The app must
-already be installed; this skill does NOT build or launch from source (that is
-flutter-hot-reload-mac)"*, and the sister skill's says the mirror image. It has
-not worked. `397ef6f2`'s own diagnosis, when pressed for a real answer: *"I'm
-pattern-matching 'start driving' + 'DEV app' + 'build' to 'launch the app', and
-hot-reload is the skill that launches. The distinction I'm failing to make is
-between running the app and driving the app."* The trigger is a request that
-mentions a build or an environment, which is most of them.
-
-Four repeats in one day, after the description was already written to prevent it,
-is the same argument item 51 made for a hook over more prose: **a rule the model
-reads at the wrong moment is not a rule.** Note also `397ef6f2` at 14:27 — told
-to report the problem to the skill's own session, it sent the message to the wrong
-session first and could not recall it.
-
-**Approximate resolution.** The `gate-journey-first.sh` precedent: a PreToolUse
-hook on `flutter-hot-reload-mac`'s entry points asking whether the app is already
-installed on the target simulator — if it is, name `maestro-remote-mac` and stop.
-The check is cheap (`preflight.sh` answers it in one round trip) and it fires at
-the moment of the mistake rather than at session start. This belongs to the
-sister skill as much as to this one; raised here because this is where the cost
-landed.
-
-**17 Sep: raised in the sister package, where the fix belongs.**
-`~/claude-sandbox/flutter-hot-reload-mac/BACKLOG.md` item 16 carries the four
-sightings, the session's own diagnosis, and the resolution — a `PreToolUse` hook
-on that skill's entry points that asks whether the app is already installed and,
-if it is, names this skill and stops. It points at
-`skill/hooks/gate-journey-first.sh` as the worked precedent and at this
-package's `install.sh` for how a hook ships with a skill.
-
-**This item stays open here as the record of the cost**, and closes when that
-one does. Nothing in this package changes.
-
-**Gates.** None. Same argument as item 51.
 
 ---
 

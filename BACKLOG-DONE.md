@@ -5150,6 +5150,28 @@ rediscovered. Item 58's warning is cross-referenced on the third route.
 
 ---
 
+## 82. Four sessions opened with `flutter-hot-reload-mac` when asked to drive — **CLOSED HERE 18 Sep 2026; owned by `flutter-hot-reload-mac` item 16**
+
+Raised here on 17 Sep because this is where the cost landed: 15 Sep, four
+separate sessions in the client project started hot reload when asked to drive
+the UI. The fix is a `PreToolUse` hook on the SISTER skill's entry points, asking
+whether the app is already installed on the target simulator and, if it is,
+naming this skill and stopping. **Nothing in this package changes**, and it never
+was going to, so the item does not belong in this file.
+
+The four sightings, the session's own diagnosis of why the description did not
+prevent it, and the resolution are all in
+`~/claude-sandbox/flutter-hot-reload-mac/BACKLOG.md` under "Wanted". Checked
+18 Sep: nothing has been built there — that package has no `hooks/` directory in
+either its source or its installed copy, and nothing of its is registered in
+`settings.json`.
+
+**Two stale paths in that item, for whoever picks it up.** It names
+`maestro-remote-mac/src/hooks/gate-journey-first.sh` as the worked precedent and
+`ship.sh` as how a hook ships with a skill. Item 17 moved this package into a git
+repo: it is `skill/hooks/gate-journey-first.sh`, and `install.sh` registers hooks
+rather than `ship.sh` publishing them.
+
 ## 83. A journey edit is a blind string replacement — a no-match rewrites the file unchanged and says nothing — **DONE 17 Sep; SHIPPED in v1.0.0**
 
 The half of item 77 that was not built. 77 gave `script --steps` for *composing*
