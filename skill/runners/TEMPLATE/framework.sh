@@ -138,9 +138,16 @@ inspect)
   ;;
 
 # --- traffic-arm <base> <session> --------------------------------------------
-# Turn HTTP capture on. Print `on`, `off` or `unknown`.
+# Turn HTTP capture on. Print TWO words: the state found, then the state after
+# arming. Each is `on`, `off` or `unknown`.
 #
-# Runs in the SANDBOX, through $grpc_proxy, against the LAN-published relay.
+# Two, not one, because "it was already on" and "it was off and is on now" are
+# different facts for the reader: in the second, nothing before this moment was
+# recorded, and a list that then comes back short is not a quiet app.
+#
+# Runs on EITHER side. The base URI decides: the LAN-published relay reached
+# through $grpc_proxy from the sandbox, or the Mac's own loopback over SSH. Use
+# the proxy only when $grpc_proxy is set, and the same verb serves both.
 #
 # Capture is normally off by default and bound to the session, so it has to be
 # re-armed after anything that replaces the session. An unrecorded profile looks
@@ -151,13 +158,13 @@ traffic-arm)
   ;;
 
 # --- traffic-list <base> <session> -------------------------------------------
-# One request per line: id, method, status, uri. Runs in the sandbox.
+# One request per line: id, method, status, uri. Either side; see traffic-arm.
 traffic-list)
   exit 2
   ;;
 
 # --- traffic-one <base> <session> <id> ---------------------------------------
-# One request in full: headers, request body, response body. Runs in the sandbox.
+# One request in full: headers, request body, response body. Either side.
 traffic-one)
   exit 2
   ;;
