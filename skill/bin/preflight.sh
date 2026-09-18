@@ -41,24 +41,16 @@ printf '%s' '$GS' | base64 -d > '$RDIR/gitstate.sh' 2>/dev/null
 # both to tell a lock file from somebody's work. gitstate.sh says so at length.
 sh '$RDIR/gitstate.sh' --run '$REPO'
 echo; echo '== app installed on $d? =='
-C=\$(xcrun simctl get_app_container '$d' '$APP_ID' 2>/dev/null)
+C=\$(sh '$PLATFORM_SH' container '$d' '$APP_ID' 2>/dev/null)
 if [ -n \"\$C\" ]; then echo \"\$C\"
-else xcrun simctl get_app_container '$d' '$APP_ID' 2>&1 | tail -1
+else sh '$PLATFORM_SH' container '$d' '$APP_ID' 2>&1 | tail -1
 fi
 echo; echo '== is that the code under test? =='
 printf '%s' '$AC' | base64 -d > '$RDIR/appcheck.sh' 2>/dev/null
 . '$RDIR/appcheck.sh' && appcheck \"\$C\" '$REPO' '${BUILD_MARKER:-}'
 echo; echo '== supported orientations =='
 if [ -n \"\$C\" ]; then
-  _plist=\"\$C/Info.plist\"
-  if [ -f \"\$_plist\" ]; then
-    _ipad=\$(defaults read \"\$_plist\" 'UISupportedInterfaceOrientations~ipad' 2>/dev/null | grep -v '[()]' | sed 's/^[[:space:]]*//' | tr -d '\",' | paste -sd ' ' -)
-    _iphone=\$(defaults read \"\$_plist\" 'UISupportedInterfaceOrientations' 2>/dev/null | grep -v '[()]' | sed 's/^[[:space:]]*//' | tr -d '\",' | paste -sd ' ' -)
-    [ -n \"\$_ipad\" ] && echo \"iPad:   \$_ipad\" || echo 'iPad:   not specified'
-    [ -n \"\$_iphone\" ] && echo \"iPhone: \$_iphone\" || echo 'iPhone: not specified'
-  else
-    echo 'Info.plist not found in app container'
-  fi
+  sh '$PLATFORM_SH' orientations \"\$C\" 2>&1
 else
   echo 'app not installed — cannot read'
 fi
