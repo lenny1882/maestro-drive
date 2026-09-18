@@ -289,10 +289,11 @@ starts nowhere near the project. Pass the conf explicitly:
 
   MAESTRO_MAC_CONF=<project>/.maestro-mac.conf <your command>
 
-bin/init.sh cannot write a local conf yet. Two lines are the whole of one:
+Run the skill's bin/init.sh to write one. It asks this machine which toolchains
+and devices are here rather than guessing:
 
-  TRANSPORT=local
-  APP_ID=<bundle id or applicationId>
+  bin/init.sh --local --detect             # toolchains, devices, AVDs, checkout
+  bin/init.sh --local --app <bundle id or applicationId> [--repo <path>] --write
 MSG
     return 1 2>/dev/null || exit 1
   fi

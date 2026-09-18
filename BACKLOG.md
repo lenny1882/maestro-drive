@@ -200,8 +200,8 @@ The searched-paths and detached-process paragraphs are duplicated deliberately,
 not factored out: the conf search is genuinely the same in both, and a shared
 fragment would be one more thing that has to stay true of two messages.
 
-The local message says what `bin/init.sh` cannot do yet and gives the two lines
-that are the whole of a local conf. It stops saying so at 1.4.
+The local message pointed at the two lines that are the whole of a local conf
+until 1.4 gave `bin/init.sh` a `--local`; it now names that instead.
 
 *Files:* `skill/bin/config.sh`. *Verified:* `TRANSPORT=local` with no `APP_ID`
 names `APP_ID` and nothing else; with `APP_ID` set it loads and leaves
@@ -226,12 +226,41 @@ default is the day that derivation stops holding, silently.
 allows warns and writes `perm-warned`; local mode prints nothing and writes no
 marker.
 
-**1.4 `bin/init.sh` can write a local conf.** `--detect` today lists `~/.ssh`
-aliases and probes each one. On a machine with its own simulator there are no
-aliases to list, and the honest answer is "the device is here" rather than "no
-Mac found". *Files:* `skill/bin/init.sh`. *Done when:* `init.sh --detect` on a
-machine with a booted simulator and no ssh alias offers local mode and writes a
-conf `config.sh` accepts.
+**1.4 DONE 18 Sep — `bin/init.sh --local` writes a local conf.** `--detect`
+listed `~/.ssh` aliases and probed each one; `--local --detect` instead reports
+this machine's toolchains, attached devices, defined AVDs and checkout, and
+`--local --app <id> --write` writes a conf with `TRANSPORT`, `APP_ID` and a
+detected `PLATFORM` and nothing else.
+
+**`init.sh` is the one script Stage 2.1 will not reach.** `_ssh` sources
+`config.sh`, and `init.sh` exists to write the conf `config.sh` reads — so it
+takes `--host` and calls `ssh` directly, and the local path here is a second
+path beside those four calls rather than a reuse of them. The questions carry
+over even though the code does not.
+
+**`PLATFORM` is detected now, where the ssh path still defaults it.** The ssh
+path writes `ios` with *nothing is booted yet to ask about*, which is true at
+first-run time across a network. Locally the machine is right here, so: no
+`xcrun` and `adb` present gives `android`; `xcrun` and no `adb` gives `ios`;
+both present is refused with `--platform ios|android` rather than guessed;
+neither is refused naming the missing SDK. The evidence is written above the
+setting — a booted device where there is one, otherwise the AVD names, because
+those are different facts and the weaker one has to say so.
+
+**`--host` with `--local` is refused, not ignored.** A silently dropped flag
+leaves someone believing they configured something they did not.
+
+**`RUNNER` is still the default locally, and says why in the file.**
+`runner.sh detect` reaches the checkout through `_ssh`, which has no local
+branch until 2.1.
+
+*Files:* `skill/bin/init.sh`, `skill/bin/config.sh` (the 1.2 message now names
+`--local`). *Verified:* `--local --detect` on this machine reports `android`
+from four defined AVDs with none booted; the written conf loads through
+`config.sh` with `MAC_HOST` empty; `--platform ios` overrides and records that
+it was given; `--local --host` and a missing `--app` both exit 2 by name; the
+ssh path's conf diffs byte-identical against the pre-change script; suite 144
+passed, 0 failed.
 
 **Stage 2 — `_ssh` runs the script instead of sending it.** The 84 call sites do
 not change in any unit of this stage. That is the whole bet; if a call site has
