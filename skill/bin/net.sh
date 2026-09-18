@@ -26,52 +26,63 @@ ARG="${1:-}"
 _dsuffix() { local dv=${DEV:-}; [ -n "$dv" ] || dv=$(_dev 2>/dev/null) || dv=; printf '%s' "$dv"; }
 _sfx=$(_dsuffix)
 STATE="$LDIR/published${_sfx:+-$_sfx}.state"
-HERE="$(cd "$(dirname "$0")/../remote" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# Reading traffic is the framework's job — dart:io profiling for Flutter, a
+# proxy for React Native, nothing at all for a plain Xcode app (BACKLOG item 87,
+# call site 5). The same verb serves both sides: it curls through $grpc_proxy
+# when there is one, direct when there is not.
+FW_LOCAL=$("$HERE/runner.sh" path framework) || exit 1
+FW_REMOTE=$("$HERE/runner.sh" rpath framework) || exit 1
 
 # Nothing captured: say which of the two reasons it was, and fix the one that
-# is fixable. Profiling is per-isolate, so a restart silently turns it back off.
+# is fixable. An empty list means either "the app made no calls" or "capture was
+# never armed", and those look identical. traffic-arm answers it in one call
+# because it reports the state it FOUND as well as the state it left — and
+# arming it as a side effect is the right thing, since capture is bound to the
+# session and anything that replaces the session silently turns it back off.
 _explain_empty() {  # _explain_empty <base> <isolate>
-  local r
-  r=$(curl -s -x "$grpc_proxy" --max-time 8 "$1/ext.dart.io.httpEnableTimelineLogging?isolateId=$2" 2>/dev/null)
-  case "$r" in
-    *'"enabled":true'*)
-      echo "# no requests recorded, and profiling is on — the app really has made none since it was enabled" >&2 ;;
-    *'"enabled":false'*)
-      curl -s -x "$grpc_proxy" --max-time 8 \
-        "$1/ext.dart.io.httpEnableTimelineLogging?isolateId=$2&enabled=true" >/dev/null 2>&1
+  local was now
+  read -r was now <<< "$(sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null)"
+  case "${was:-unknown}" in
+    on)
+      echo "# no requests recorded, and capture is on — the app really has made none since it was enabled" >&2 ;;
+    off)
       cat >&2 <<'MSG'
-# dart:io HTTP profiling was OFF, which is the default — that is why the list is
-# empty, not because the app was quiet. It is on now, but nothing before this
-# point was recorded. Repeat the action and read again.
+# HTTP capture was OFF, which is the default — that is why the list is empty,
+# not because the app was quiet. It is on now, but nothing before this point was
+# recorded. Repeat the action and read again.
 MSG
-      ;;
+      [ "${now:-}" = on ] || echo "# (and it could not be turned on — is the session still alive? Re-run ./publish.sh)" >&2 ;;
     *)
-      echo "# no requests recorded, and the profiling flag could not be read — is the isolate still alive? Re-run ./publish.sh" >&2 ;;
+      echo "# no requests recorded, and the capture flag could not be read — is the session still alive? Re-run ./publish.sh" >&2 ;;
   esac
 }
 
 if [ -f "$STATE" ] && read -r BASE ISO < "$STATE" \
    && curl -s -x "$grpc_proxy" --max-time 4 "$BASE/getVersion" 2>/dev/null | grep -q '"type"'; then
   if [ -z "$ARG" ]; then
-    curl -s -x "$grpc_proxy" "$BASE/ext.dart.io.getHttpProfile?isolateId=$ISO" > "$LDIR/net${_sfx:+-$_sfx}.json"
-    out=$(python3 "$HERE/net.py" list "$LDIR/net${_sfx:+-$_sfx}.json")
+    out=$(sh "$FW_LOCAL" traffic-list "$BASE" "$ISO"); rc=$?
+    [ "$rc" = 2 ] && exit 2
     if [ -n "$out" ]; then printf '%s\n' "$out"; else _explain_empty "$BASE" "$ISO"; fi
   else
-    curl -s -x "$grpc_proxy" "$BASE/ext.dart.io.getHttpProfileRequest?isolateId=$ISO&id=$ARG" > "$LDIR/net1${_sfx:+-$_sfx}.json"
-    python3 "$HERE/net.py" one "$LDIR/net1${_sfx:+-$_sfx}.json"
+    sh "$FW_LOCAL" traffic-one "$BASE" "$ISO" "$ARG"; rc=$?
+    [ "$rc" = 2 ] && exit 2
   fi
   exit
 fi
 
 echo "# no relay published - falling back to SSH (run ./publish.sh for ~7x)" >&2
 d=$(_dev) || exit 1
+# The same three verbs, run ON THE MAC against its own loopback. $grpc_proxy is
+# not set there, so the module curls direct and the base URI is the only
+# difference between this and the fast path above.
 _ssh "set -e
-V=\$(bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice-$d' | tail -1)
+V=\$(RDIR='$RDIR' sh '$FW_REMOTE' inspect '$d' '$RDIR/vmservice-$d')
+V=\$(printf '%s\\n' \"\$V\" | tail -1)
 B=\${V%% *}; I=\${V##* }
 if [ -z '$ARG' ]; then
-  curl -s \"\$B/ext.dart.io.getHttpProfile?isolateId=\$I\" > '$RDIR/net-$d.json'
-  python3 '$RDIR/net.py' list '$RDIR/net-$d.json'
+  RDIR='$RDIR' sh '$FW_REMOTE' traffic-list \"\$B\" \"\$I\"
 else
-  curl -s \"\$B/ext.dart.io.getHttpProfileRequest?isolateId=\$I&id=$ARG\" > '$RDIR/net1-$d.json'
-  python3 '$RDIR/net.py' one '$RDIR/net1-$d.json'
+  RDIR='$RDIR' sh '$FW_REMOTE' traffic-one \"\$B\" \"\$I\" '$ARG'
 fi"
