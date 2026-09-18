@@ -60,17 +60,50 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout
 #
 # `emulator -list-avds` writes crash-reporter lines to stderr on this machine,
 # so stdout only or the AVD names arrive with noise attached.
+# Maestro does not run on every Android API level, so an AVD that exists is not
+# the same as an AVD that can be driven. From the mirrored docs at
+# skill/docs (Maestro 2.8.0, mirrored 11 Aug 2026): "Maestro currently supports
+# API Levels 29, 30, 31, 33, and 34. API 35 and 36 support is arriving in Q2
+# 2026." Note 32 is absent from that list — it is quoted, not inferred.
+#
+# Hard-coded here because the answer changes on Maestro's release schedule and
+# not on anything this machine can be asked. When it moves, this list and the
+# mirrored page move together.
+_MAESTRO_APIS=" 29 30 31 33 34 "
+
+# The API level of one AVD, from its own config: the system image path carries
+# it, as system-images/android-<level>/. Prints nothing when it cannot be read.
+_avd_api() {
+  sed -n 's|^image\.sysdir\.1=system-images/android-\([0-9.]*\)/.*|\1|p' \
+    "${ANDROID_AVD_HOME:-$HOME/.android/avd}/$1.avd/config.ini" 2>/dev/null | head -1
+}
+
+# "<name> (<api>)" for each AVD, supported ones first. Sets _AVD_OK and _AVD_NO.
+_avd_survey() {
+  local n api
+  _AVD_OK=""; _AVD_NO=""
+  for n in $(emulator -list-avds 2>/dev/null); do
+    api=$(_avd_api "$n")
+    case "$_MAESTRO_APIS" in
+      *" ${api%%.*} "*) _AVD_OK="$_AVD_OK $n (${api:-?})" ;;
+      *)                _AVD_NO="$_AVD_NO $n (${api:-?})" ;;
+    esac
+  done
+  _AVD_OK=${_AVD_OK# }; _AVD_NO=${_AVD_NO# }
+}
+
 _android_evidence() {
-  local d a
+  local d
   d=$(adb devices 2>/dev/null | sed -n 's/\tdevice$//p' | head -1)
   [ -n "$d" ] && { printf 'a booted device, %s' "$d"; return 0; }
-  a=$(emulator -list-avds 2>/dev/null)
-  if [ -n "$a" ]; then
-    # All of them, with the count. A truncated list in a conf comment reads as
-    # the whole answer, and the reader has no way to tell that it is not.
-    printf 'AVDs defined but none booted (%s): %s' \
-      "$(printf '%s\n' "$a" | grep -c .)" \
-      "$(printf '%s' "$a" | tr '\n' ' ' | sed 's/ *$//')"
+  _avd_survey
+  if [ -n "$_AVD_OK" ]; then
+    printf 'none booted; AVDs Maestro can drive: %s' "$_AVD_OK"
+    [ -n "$_AVD_NO" ] && printf ' (and on an API it cannot: %s)' "$_AVD_NO"
+    return 0
+  fi
+  if [ -n "$_AVD_NO" ]; then
+    printf 'none booted, and every AVD here is on an API Maestro does not support yet: %s' "$_AVD_NO"
     return 0
   fi
   printf 'the SDK is here, with no device and no AVD'
@@ -129,7 +162,13 @@ if [ "$DETECT" = 1 ] && [ "$LOCAL" = 1 ]; then
     adb devices -l 2>/dev/null | sed -n '2,$p' | sed '/^$/d; s/^/  /' |
       grep . || echo "  none attached"
     echo "== AVDs defined"
-    emulator -list-avds 2>/dev/null | sed 's/^/  /' | grep . || echo "  none"
+    _avd_survey
+    if [ -z "$_AVD_OK$_AVD_NO" ]; then
+      echo "  none"
+    else
+      [ -n "$_AVD_OK" ] && echo "  Maestro can drive:  $_AVD_OK"
+      [ -n "$_AVD_NO" ] && echo "  API unsupported:    $_AVD_NO"
+    fi
   fi
   if command -v xcrun >/dev/null 2>&1; then
     echo "== booted simulators"
