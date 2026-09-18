@@ -111,6 +111,17 @@ build)
   sh "$HERE/build.sh" "$@"
   ;;
 
+version)
+  # pubspec.yaml's `version: 3.0.4+43` is exactly the pair iOS reports as
+  # CFBundleShortVersionString and CFBundleVersion, so the two compare directly
+  # with no mapping.
+  _repo=${1:?version <repo>}
+  _v=$(sed -n 's/^version:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_repo/pubspec.yaml" 2>/dev/null | head -1)
+  [ -n "$_v" ] || { echo "runners/flutter version: no version: line in $_repo/pubspec.yaml" >&2; exit 2; }
+  echo "$_v"
+  exit 0
+  ;;
+
 residue)
   # The same five patterns as `_gs_residue` in remote/gitstate.sh, which is
   # still the live copy. Wiring call site 1 leaves only one of the two.

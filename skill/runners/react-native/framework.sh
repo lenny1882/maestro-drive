@@ -96,6 +96,18 @@ build)
   exit 2
   ;;
 
+version)
+  # DOCUMENTED, NOT MEASURED, and it is NOT package.json's version — that is the
+  # JS package's, and the iOS build number comes from CFBundleVersion in the
+  # Xcode project while Android's comes from versionCode in build.gradle. So the
+  # honest answer is that a React Native project has two, one per platform, and
+  # this verb returns one. Settle that before writing it — same shape as the
+  # `variants` question.
+  echo "runners/react-native version: unanswered — iOS and Android carry their" >&2
+  echo "  own build numbers, and this verb returns one. See variants." >&2
+  exit 2
+  ;;
+
 residue)
   # The paths a React Native build regenerates and a repo commits. yarn.lock and
   # package-lock.json are the JS half; Podfile.lock and Pods/ are the iOS half
