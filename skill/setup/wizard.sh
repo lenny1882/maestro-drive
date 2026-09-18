@@ -1267,17 +1267,48 @@ print(" ".join(servers))
   scp -o BatchMode=yes -q "$VENDORED_PLIST" "$alias:/tmp/networkChange.plist" || true
   rm -f "$work"
 
+  # The five commands, in one place, printed either way.
+  local install_cmds
+  install_cmds="sudo cp -p $REMOTE_SCRIPT $REMOTE_SCRIPT.bak 2>/dev/null
+sudo install -m 755 -o root -g wheel $stage $REMOTE_SCRIPT
+sudo install -m 644 -o root -g wheel /tmp/networkChange.plist $REMOTE_PLIST
+sudo launchctl bootout system $REMOTE_PLIST 2>/dev/null
+sudo launchctl bootstrap system $REMOTE_PLIST"
+
   say ""
-  say "  Both files need root on the Mac, and sudo there has no passwordless"
-  say "  path. Run this in a terminal on the Mac, or over your own ssh:"
+  say "  Both files need root on the Mac. These are the five commands:"
   say ""
-  say "    sudo cp -p $REMOTE_SCRIPT $REMOTE_SCRIPT.bak 2>/dev/null"
-  say "    sudo install -m 755 -o root -g wheel $stage $REMOTE_SCRIPT"
-  say "    sudo install -m 644 -o root -g wheel /tmp/networkChange.plist $REMOTE_PLIST"
-  say "    sudo launchctl bootout system $REMOTE_PLIST 2>/dev/null"
-  say "    sudo launchctl bootstrap system $REMOTE_PLIST"
+  printf '%s\n' "$install_cmds" | sed 's/^/    /' >&2
   say ""
-  confirm "Done?" n || { warn "phase C stopped — nothing on the Mac has changed"; return 1; }
+  say "  This can run them for you over ssh. sudo needs a terminal to ask for"
+  say "  the Mac's password on, not a passwordless rule, and -t gives it one —"
+  say "  the prompt appears here, exactly as ssh-copy-id's did in phase A."
+  say ""
+  say "  It installs a LaunchDaemon on a machine that is not this one, so it is"
+  say "  offered rather than assumed. Saying no leaves the commands above to run"
+  say "  by hand; nothing on the Mac has changed yet either way."
+  say ""
+  if confirm "Run them over ssh now?" n; then
+    # -t, and deliberately not -n. Every other ssh in this file passes -n so a
+    # successful connection cannot swallow the rest of the answers (item 84);
+    # this one wants the opposite, because sudo's prompt has to reach a
+    # terminal and the reply has to get back. ssh-copy-id in phase A is exempt
+    # for the same reason and in the same way.
+    # Two -t: ssh allocates a tty only when its own stdin is one, and forcing it
+    # is what makes the prompt appear when this runs from anything else.
+    if ssh -tt "$alias" "set -e; $install_cmds"; then
+      ok "installed on the Mac"
+    else
+      warn "the install did not complete — the Mac is as it was, or part-way."
+      warn "Check with: ssh $alias 'ls -l $REMOTE_SCRIPT $REMOTE_SCRIPT.bak'"
+      say ""
+      confirm "Carry on to the Wi-Fi cycle anyway?" n || return 1
+    fi
+  else
+    say ""
+    say "  Run them on the Mac, or over your own ssh, then come back."
+    confirm "Done?" n || { warn "phase C stopped — nothing on the Mac has changed"; return 1; }
+  fi
 
   c_cycle_and_verify "$alias" "$dev" "$static"
 }
