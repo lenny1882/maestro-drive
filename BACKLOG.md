@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 94.** Items 1–93 are allocated; new items start from 94.
+**Next item number: 95.** Items 1–94 are allocated; new items start from 95.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -88,6 +88,68 @@ work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
 
 ---
+
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep**
+
+The package is named for the case it was built for: a Linux box driving a Mac.
+A developer whose simulator or emulator is on the machine they are sitting at
+cannot use it at all — `bin/config.sh` refuses to load without `MAC_HOST` and
+`MAC_FQDN`, and there is no host to give it.
+
+**It is a smaller job than the shape suggests.** Counted 18 Sep:
+
+```
+84  _ssh "<script>"   across 21 files   ONE function in bin/lib.sh
+16  raw ssh / scp     across 12 files   individual, mostly file copies
+```
+
+The 84 do not change. They already pass a shell script and read its output, and
+`_ssh` is free to run that with `sh -c` instead of handing it to ssh. The 16 raw
+calls are the ones needing attention one at a time.
+
+**Six things are not simplified locally — they become unnecessary.** Each exists
+only because there is a boundary:
+
+| piece | why it exists | locally |
+| --- | --- | --- |
+| `remote/relay.py`, `bin/publish.sh` | republishes the Mac's loopback-bound debug endpoint on its LAN interface | read `127.0.0.1` |
+| `$grpc_proxy` on every curl | the sandbox's egress proxy | no proxy |
+| base64 round-trips in `shot.sh`, `flow.sh`, `img.sh` | getting a PNG back over SSH | the file is already there |
+| `_pick_host`, `_probe_host`, `MAC_HOST` as a list | the Mac moves between networks | no host to pick |
+| `MACIP`, `MAC_FQDN` | building URLs the sandbox can reach | `127.0.0.1` |
+| `$RDIR` vs `$LDIR` | two machines, two scratch directories | one |
+
+**Three parts need thought rather than a branch.**
+
+**`config.sh`'s required settings.** It refuses without `MAC_HOST` and
+`MAC_FQDN`. Local mode is a different required-settings shape, not an exemption
+bolted onto the existing one — and the message it prints when a project is not
+configured is one of the more useful things this package does, so it has to stay
+that good for both.
+
+**`$RDIR` and `$LDIR` collapsing to one directory.** Code that copies between
+them would copy a file onto itself. `bin/shot.sh` and `bin/install.sh` both do.
+This is the part that looks trivial and is not: every `scp` and every
+`base64 | base64 -d` pair is a copy between two names for what would become one
+place.
+
+**The wall.** It binds the Mac's LAN interface and publishes a URL built from
+`MAC_FQDN`. Locally that is `127.0.0.1:9990` — but `WALL_URL` already exists as
+the override for exactly this, so it may cost nothing. Check before assuming it
+does.
+
+**The runner modules are unaffected**, which is worth saying because it is the
+same argument item 87 rests on, one layer down. Every platform and framework
+verb already runs on the machine that has the device and is invoked as
+`sh <module> <verb>`. Whether that machine is reached by ssh or IS this one is
+`_ssh`'s business and none of theirs.
+
+**Naming.** If this lands, `maestro-remote-mac` is the wrong name for what the
+package does. Not a reason to avoid it, but it is a rename, an installed skill
+directory, an MCP server entry and a repo — so decide it deliberately rather
+than discovering it at the end.
+
+**Gated on:** nothing. Item 87 touches `_ssh` only as a caller.
 
 ## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **OPEN, raised 18 Sep**
 
