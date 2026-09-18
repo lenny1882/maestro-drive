@@ -30,13 +30,30 @@ claim)
   ;;
 
 devices)
-  if [ "${1:-}" = --booted ]; then
-    xcrun simctl list devices booted |
-      sed -nE 's/^ *(.*) \(([0-9A-F-]{36})\) \(Booted\).*/\2\'"$(printf '\t')"'Booted\'"$(printf '\t')"'\1/p'
-  else
-    xcrun simctl list devices available |
-      sed -nE 's/^ *(.*) \(([0-9A-F-]{36})\) \((Booted|Shutdown)\).*/\2\'"$(printf '\t')"'\3\'"$(printf '\t')"'\1/p'
-  fi
+  # <id> TAB <state> TAB <name> TAB <runtime>. The runtime is the optional
+  # fourth column: nothing needs it to identify a device, and the wall groups
+  # by it so that two iPhone 16s on different iOS versions sort together with
+  # their own kind rather than interleaving.
+  #
+  # -j and python, not the plain text: simctl's human listing puts the runtime
+  # on a heading line above its devices, so a line-at-a-time sed cannot carry it
+  # down, and the JSON has it as the key.
+  [ "${1:-}" = --booted ] && _only=Booted || _only=
+  xcrun simctl list devices available -j 2>/dev/null | ONLY="$_only" python3 -c '
+import json, os, sys
+only = os.environ.get("ONLY") or None
+rows = []
+for runtime, devs in (json.load(sys.stdin).get("devices") or {}).items():
+    for d in devs:
+        st = d.get("state") or ""
+        if only and st != only:
+            continue
+        if not d.get("udid"):
+            continue
+        rows.append((runtime, d.get("name") or d["udid"], d["udid"], st))
+for rt, name, udid, st in sorted(rows):
+    print("\t".join((udid, st, name, rt)))
+'
   ;;
 
 boot)
