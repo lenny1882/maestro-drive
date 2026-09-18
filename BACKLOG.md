@@ -962,23 +962,81 @@ Native checkout on the Mac — there is none today.** *Files:*
 `runners/react-native/framework.sh`. *Done when:* `bin/build.sh --detect`
 reports an RN project and `--no-install` produces an artefact path.
 
-**Stage 3 — call site 7, the mechanical one.** Largest by line count, smallest
-by thought: one command substituted for another, repeatedly.
+**Stage 3 — call site 7. DONE 18 Sep**, seven units, seven commits. It was
+planned as four files and "one command substituted for another, repeatedly".
+Call site 7 covers seven files, and two of the substitutions were not
+substitutions at all.
 
-**3.1 `lib.sh`** — `_dev` becomes `platform.sh devices --booted`, `_driver_scan`
-becomes `platform.sh driver-scan`. *Done when:* no `xcrun` remains in `lib.sh`.
+**3.1 `lib.sh` DONE.** `_dev` and `_driver_scan` become `devices --booted` and
+`driver-scan`. The module paths are plain strings set in `lib.sh` rather than a
+call to `bin/runner.sh`, because `runner.sh` sources `lib.sh` and every `_dev`
+would otherwise pay for a subprocess to learn what `config.sh` already knows.
 
-**3.2 `drivers.sh`** — `_booted`, the rig's boot and shutdown, and `driverup.sh`
-become `devices`, `boot`, `shutdown` and `driver-up`. *Done when:* no `xcrun`
-remains in `drivers.sh`.
+**3.2 `drivers.sh` DONE.** Six call sites, five of them substitutions.
 
-**3.3 `shot.sh`** — one line: `platform.sh screenshot`. *Done when:* the same.
+The sixth was `rig reap`'s freshness probe, which walked CoreSimulator's per-app
+data containers for an mtime — two levels deep, because a container's own mtime
+only moves when its IMMEDIATE contents change and a device driven all day on the
+18th reported the 16th. That is archaeology rather than a command, so it became
+**`last-used`**: `<id>|<yyyymmdd>|<human>|<today>` for every booted device in one
+call. Today's date comes from the device's own host, so clock skew between the
+two cannot reap a live device. Android's is unanswered and says why — an
+emulator image's mtime says the emulator is running, not that anyone is driving
+it, which is a different question.
 
-**3.4 `wall.py`** — do this last and on its own. It is Python, it parses
-`simctl list -j`, and it spawns the capture binary per device. `capture-cmd`
-covers the spawn; **the listing does not have a verb yet**, because the contract
-returns tab-separated text and `wall.py` wants structure. Add a JSON form, or
-have `wall.py` take the text — decide before starting.
+Boot and settle also split. `platform.sh boot` waits for the DEVICE;
+`drivers.sh` still waits for the MACHINE afterwards, and it is the second that
+decides whether the next boot or a driver start survives. Two different things
+that happened to share a function.
+
+**3.3 `shot.sh` DONE.** One line.
+
+**3.4 `wall.py` DONE, and reading it settled the open decision rather than a
+design argument.** `wall.py` used the runtime ONLY to sort and dropped it from
+the return — so no JSON form was needed. `devices` gained an optional fourth
+column carrying the runtime, and the single text format stays. No `simctl`,
+`XCRUN` or `SIMSERVER` left in the file.
+
+The module's `devices` reads `-j` and parses it with python rather than scraping
+simctl's human listing, because that listing puts the runtime on a heading line
+ABOVE its devices and a line-at-a-time parse cannot carry it down to the rows.
+
+**3.5 `preflight.sh` DONE.** `container`, and `orientations` — which already
+existed and had no caller. `orientations` takes the container rather than the
+device on purpose: it reports what the INSTALLED BUILD declares, not what the
+device supports, and those differ on exactly the case the check exists for, a
+landscape-locked app on a natively-portrait iPad.
+
+**3.6 `flow.sh` DONE.** The other screenshot.
+
+**3.7 `driver.sh` DONE**, and it needed two verbs the contract lacked.
+
+`uninstall <id> <app-id>` for `clearstate`. Removing the app removes its data
+with it, which is the point: clearstate wants a first-launch app, not a
+logged-out one. An app already absent is not a failure.
+
+`locked <id>` has THREE statuses — 0 locked, 1 not, **2 the question does not
+apply** — and the third is what lets the check self-gate. `devicectl` returns
+nothing for a simulator udid, so a simulator gets 2 and the caller never needs
+to know which kind of device it holds. Verified live.
+
+That third status caught a latent test bug. The three lock stubs answered by
+PRINTING `passcodeRequired: true`; they answer by status now, and the simulator
+case returns 2 where it returned 0 — which under the new code means "locked".
+
+**Three verbs and a column added across the stage:** `last-used`, `uninstall`,
+`locked`, and `devices`' optional fourth column.
+
+**Nothing under `bin/` calls `xcrun`, `simctl` or `devicectl` any more.** What
+still matches is comments in `build.sh` and `driver.sh`, and three files that
+are a module's own territory rather than a caller's: `remote/vmservice.sh` and
+`remote/build.sh` belong to the flutter framework runner, `remote/deviceup.sh`
+to the `ios-device` platform runner. Moving them inside `runners/` would leave
+`remote/` holding only shared code, and is worth doing before a second platform
+arrives.
+
+`bin/init.sh` is the real remainder and is **5.2**: it lists devices and
+installed apps for the setup wizard, which is conf-writing rather than driving.
 
 **Stage 4 — answer the six unanswered verbs.** Two are paper decisions and can
 be taken now. Two need hardware this Mac may not have.
