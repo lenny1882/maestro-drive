@@ -1127,8 +1127,21 @@ with open(path) as fh:
 arm = '    "%s")\n      echo "%s"\n      ;;\n' % (ssid, profile)
 
 # Drop any existing arm for this SSID, then insert before the default.
+#
+# ^ and MULTILINE are load-bearing. Unanchored, `[ \t]*"SSID")` matches inside a
+# COMMENTED arm — starting after the #, because the spaces that follow it are
+# whitespace — and the run then carries on to the next `;;` that does begin a
+# line, which belongs to a different arm. Measured 18 Sep 2026 against a Mac
+# whose Tachikoma:Redux arm had been commented out by hand: the splice removed
+# the live "The Sharp Project Tenants" arm and glued the orphaned # onto
+# `    "SenseGuest")`, commenting out its pattern and leaving its echo with no
+# arm to belong to. bash -n caught it and nothing was copied to the Mac.
+#
+# Anchored, a commented arm is not an arm: this adds a live one and leaves the
+# commented text alone, which is right — the comment is a record of a choice,
+# and the file says what it does.
 pattern = re.compile(
-    r'[ \t]*"%s"\)\n(?:.*\n)*?[ \t]*;;\n' % re.escape(ssid))
+    r'^[ \t]*"%s"\)\n(?:.*\n)*?^[ \t]*;;\n' % re.escape(ssid), re.M)
 text, dropped = pattern.subn('', text)
 
 marker = "    *)\n"
@@ -1151,7 +1164,10 @@ import os, re, sys
 path, ssid = sys.argv[1], os.environ["SSID"]
 with open(path) as fh:
     text = fh.read()
-text, n = re.subn(r'[ \t]*"%s"\)\n(?:.*\n)*?[ \t]*;;\n' % re.escape(ssid), '', text)
+# Anchored for the reason splice_profile is: unanchored, this matches inside a
+# commented arm and runs on to a live arm's `;;`, taking that arm with it.
+text, n = re.subn(r'^[ \t]*"%s"\)\n(?:.*\n)*?^[ \t]*;;\n' % re.escape(ssid), '',
+                  text, flags=re.M)
 with open(path, "w") as fh:
     fh.write(text)
 PY

@@ -100,6 +100,76 @@ sed -n "/^static_default() {/,/^}/p;/^splice_profile() {/,/^}/p;/^drop_profile()
   && ok "static address declines to guess from a non-address" \
   || no "static address declines to guess from a non-address" "got $(static_default not-an-ip)"
 
+# A commented-out arm is not an arm. Found 18 Sep against a Mac whose
+# Tachikoma:Redux arm had been commented out by hand: unanchored, the pattern
+# matched INSIDE the comment — starting after the #, because what follows it is
+# whitespace — and the run carried on to the next `;;` that did begin a line,
+# which belonged to the live arm after it. That arm was deleted and the orphaned
+# # was glued onto the next pattern, commenting it out and leaving its echo with
+# nothing to belong to. bash -n caught it and nothing reached the Mac.
+CM="$TMP/commented.sh"
+cat > "$CM" <<'SCRIPT'
+profile_for_ssid() {
+  case "$1" in
+#    "Commented Net")
+#      echo "manual 10.0.1.250 255.255.255.0 10.0.1.1 10.0.1.1"
+#      ;;
+    "Live Net")
+      echo "manual 10.0.2.250 255.255.255.0 10.0.2.1 10.0.2.1"
+      ;;
+    "Other Net")
+      echo "manual 10.0.3.250 255.255.255.0 10.0.3.1 10.0.3.1"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+SCRIPT
+cm_action=$(splice_profile "$CM" "Commented Net" "manual 10.0.1.250 255.255.255.0 10.0.1.1 10.0.1.1")
+bash -n "$CM" 2>/dev/null \
+  && ok "splice: a commented arm does not corrupt the script" \
+  || no "splice: a commented arm does not corrupt the script" "$(bash -n "$CM" 2>&1 | head -2)"
+
+grep -q '^    "Live Net")$' "$CM" \
+  && grep -q '^    "Other Net")$' "$CM" \
+  && ok "splice: the live arms either side of a commented one survive" \
+  || no "splice: the live arms either side of a commented one survive" "$(cat "$CM")"
+
+[ "$cm_action" = "added" ] \
+  && ok "splice: a commented arm reads as absent, so the SSID is added" \
+  || no "splice: a commented arm reads as absent, so the SSID is added" "said $cm_action"
+
+grep -q '^    "Commented Net")$' "$CM" \
+  && ok "splice: and the arm it adds is live" \
+  || no "splice: and the arm it adds is live" "$(cat "$CM")"
+
+# The comment is a record of a choice, so it stays and the file says what it does.
+grep -q '^#    "Commented Net")$' "$CM" \
+  && ok "splice: the commented text is left where it was" \
+  || no "splice: the commented text is left where it was" "$(cat "$CM")"
+
+# drop_profile carries the same pattern and the same flaw.
+cat > "$CM" <<'SCRIPT'
+profile_for_ssid() {
+  case "$1" in
+#    "Commented Net")
+#      echo "manual 10.0.1.250 255.255.255.0 10.0.1.1 10.0.1.1"
+#      ;;
+    "Live Net")
+      echo "manual 10.0.2.250 255.255.255.0 10.0.2.1 10.0.2.1"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+SCRIPT
+drop_profile "$CM" "Commented Net"
+bash -n "$CM" 2>/dev/null && grep -q '^    "Live Net")$' "$CM" \
+  && ok "drop: a commented arm is not dropped, and takes no live arm with it" \
+  || no "drop: a commented arm is not dropped, and takes no live arm with it" "$(cat "$CM")"
+
 cp "$REPO/skill/setup/network-change.sh" "$TMP/nc.sh"
 drop_profile "$TMP/nc.sh" "Example Network Name"
 grep -q "Example Network Name" "$TMP/nc.sh" \
