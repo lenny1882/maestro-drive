@@ -162,6 +162,16 @@ driver-up|driver-down|driver-scan)
   exit 2
   ;;
 
+last-used)
+  # UNANSWERED. The iOS answer walks CoreSimulator's per-app data containers for
+  # an mtime. An emulator's userdata is a qcow2 image whose mtime moves whenever
+  # the emulator writes anything at all, which is not the same question — it
+  # says the emulator is running, not that somebody is driving it.
+  echo "runners/android last-used: unanswered — an emulator disk image's mtime" >&2
+  echo "  says the emulator is running, not that anyone is using it." >&2
+  exit 2
+  ;;
+
 capture-cmd)
   # PLAUSIBLE, NOT MEASURED. Maestro's capture binary takes the platform as its
   # first argument — the iOS runner passes `ios` — so `android` is the obvious

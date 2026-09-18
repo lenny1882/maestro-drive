@@ -33,9 +33,11 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 HERE=$(cd "$(dirname "$0")" && pwd)
 
+# "<id> <name>", which is what every caller here reads. The platform gives tab
+# separated <id> <state> <name>; the state is not interesting once --booted has
+# already filtered on it.
 _booted() {
-  _ssh 'xcrun simctl list devices booted' |
-    sed -nE 's/^ *(.*) \(([0-9A-F-]{36})\) \(Booted\).*/\2 \1/p'
+  _ssh "sh '$PLATFORM_SH' devices --booted" | awk -F'\t' 'NF{printf "%s %s\n", $1, $3}'
 }
 
 _list() {
@@ -188,7 +190,9 @@ _rig_claimed() { _ssh "cat '$(_rig_mine)' 2>/dev/null" 2>/dev/null; }
 _rig_settle() {  # _rig_settle <udid> -- wait for the boot AND for the load it caused
   local udid=$1 waited=0 l
   echo "  waiting for $udid to finish booting" >&2
-  TMO=300 _ssh "xcrun simctl bootstatus '$udid' -b >/dev/null 2>&1; true" >/dev/null 2>&1
+  # The platform's `boot` already waited for the device itself — this is the
+  # second wait, for the machine. They are different things and only the second
+  # decides whether the next boot or a driver start survives.
   # bootstatus returns when the device is up, not when the machine has caught
   # up with it, and it is the second one that decides whether the next boot or
   # a driver start survives.
@@ -218,7 +222,9 @@ _rig_up() {
       echo "$d  already booted (leaving it alone)"
     else
       echo "$d  booting"
-      _ssh "xcrun simctl boot '$d'" >/dev/null 2>&1 || {
+      # One verb: it boots AND waits the device out. Returning before the boot
+      # settles is what makes the next caller start a driver mid-storm.
+      TMO=300 _ssh "sh '$PLATFORM_SH' boot '$d'" >/dev/null 2>&1 || {
         echo "$d  would not boot" >&2; continue; }
       _rig_claim "$d"          # only what WE booted is ours to shut down
       _rig_settle "$d"
@@ -272,9 +278,9 @@ _rig_down() {
   fi
   for d in $mine; do
     echo "$d  stopping driver, clearing label, shutting down"
-    _ssh "pkill -f 'test-without-building.*$d' 2>/dev/null
+    _ssh "sh '$PLATFORM_SH' driver-down '$d' 2>/dev/null
 rm -f '$RDIR/labels/$d'
-xcrun simctl shutdown '$d' 2>/dev/null; true" >/dev/null 2>&1 || true
+sh '$PLATFORM_SH' shutdown '$d' 2>/dev/null; true" >/dev/null 2>&1 || true
     _driver_disown "$d"
     n=$((n + 1))
   done
@@ -321,18 +327,7 @@ _rig_reap() {  # _rig_reap [--shutdown]
   # device driven all day on the 18th; Documents/ and Library/ inside it gave
   # 18 Sep 12:56, which is exactly what a recursive find over the whole
   # container returned, for the cost of a glob.
-  rows=$(_ssh 'today=$(date +%Y%m%d)
-for u in $(xcrun simctl list devices booted | sed -n "s/.*(\([0-9A-Fa-f-]\{36\}\)).*/\1/p"); do
-  d="$HOME/Library/Developer/CoreSimulator/Devices/$u/data/Containers/Data/Application"
-  l=$(ls -td "$d"/*/*/ 2>/dev/null | head -1)
-  [ -n "$l" ] || l=$(ls -td "$d"/*/ 2>/dev/null | head -1)
-  if [ -n "$l" ]; then
-    e=$(stat -f %m "$l" 2>/dev/null)
-    echo "$u|$(date -r "$e" +%Y%m%d 2>/dev/null)|$(date -r "$e" "+%Y-%m-%d %H:%M" 2>/dev/null)|$today"
-  else
-    echo "$u|none|never|$today"
-  fi
-done' 2>/dev/null)
+  rows=$(_ssh "sh '$PLATFORM_SH' last-used")
 
   # One pass, into a variable: a `while read` fed by a pipe runs in a subshell,
   # so anything it decides is lost at the done.
@@ -375,7 +370,7 @@ done' 2>/dev/null)
   local u
   for u in $orphans; do
     echo "$u  shutting down"
-    _ssh "rm -f '$RDIR/labels/$u'; xcrun simctl shutdown '$u' 2>/dev/null; true" >/dev/null 2>&1 || true
+    _ssh "rm -f '$RDIR/labels/$u'; sh '$PLATFORM_SH' shutdown '$u' 2>/dev/null; true" >/dev/null 2>&1 || true
   done
   _driver_scan >/dev/null
   echo "rig reap: $n shut down, labels cleared. Claimed and same-day devices untouched."
@@ -398,7 +393,7 @@ _up_one() {  # _up_one <udid> <live-map> <ports-map>
   echo "$udid  starting on $port (about 30s)"
   _ssh "mkdir -p '$RDIR'" >/dev/null
   scp "${SSH_OPTS[@]}" "$HERE/../remote/driverup.sh" "$MAC_HOST:$RDIR/driverup.sh" >/dev/null || return 1
-  TMO=180 _ssh "bash '$RDIR/driverup.sh' '$udid' '$port' '$RDIR/drv'" || return 1
+  TMO=180 _ssh "RDIR='$RDIR' sh '$PLATFORM_SH' driver-up '$udid' '$port' '$RDIR/drv'" || return 1
   # Remember it was us. A driver that disappears from the scan afterwards was
   # taken by something, and the note in _driver_bind can say so.
   _driver_own "$udid" "$port"
