@@ -1886,13 +1886,20 @@ sh "$RS/android/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA 2>/dev/n
 # caller's `IFS=$'\t' read` takes the id and leaves the name alone however many
 # spaces are in it.
 SIMSTUB="$TMP/simstub"; mkdir -p "$SIMSTUB"
+# -j, because that is what the module asks for: simctl's human listing puts the
+# runtime on a heading line above its devices, so a line-at-a-time parse cannot
+# carry it down to the rows.
 cat > "$SIMSTUB/xcrun" <<'XR'
 #!/bin/sh
 cat <<'OUT'
-== Devices ==
--- iOS 18.6 --
-    iPhone 16 Pro (6EA2EBFE-7483-4422-9E51-A345A74DADEA) (Booted)
-    iPad Pro 11-inch (7C0331AA-1111-2222-3333-444455550331) (Booted)
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
+    {"udid": "6EA2EBFE-7483-4422-9E51-A345A74DADEA", "name": "iPhone 16 Pro", "state": "Booted"},
+    {"udid": "7C0331AA-1111-2222-3333-444455550331", "name": "iPad Pro 11-inch", "state": "Booted"},
+    {"udid": "9999AAAA-1111-2222-3333-444455550000", "name": "iPhone SE", "state": "Shutdown"}
+  ],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-4": []
+}}
 OUT
 XR
 chmod +x "$SIMSTUB/xcrun"
@@ -1903,9 +1910,11 @@ out=$(PATH="$SIMSTUB:$PATH" sh "$RS/ios/platform.sh" devices --booted)
 # A here-string, not a pipe: `read` in a pipeline runs in a subshell and the
 # variables never reach here — which is the same trap bin/build.sh's --all loop
 # avoids with process substitution.
-IFS=$'\t' read -r _u _st _nm <<< "$(printf '%s\n' "$out" | head -1)"
+# Four fields, not three: `read` puts every remaining field into the last
+# variable, so a three-variable read glues the runtime onto the name.
+IFS=$'\t' read -r _u _st _nm _rt <<< "$(printf '%s\n' "$out" | head -1)"
 case "$_u:$_nm" in
-  "6EA2EBFE-7483-4422-9E51-A345A74DADEA:iPhone 16 Pro")
+  "7C0331AA-1111-2222-3333-444455550331:iPad Pro 11-inch")
     ok "devices --booted separates the id from a name with spaces in it" ;;
   *) no "devices --booted separates the id from a name with spaces in it" "got '$_u' / '$_nm'" ;;
 esac
@@ -2282,21 +2291,19 @@ check("split-boundary-then-emits", lambda: frames == [b"XY"])
 check("empty", lambda: w.split_frames(b"") == ([], b""))
 check("rubbish", lambda: w.split_frames(b"not multipart at all") == ([], b"not multipart at all"))
 
-# simctl lists every runtime it knows, nearly all of them empty
-data = {"devices": {
-    "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
-        {"udid": "B" * 36, "name": "iPhone 16", "state": "Booted"},
-        {"udid": "C" * 36, "name": "iPhone 16 Pro", "state": "Shutdown"},
-    ],
-    "com.apple.CoreSimulator.SimRuntime.iOS-26-4": [],
-    "com.apple.CoreSimulator.SimRuntime.iOS-15-5": [
-        {"udid": "A" * 36, "name": "iPhone 8", "state": "Booted"},
-    ],
-}}
-got = w.parse_booted(data)
+# The platform runner filters and sorts; the wall reads four tab-separated
+# columns and keeps two. The runtime is the fourth and exists only so that two
+# iPhone 16s on different iOS versions sort with their own kind.
+rows = "\t".join(("A" * 36, "Booted", "iPhone 8", "iOS-15-5")) + "\n" + \
+       "\t".join(("B" * 36, "Booted", "iPhone 16", "iOS-18-6")) + "\n"
+got = w.parse_booted(rows)
 check("booted-only", lambda: [n for _, n in got] == ["iPhone 8", "iPhone 16"])
-check("empty-runtimes", lambda: w.parse_booted({"devices": {}}) == [])
-check("no-key", lambda: w.parse_booted({}) == [])
+check("empty-rows", lambda: w.parse_booted("") == [])
+check("none-at-all", lambda: w.parse_booted(None) == [])
+# The runtime column is optional by contract; the id is not. A row without one
+# is skipped rather than guessed at.
+check("short-row", lambda: w.parse_booted("X\tBooted\tiPhone X\n\tBooted\tno id\nrubbish\n")
+      == [("X", "iPhone X")])
 
 # labels: written by whoever drives, read by the wall, never posted to it
 import os, tempfile, time
@@ -2377,7 +2384,7 @@ os.utime(p2, (late, late))
 check("day-crossed-midnight-hidden", lambda: w.read_label(udid2) == {})
 PYEOF
 )
-for line in one-complete partial-kept three split-boundary-waits split-boundary-then-emits empty rubbish booted-only empty-runtimes no-key label-basic label-equals label-junk label-none label-missing label-read label-stale label-empty-file label-by label-no-by day-today-fresh day-today-not-stale day-today-old-kept day-today-old-greyed day-yesterday-hidden day-crossed-midnight-hidden; do
+for line in one-complete partial-kept three split-boundary-waits split-boundary-then-emits empty rubbish booted-only empty-rows none-at-all short-row label-basic label-equals label-junk label-none label-missing label-read label-stale label-empty-file label-by label-no-by day-today-fresh day-today-not-stale day-today-old-kept day-today-old-greyed day-yesterday-hidden day-crossed-midnight-hidden; do
   case "$wall_out" in
     *"$line True"*) ok "wall.py: $line" ;;
     *)              no "wall.py: $line" "$(printf '%s' "$wall_out" | grep "^$line " || echo 'no result')" ;;
