@@ -892,9 +892,134 @@ one of them still pays for sixty builds' worth of the single-call saving.
 Left open by that: the physical-device path polls a GUI-session build for up to
 1200s and keeps its own `TMO`, so the two paths do not share a timeout rule.
 
-**Still to do.** Six of the seven call sites. Only 3 actually calls a runner; 1
-and 2 are parameterised but still hold the Flutter defaults themselves, so
-nothing passes the module's answer to them yet, and 4 to 7 are untouched.
-Answer the six unanswered verbs. Verify the install half of call site 3 against
-a booted simulator. `runners/README.md` has each call site and the shape of its
-change.
+---
+
+### What is left, in units
+
+Each unit is one commit. `runners/README.md` has the contract and the shape of
+every call site's change; this is the order and the stopping condition.
+
+**Stage 1 — wire the call sites that need no new answers.** Every verb these
+need is written and works. This is substitution, and it is what makes a second
+framework possible at all.
+
+**1.1 Residue comes from the framework.** `bin/preflight.sh` passes
+`RESIDUE_GLOBS=$(framework.sh residue)` into the remote call before it sources
+`gitstate.sh`. `gitstate.sh` keeps its current default, because it is also
+sourced standalone and by the tests, but nothing in the live path uses it any
+more. *Files:* `bin/preflight.sh`. *Done when:* preflight against a checkout
+whose runner answers `yarn.lock` reports `yarn.lock` as residue and
+`pubspec.lock` as a change.
+
+**1.2 The dev-session probe comes from the framework.** The three
+`DEVSESSION_*` variables are filled from `framework.sh devsession` rather than
+defaulted in the script. It runs on the Mac, so it folds into preflight's one
+SSH call rather than adding another. *Files:* `bin/preflight.sh`. *Done when:*
+`RUNNER=react-native` makes preflight say Metro rather than `flutter run`, and
+say the app may not start at all rather than that driving is unaffected.
+
+**1.3 `publish.sh` finds its endpoint through the framework.** The
+`vmservice.sh` call becomes `framework.sh inspect`; `_profiling` and
+`_profiling_on` become `framework.sh traffic-arm`. The relay, the state file and
+the per-device suffix stay — `relay.py` does not care what is behind the port.
+*Files:* `bin/publish.sh`. *Done when:* a framework whose `inspect` exits 2
+makes `publish.sh` say that framework has no debug endpoint, rather than that
+the relay failed.
+
+**1.4 `net.sh` reads traffic through the framework.** The two `ext.dart.io`
+URLs and the `net.py` calls become `traffic-list` and `traffic-one`. Keep the
+fast-path/SSH-fallback choice and keep `_explain_empty`: "the app made no
+calls" and "capture was never armed" look identical and must not be conflated.
+*Files:* `bin/net.sh`. *Done when:* `RUNNER=react-native` makes `net.sh` print
+the proxy explanation and exit 2, and Flutter behaves exactly as it does today.
+
+**NOTE on 1.3 and 1.4.** The `traffic-*` verbs run **in the sandbox**, through
+`$grpc_proxy`, while every other verb runs on the Mac. `runner.sh framework`
+handles the local side and `runner.sh rpath` the remote one. A verb invoked on
+the wrong side fails as a network error, which reads as a broken relay rather
+than as a wiring mistake.
+
+**1.5 `prefs.sh` uses both modules.** The container lookup and the plist read
+become `platform.sh data-container` / `prefs-read` / `prefs-flush`; the default
+filter becomes `framework.sh prefs-prefix`. The only call site that needs both.
+*Files:* `bin/prefs.sh`. *Done when:* the default filter comes from the runner
+and a framework with no prefix reads every key rather than none.
+
+**Stage 2 — prove it against something that is not Flutter.** Doing this before
+the mechanical work means Stage 3 is done against a contract known to hold
+rather than one hoped to.
+
+**2.1 Verify the install half of call site 3.** No bytes have gone onto a device
+through `platform.sh install`. Boot the pinned simulator, build, install,
+confirm with `preflight.sh`. *Done when:* preflight reports the installed build
+as newer than the newest commit, through the new path.
+
+**2.2 React Native on iOS, end to end.** The cheapest second target by a
+distance: `runners/ios` already works, so only `framework.sh` is new. Fill in
+`describe`, `build` and `residue` against a real checkout. **Needs a React
+Native checkout on the Mac — there is none today.** *Files:*
+`runners/react-native/framework.sh`. *Done when:* `bin/build.sh --detect`
+reports an RN project and `--no-install` produces an artefact path.
+
+**Stage 3 — call site 7, the mechanical one.** Largest by line count, smallest
+by thought: one command substituted for another, repeatedly.
+
+**3.1 `lib.sh`** — `_dev` becomes `platform.sh devices --booted`, `_driver_scan`
+becomes `platform.sh driver-scan`. *Done when:* no `xcrun` remains in `lib.sh`.
+
+**3.2 `drivers.sh`** — `_booted`, the rig's boot and shutdown, and `driverup.sh`
+become `devices`, `boot`, `shutdown` and `driver-up`. *Done when:* no `xcrun`
+remains in `drivers.sh`.
+
+**3.3 `shot.sh`** — one line: `platform.sh screenshot`. *Done when:* the same.
+
+**3.4 `wall.py`** — do this last and on its own. It is Python, it parses
+`simctl list -j`, and it spawns the capture binary per device. `capture-cmd`
+covers the spawn; **the listing does not have a verb yet**, because the contract
+returns tab-separated text and `wall.py` wants structure. Add a JSON form, or
+have `wall.py` take the text — decide before starting.
+
+**Stage 4 — answer the six unanswered verbs.** Two are paper decisions and can
+be taken now. Two need hardware this Mac may not have.
+
+**4.1 `android boot` — settle the identifier.** An AVD name and an emulator
+serial are not the same thing and the contract assumes they are. Either add
+`resolve <name> -> <id>` or have `boot` print what it booted. *Paper.*
+
+**4.2 `react-native variants` — settle the second argument.** iOS schemes and
+Android product flavours are two lists where the contract asks for one, which
+makes this the single verb where the two axes are not independent. *Paper.*
+
+**4.3 `android container` — give `appcheck` an Android form.** The
+timestamp-and-plist comparison is the check that caught a wrong-branch build
+twice and it has no Android equivalent. `dumpsys package <id>` gives
+`versionName`, `versionCode` and `lastUpdateTime`. *Needs a device.*
+
+**4.4 The Android driver trio.** Maestro's Android driver is an instrumented
+APK behind `adb forward`, sharing nothing with XCUITest. The question that
+decides the shape: **can its port be chosen per device?** `bin/drivers.sh`
+exists only because Maestro's iOS client hardcodes 22087, so if the Android
+client does the same, several-devices-at-once does not cross. *Needs an Android
+SDK and a booted emulator.*
+
+**Stage 5 — what falls out once a second runner works.**
+
+**5.1 `SKILL.md` stops assuming.** Its description, its `flutter run` section
+and its build section all say Flutter and iOS as facts. It is read at the start
+of every session, so wrong prose there is expensive.
+
+**5.2 `bin/init.sh` writes the runner.** Call `runner.sh detect` and put
+`RUNNER` and `PLATFORM` in the conf it writes, so the next session is not left
+to discover them. Write the `.gitignore` entry for the conf while it is there,
+the way this repo now has one.
+
+**5.3 `flutter-hot-reload-mac`.** The sister package, Flutter by definition, and
+it plugs into this same seam. Out of scope for this item and it will not stay
+out.
+
+**Order.** Stage 1, then 2.1, then 2.2 if there is an RN checkout to use, then
+Stage 3, then Stage 4. Stage 5 follows whenever a second runner actually works.
+
+**Open, and it changes the size of this item.** Is there an Android SDK and an
+emulator on that Mac? If Android is far off, 4.3 and 4.4 drop out and the whole
+thing is two stages shorter.
