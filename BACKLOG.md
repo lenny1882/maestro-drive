@@ -187,15 +187,26 @@ says only that there is more than one of something.
 with exit 1; and the unconfigured-project message is byte-identical to the one
 `git stash` produces, diffed rather than eyeballed.
 
-**1.2 The required-settings check is per mode.** `config.sh:239` demands
-`MAC_HOST`, `MAC_FQDN` and `APP_ID` together. Local mode needs `APP_ID` alone —
-the other two have no answer on this machine. Two messages, not one with a
-conditional clause: the unconfigured-project message at `config.sh:243` is one
-of the more useful things this package prints, and it has to stay that good for
-both shapes rather than degrade into a list with `(unset)` against settings the
-user was never meant to fill. *Files:* `skill/bin/config.sh`. *Done when:* a
-`MODE=local` conf missing `APP_ID` names `APP_ID` and nothing else, and the
-`MODE=ssh` message is byte-identical to today's.
+**1.2 DONE 18 Sep — the required-settings check is per transport.**
+`config.sh` demanded `MAC_HOST`, `MAC_FQDN` and `APP_ID` together. Local mode
+needs `APP_ID` alone; the other two have no answer on this machine. Two
+messages, not one with a conditional clause: the unconfigured-project message is
+one of the more useful things this package prints, and it stays that good for
+both shapes rather than degrading into a list with `(unset)` against settings
+the reader was never meant to fill — and a `--detect` line offering to list ssh
+aliases they do not have.
+
+The searched-paths and detached-process paragraphs are duplicated deliberately,
+not factored out: the conf search is genuinely the same in both, and a shared
+fragment would be one more thing that has to stay true of two messages.
+
+The local message says what `bin/init.sh` cannot do yet and gives the two lines
+that are the whole of a local conf. It stops saying so at 1.4.
+
+*Files:* `skill/bin/config.sh`. *Verified:* `TRANSPORT=local` with no `APP_ID`
+names `APP_ID` and nothing else; with `APP_ID` set it loads and leaves
+`MAC_HOST` empty; the ssh message diffs byte-identical to the captured
+pre-change output; suite 144 passed, 0 failed.
 
 **1.3 The permission warning has nothing to warn about locally.**
 `config.sh:284-353` matches `permissions.allow` against the real `ssh <host>`
