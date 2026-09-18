@@ -126,12 +126,23 @@ _label_default() {  # _label_default <udid> [<live-map>]
   mine=$(_label_by)
   # `-s` fills a blank; the second clause reclaims a dead session's label. Both
   # are evaluated on the Mac in one round trip, so this costs nothing extra.
+  #
+  # The live-driver test below is the exception: its $( ) sits in a
+  # double-quoted string, so THIS shell expands it before anything is sent, and
+  # the awk runs here against the $map read here. Its \$ escapes were written as
+  # though it ran on the Mac, so awk received a literal backslash, died with
+  # "backslash not last character on line", and the substitution came back
+  # empty — making the test always false. A live driver therefore stopped
+  # protecting a peer's label, leaving the age check as the only one of the
+  # three guards still working. Found by the first live rig up after Stage 3,
+  # and invisible to the tests because a recent label is kept by the age check
+  # whether or not this one fires.
   printf 'name=%s\ngroup=%s\nby=%s\n' "$name" "$group" "$mine" |
     _ssh "mkdir -p '$RDIR/labels'
 L='$RDIR/labels/$udid'
 if [ ! -s \"\$L\" ]; then cat > \"\$L\"; exit 0; fi
 if grep -qF 'by=$mine' \"\$L\" 2>/dev/null; then cat >/dev/null; exit 0; fi
-if [ -n '$(printf '%s\n' "$map" | awk -v d="$udid" '\$1==d{print \$2; exit}')' ]; then cat >/dev/null; exit 0; fi
+if [ -n '$(printf '%s\n' "$map" | awk -v d="$udid" '$1==d{print $2; exit}')' ]; then cat >/dev/null; exit 0; fi
 AGE=\$(( \$(date +%s) - \$(stat -f %m \"\$L\" 2>/dev/null || stat -c %Y \"\$L\" 2>/dev/null || date +%s) ))
 if [ \"\$AGE\" -gt $LABEL_STALE_AFTER ]; then cat > \"\$L\"; else cat >/dev/null; fi" \
     >/dev/null 2>&1 || true

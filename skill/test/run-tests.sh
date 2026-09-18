@@ -2915,6 +2915,26 @@ reclaim(){ # reclaim <label-contents> <mine> <live-port-or-empty> <age-secs> -> 
 [ "$(reclaim "by=orange · zzz" "blue · aaa" "22087" 46800)" = KEPT ] \
   && ok "label: a peer with a live driver keeps its name" \
   || no "label: a peer with a live driver keeps its name" "renamed a live peer"
+
+# ...and the same case against the SHIPPED code rather than a model of it.
+#
+# Everything above reimplements the reclaim in shell, which is why it passed
+# throughout a period when the live-driver guard did not work at all. The guard
+# is a $( ) inside a double-quoted _ssh string, so THIS shell expands it and the
+# awk runs locally — but its field references were escaped as \$1 and \$2, as
+# though they ran on the Mac. awk died with "backslash not last character on
+# line", the substitution came back empty, and the test was always false. A
+# recent label is kept by the age check regardless, so nothing showed until a
+# live `rig up` printed the awk error on 18 Sep.
+#
+# Reading the file rather than running it, because the string cannot be
+# extracted from the function without rebuilding the very thing under test.
+if grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" >/dev/null 2>&1; then
+  no "no awk inside a local \$( ) escapes its field references" \
+     "$(grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" | head -1)"
+else
+  ok "no awk inside a local \$( ) escapes its field references"
+fi
 # ... and a peer whose driver Maestro just tore down is still protected by age
 [ "$(reclaim "by=orange · zzz" "blue · aaa" "" 60)" = KEPT ] \
   && ok "label: a recently-named peer survives a torn-down driver" \
