@@ -5222,7 +5222,7 @@ path needs text that is genuinely absent.
 
 ---
 
-## 69. `driver.sh swipe` posts `/swipe`; the driver's live route is `/swipeV2` — **DONE; SHIPPED in v1.0.0; the variable isolated 18 Sep**
+## 69. `driver.sh swipe` posts `/swipe`; the driver's live route is `/swipeV2` — **DONE; SHIPPED in v1.0.0; cause found 18 Sep — `/swipe` does not rotate**
 
 Measured 16 Sep 2026 on the iPad Pro 11-inch (M4)
 `E8F5AC4E-C660-CA9A-F298-B4715B5D1E1E`, iOS 18.6, landscapeLeft, against a
@@ -5364,14 +5364,34 @@ route.
 
 So on this device the two routes are indistinguishable, and the 16 Sep failure —
 iPad Pro 11-inch, **landscapeLeft**, Flutter two-column grid — is explained by
-neither the framework nor a vertical gesture. What is left is the iPad, its
-orientation, or that day's driver build. **Orientation is the candidate worth
-testing first**: rule 3 already says a landscape-locked iPad needs
-`driver.sh orient` before a resolved tap, because the resolver sends app-space
-coordinates and the driver rotates them. If `/swipe` v1 does not apply that
-rotation and `/swipeV2` does, a swipe would land off the view and answer 200 —
-which is exactly what fourteen consecutive inert swipes looked like. Testing it
-costs one iPad boot.
+neither the framework nor a vertical gesture.
+
+**The cause, measured the same afternoon: `/swipe` does not rotate its
+coordinates and `/swipeV2` does.** iPad Pro 11-inch
+`EF266A1C-BB33-483F-BFD7-3B84677E1A5F`, one driver on 22092, **Settings** rather
+than the app, so the framework is out of the picture entirely. The same payload,
+in app-space coordinates, to each route in turn, relaunching to a fresh scroll
+position before every trial:
+
+| device orientation | app frame | `/swipe` | `/swipeV2` |
+| --- | --- | --- | --- |
+| `landscapeLeft` | 1210x834 | **no change, 2 trials** | moved, 2 trials |
+| `portrait` | 834x1210 | moved, 2 trials | moved, 2 trials |
+
+Rotate the device and `/swipe` starts working. That is not a property of the app,
+the gesture or the build — it is the coordinate space. In landscape the tree
+already shows the two spaces disagreeing: the app node is 1210x834 while the
+status bar is 24x1210, which is rule 3's whole subject. `/swipeV2` applies that
+rotation, `/swipe` sends the point through unturned, it lands off the view, and
+the driver answers 200 because the request was well-formed. Fourteen consecutive
+inert swipes on 16 Sep were fourteen taps into nowhere.
+
+Two consequences beyond the fix that already shipped. `reference/driver-api.md`
+should say `swipe` is v1 and unrotated rather than listing `swipeV` as "not
+exercised". And this is a third instance of the pattern rule 3 exists for, after
+the resolver and the raw-tap rule — a landscape iPad is where app space and
+device space part company, and anything that sends a raw coordinate has to know
+which one it is in.
 
 **Shipped.** `skill/bin/driver.sh:385`, `:868` and `:960` post `swipeV2`, and the
 v1.0.0 release tarball carries them. The "NOT YET SHIPPED" in this item's title

@@ -15,9 +15,9 @@ skill change behind them.
 the item that cost those two days — `driver.sh watch`, built on 72's `rows` and
 71's detached-work rules, verified live on an iPhone the same afternoon. **69 is done and
 shipped.** Its route fix is in `skill/bin/driver.sh` and in the v1.0.0 tarball,
-and the isolation its fold asked for was run on 18 Sep: `/swipe` and `/swipeV2`
-are indistinguishable on the iPhone across every cell tried, so neither Flutter
-nor a vertical gesture explains the 16 Sep failure.
+and the isolation its fold asked for was run on 18 Sep, which found the cause:
+`/swipe` does not rotate its coordinates and `/swipeV2` does, so on a landscape
+iPad a v1 swipe lands off the view and is answered 200.
 
 **74 is done and it came back with the opposite of what it claimed.** A device
 budget is not the fix: seven simulators idle with the wall up sit at load 6,
