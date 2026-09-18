@@ -2076,6 +2076,22 @@ if command -v git >/dev/null 2>&1; then
     && no "net.sh leaves the profile format to the module" "it still calls net.py" \
     || ok "net.sh leaves the profile format to the module"
 
+  # Call site 6 (prefs.sh), the only one that needs both modules. WHERE the store
+  # lives is the platform's; WHICH keys are the app's own is the framework's.
+  [ "$(sh "$REPO/runners/flutter/framework.sh" prefs-prefix)" = flutter ] \
+    && ok "flutter's prefs prefix is the shared_preferences one" \
+    || no "flutter's prefs prefix is the shared_preferences one" "got: $(sh "$REPO/runners/flutter/framework.sh" prefs-prefix)"
+  # AsyncStorage keeps its own store rather than the platform's, so there is no
+  # prefix. Empty with exit 0 means "no prefix", and the caller must then show
+  # every key — showing none would be reading the absence as a filter.
+  rnp=$(sh "$REPO/runners/react-native/framework.sh" prefs-prefix); rc=$?
+  { [ "$rc" = 0 ] && [ -z "$rnp" ]; } \
+    && ok "react-native has no prefs prefix, and says so with exit 0" \
+    || no "react-native has no prefs prefix, and says so with exit 0" "rc=$rc: '$rnp'"
+  grep -qE 'plutil|get_app_container|notifyutil' "$REPO/bin/prefs.sh" \
+    && no "prefs.sh names no platform command of its own" "it still runs one" \
+    || ok "prefs.sh names no platform command of its own"
+
   # And the flutter runner's answer is the list gitstate defaults to, so wiring
   # the two together cannot change what this project sees.
   a=$(sh "$REPO/runners/flutter/framework.sh" residue | sort)
