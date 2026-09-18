@@ -30,17 +30,40 @@ Podfile.lock
 .flutter-plugins
 .flutter-plugins-dependencies}"
 
+# RUN THIS FILE WITH sh. DO NOT SOURCE IT INTO THE SHELL ssh GIVES YOU.
+#
+# The Mac's login shell is zsh, and zsh is not a POSIX shell in two ways that
+# both bite exactly here:
+#
+#   `for g in $RESIDUE_GLOBS` does not split — zsh leaves an unquoted expansion
+#     as one word, so the whole list arrived as a single pattern and matched
+#     nothing. Every lock file was then reported as somebody's work, which is
+#     precisely the flat list this check exists to undo.
+#   `case $p in $g)` does not glob — zsh treats an unquoted variable in a case
+#     pattern as a literal string, so `*/Podfile.lock` matched only a file
+#     actually called `*/Podfile.lock`. Fixing the splitting alone left this,
+#     and `pubspec.lock` passed while `ios/Podfile.lock` did not.
+#
+# Both passed every test on Linux, where /bin/sh splits and globs, and only a
+# live preflight showed either. So preflight executes this with `sh --run`
+# rather than sourcing it, and zsh is out of the path. The tests still source it
+# and call the function directly, which is why both entry points exist.
+#
+# This is the third time zsh has cost this file: see the `_p` loop variable
+# below, renamed because zsh ties `path` to PATH.
+#
+# The loop reads lines rather than splitting words anyway, because that is
+# correct in both shells and needs no `set -f` to stop `*/pubspec.lock` being
+# expanded against the current directory before it is ever compared.
 _gs_residue() {
   _gsr=1
-  # Pathname expansion off while the list is split: these are patterns to match
-  # against, and `*/pubspec.lock` sitting unquoted in a `for` would otherwise be
-  # expanded against the current directory before it was ever compared.
-  set -f
-  for _gsg in $RESIDUE_GLOBS; do
+  while IFS= read -r _gsg; do
+    [ -n "$_gsg" ] || continue
     # shellcheck disable=SC2254
     case $1 in $_gsg) _gsr=0; break ;; esac
-  done
-  set +f
+  done <<GLOBS
+$RESIDUE_GLOBS
+GLOBS
   return $_gsr
 }
 
@@ -79,3 +102,10 @@ gitstate() {  # gitstate <repo>
     fi
   }
 }
+
+# Executed rather than sourced: `sh gitstate.sh --run <repo>`. An explicit
+# sentinel, because a sourced file sees the sourcing script's $1 and there is no
+# $BASH_SOURCE in POSIX sh to tell the two apart.
+if [ "${1:-}" = --run ]; then
+  gitstate "${2:-}"
+fi
