@@ -18,10 +18,15 @@ GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
 
 # "Is a dev session live, and what is lost when it is not" is the framework's
 # question, not this script's: React Native looks for Metro, a plain Xcode app
-# has no such thing at all and loses nothing by it. These four are what
-# `runners/<name>/framework.sh devsession` will supply (BACKLOG item 87,
-# runners/README.md call site 2); until that is wired they hold the Flutter
-# answers this script has always printed, and nothing sets them from outside.
+# has no such thing at all and loses nothing by it. Same for which tracked paths
+# a build regenerates — a React Native checkout rewrites yarn.lock, a Gradle one
+# rewrites neither of the files gitstate.sh knows about.
+#
+# The residue list now comes from the framework runner, on the Mac, inside the
+# same SSH call (BACKLOG item 87, runners/README.md call site 1). The dev-session
+# probe is call site 2 and is still defaulted below.
+FW=$("$(dirname "$0")/runner.sh" rpath framework) || exit 1
+
 : "${DEVSESSION_HEADING:=flutter run active?}"
 : "${DEVSESSION_PGREP:=flutter_tools}"
 : "${DEVSESSION_NONE:=none — nothing started the app with flutter run, so there is no VM
@@ -29,9 +34,19 @@ GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
        Driving still works. Ask the user before starting one.}"
 
 _ssh "
+# The framework's residue list, if it has one. Only an exit 0 overrides
+# gitstate.sh's own default: a module that exits 2 has no opinion, and taking
+# its empty output as 'nothing is residue' would quietly reclassify every lock
+# file as somebody's work — which is the flat list this check exists to undo.
+if _RG=\$(RDIR='$RDIR' sh '$FW' residue 2>/dev/null); then
+  RESIDUE_GLOBS=\$_RG; export RESIDUE_GLOBS
+fi
 echo '== branch / working tree =='
 printf '%s' '$GS' | base64 -d > '$RDIR/gitstate.sh' 2>/dev/null
-. '$RDIR/gitstate.sh' && gitstate '$REPO' 
+# Run with sh, do NOT source: this shell is zsh, which neither word-splits an
+# unquoted expansion nor globs an unquoted case pattern, and gitstate.sh needs
+# both to tell a lock file from somebody's work. gitstate.sh says so at length.
+sh '$RDIR/gitstate.sh' --run '$REPO'
 echo; echo '== app installed on $d? =='
 C=\$(xcrun simctl get_app_container '$d' '$APP_ID' 2>/dev/null)
 if [ -n \"\$C\" ]; then echo \"\$C\"

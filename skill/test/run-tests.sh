@@ -1994,6 +1994,49 @@ if command -v git >/dev/null 2>&1; then
     *"checkout --"*"lib.dart"*) no "the discard command covers only the residue" "lib.dart is in it" ;;
     *) ok "the discard command covers only the residue" ;;
   esac
+
+  # Call site 1: the list is the framework's answer, and preflight exports it
+  # into the remote shell before sourcing this. A React-Native-shaped list must
+  # reclassify BOTH ways round — yarn.lock becomes residue and pubspec.lock
+  # becomes somebody's change — or the override is only half working.
+  echo two > "$GR/yarn.lock"; git -C "$GR" add yarn.lock >/dev/null 2>&1
+  git -C "$GR" commit -qm yarn >/dev/null 2>&1; echo three > "$GR/yarn.lock"
+  rngs(){ RESIDUE_GLOBS='yarn.lock
+*/yarn.lock' sh -c '. '"$REPO"'/remote/gitstate.sh; gitstate "$1"' _ "$1" 2>&1; }
+  out=$(rngs "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$out" in
+    *"residue yarn.lock"*) ok "an overridden residue list is the one that is used" ;;
+    *) no "an overridden residue list is the one that is used" "got: $out" ;;
+  esac
+  case "$out" in
+    *"changed"*"pubspec.lock"*) ok "a path the override does not name is a change again" ;;
+    *) no "a path the override does not name is a change again" "got: $out" ;;
+  esac
+
+  # The entry point preflight actually uses. It sourced this file and called the
+  # function until 18 Sep, which put the matching inside zsh — where an unquoted
+  # expansion neither splits nor globs, so `*/Podfile.lock` matched only a file
+  # of that literal name. Nothing here can run zsh, so the test is that the
+  # executable entry point exists and behaves, and that preflight uses it.
+  out=$(sh "$REPO/remote/gitstate.sh" --run "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$out" in
+    *"residue"*"Podfile.lock"*) ok "sh gitstate.sh --run classifies a nested residue path" ;;
+    *) no "sh gitstate.sh --run classifies a nested residue path" "got: $out" ;;
+  esac
+  grep -q "\. '\$RDIR/gitstate.sh'" "$REPO/bin/preflight.sh" \
+    && no "preflight runs gitstate.sh rather than sourcing it into zsh" "it still sources it" \
+    || ok "preflight runs gitstate.sh rather than sourcing it into zsh"
+
+  # And the flutter runner's answer is the list gitstate defaults to, so wiring
+  # the two together cannot change what this project sees.
+  a=$(sh "$REPO/runners/flutter/framework.sh" residue | sort)
+  b=$(sh -c '. '"$REPO"'/remote/gitstate.sh; printf "%s\n" $RESIDUE_GLOBS' | sort)
+  [ "$a" = "$b" ] \
+    && ok "the flutter runner's residue list matches gitstate's default exactly" \
+    || no "the flutter runner's residue list matches gitstate's default exactly" \
+          "runner: $(echo "$a" | tr '\n' ' ') / default: $(echo "$b" | tr '\n' ' ')"
+  case x in x)
+  esac
   case "$out" in
     *"untracked 1 file"*) ok "untracked files are counted and excused" ;;
     *) no "untracked files are counted and excused" "got: $out" ;;
