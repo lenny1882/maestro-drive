@@ -1135,16 +1135,27 @@ a usbmux forwarder, a lock refusal, and `remote/iproxy.py` with it.
 iOS-specific helpers is what a second PLATFORM trips over, so 5.4 wants doing
 before 4.3 and 4.4 rather than after them.
 
-**The flutter module is verified end to end as of 18 Sep, every verb but one.**
-`claim` against sixteen checkouts, `describe`, `variants` and
+**The flutter module is verified end to end as of 18 Sep — EVERY verb has run
+live.** `claim` against sixteen checkouts, `describe`, `variants` and
 `variant-for-appid` against the seven-flavour repo, `build`, `residue`,
-`devsession`, `prefs-prefix`, `inspect` in both failure modes AND in success,
-`traffic-arm` live with both states, `traffic-list` end to end.
+`devsession`, `prefs-prefix`, `inspect` in both failure modes and in success,
+`traffic-arm` with both states, `traffic-list` and `traffic-one`.
 
-`traffic-one` is the one not exercised. It needs a recorded request, and the app
-under test fetches its store list at startup and caches it — tapping through the
-picker made no further call, and a login needs a PIN. It differs from
-`traffic-list` only in the RPC name and net.py's mode, both exercised.
+The last two needed a recorded request, and this app only calls out on login.
+The login needs a PIN, and the PIN is in the `hugoboss-flutter-runner` project's
+own `.maestro-mac.conf` **on this machine** — which is the convention working
+exactly as designed, and which I first looked for on the Mac and under one local
+path and wrongly concluded was absent. Pointing `MAESTRO_MAC_CONF` at that
+project picks up its conf, its `DEV`, its dev flavour and its committed
+journeys, and `00-login-store-set.journey` does the rest.
+
+  traffic-list  GET /v1/users?storeId=1927 -> 200, /v1/chats -> 401, and more
+  traffic-one   headers and body, user-agent: Dart/3.11 (dart:io)
+
+The credential stayed where it belongs throughout: the journey reads
+`${APP_PIN}` from the conf rather than taking it on the command line, so the run
+log shows the variable name and not the value, and `bin/secrets.sh check`
+afterwards reported clean — no project value in any file git would commit.
 
 The live run also found a bug in 1.4 that could never have worked: the module
 addressed net.py as `$RDIR/net.py`, a path on the MAC, for verbs that run in the
