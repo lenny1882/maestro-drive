@@ -208,13 +208,22 @@ names `APP_ID` and nothing else; with `APP_ID` set it loads and leaves
 `MAC_HOST` empty; the ssh message diffs byte-identical to the captured
 pre-change output; suite 144 passed, 0 failed.
 
-**1.3 The permission warning has nothing to warn about locally.**
-`config.sh:284-353` matches `permissions.allow` against the real `ssh <host>`
-and `scp <host>` strings and suggests `Bash(ssh <prefix>*:*)`. With no ssh in
-the path there is nothing to cover, and `_perm_prefix` over an empty `MAC_HOST`
-would suggest `Bash(ssh *:*)` — a wider allow than the remote case asks for,
-produced for a session that needs none. *Files:* `skill/bin/config.sh`. *Done
-when:* a local session prints no permission notice and writes no `perm-warned`
+**1.3 DONE 18 Sep — the permission warning has nothing to warn about
+locally.** The block matches `permissions.allow` against the real `ssh <host>`
+and `scp <host>` strings and suggests `Bash(ssh <prefix>*:*)`. Local transport
+runs neither command, so the block is guarded off.
+
+**The reason it was planned for was wrong, and the measurement is the record.**
+This item expected an empty `MAC_HOST` to produce `Bash(ssh *:*)` — every host
+on the machine, offered to a session that needs none. Removing the guard and
+running local mode prints nothing at all: the command list is built from the
+alias list, and an empty list has nothing uncovered. So the guard is one
+python3 subprocess saved per local session and a statement in the file, not a
+behaviour change. It still earns its place — the day `MAC_HOST` gains a local
+default is the day that derivation stops holding, silently.
+
+*Files:* `skill/bin/config.sh`. *Verified:* ssh mode with two aliases and no
+allows warns and writes `perm-warned`; local mode prints nothing and writes no
 marker.
 
 **1.4 `bin/init.sh` can write a local conf.** `--detect` today lists `~/.ssh`
