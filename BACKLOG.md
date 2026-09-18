@@ -250,17 +250,28 @@ those are different facts and the weaker one has to say so.
 **`--host` with `--local` is refused, not ignored.** A silently dropped flag
 leaves someone believing they configured something they did not.
 
-**`RUNNER` is still the default locally, and says why in the file.**
-`runner.sh detect` reaches the checkout through `_ssh`, which has no local
-branch until 2.1.
+**`RUNNER` is detected locally too, and 2.1 is not needed for it.** The first
+cut of this unit guarded `runner.sh detect` off locally on the grounds that it
+reaches the checkout through `_ssh`. Wrong: `claim` is the one framework verb
+that needs no Mac. Every implementation is a filesystem test on the checkout —
+`flutter` reads `pubspec.yaml` for a `flutter:` dependency, `react-native`
+reads `package.json`'s `dependencies` — and it goes through `_ssh` only because
+in ssh transport the checkout is on the Mac. `runner.sh detect` now runs the
+module out of `$RUNNERS` when `TRANSPORT=local`, and `runners/README.md` already
+said so: *Runs ON THE MAC, except `claim`*.
+
+Caught by the question a local React Native project asks: why would it default
+to flutter? It no longer does.
 
 *Files:* `skill/bin/init.sh`, `skill/bin/config.sh` (the 1.2 message now names
 `--local`). *Verified:* `--local --detect` on this machine reports `android`
 from four defined AVDs with none booted; the written conf loads through
 `config.sh` with `MAC_HOST` empty; `--platform ios` overrides and records that
-it was given; `--local --host` and a missing `--app` both exit 2 by name; the
-ssh path's conf diffs byte-identical against the pre-change script; suite 144
-passed, 0 failed.
+it was given; `--local --host` and a missing `--app` both exit 2 by name; a
+local checkout with a react-native dependency writes `RUNNER=react-native` and
+one with a flutter dependency writes `flutter`, both marked detected, while a
+checkout neither claims writes the default and says so; the ssh path's conf
+diffs byte-identical against the pre-change script; suite 144 passed, 0 failed.
 
 **Stage 2 — `_ssh` runs the script instead of sending it.** The 84 call sites do
 not change in any unit of this stage. That is the whole bet; if a call site has

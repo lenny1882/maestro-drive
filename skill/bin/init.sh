@@ -295,8 +295,9 @@ VALS
   # PLATFORM is written as ios and not detected: nothing has been booted at this
   # point in a first-time setup, so there is no device to ask about.
   _rn=
-  if [ -n "$REPO" ] && [ "$LOCAL" != 1 ]; then
+  if [ -n "$REPO" ]; then
     _rn=$(MAESTRO_MAC_CONF="$OUT" MAC_HOST="$HOST" MAC_FQDN="$FQDN" APP_ID="$APP" REPO="$REPO" \
+          TRANSPORT="$([ "$LOCAL" = 1 ] && echo local || echo ssh)" \
           "$(dirname "$0")/runner.sh" detect 2>/dev/null |
           sed -n 's/^RUNNER=\([a-z-][a-z-]*\).*/\1/p')
   fi
@@ -305,14 +306,11 @@ VALS
     printf '# whatever built it; these two decide the rest. runners/README.md is the\n'
     printf '# contract, and bin/runner.sh which says what else is available.\n'
     if [ -n "$_rn" ]; then
-      printf ': "${RUNNER:=%s}"     # detected from the checkout on the Mac\n' "$_rn"
-    elif [ "$LOCAL" = 1 ]; then
-      # runner.sh detect reaches the checkout through _ssh, which has no local
-      # branch yet (item 94, Stage 2.1). Until it does, this is the default and
-      # says so rather than presenting itself as a finding.
-      printf '# Not detected: asking the checkout needs the local transport that item 94\n'
-      printf '# Stage 2.1 adds. This is the default. bin/runner.sh detect asks again.\n'
-      printf ': "${RUNNER:=flutter}"\n'
+      if [ "$LOCAL" = 1 ]; then
+        printf ': "${RUNNER:=%s}"     # detected from the checkout on this machine\n' "$_rn"
+      else
+        printf ': "${RUNNER:=%s}"     # detected from the checkout on the Mac\n' "$_rn"
+      fi
     else
       printf '# No framework module claimed the checkout, or REPO was not given, so this\n'
       printf '# is the default rather than a finding. bin/runner.sh detect asks again.\n'
