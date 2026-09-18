@@ -165,16 +165,16 @@ traffic-arm)
 
 traffic-list)
   _base=${1:?traffic-list <base> <session>}; _iso=${2:?session}
-  _out=${LDIR:-${RDIR:-${TMPDIR:-/tmp}}}/runner-net.json
+  _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net.json
   _curl "$_base/ext.dart.io.getHttpProfile?isolateId=$_iso" > "$_out" || exit 1
-  python3 "$RDIR/net.py" list "$_out"
+  python3 "$HERE/net.py" list "$_out"
   ;;
 
 traffic-one)
   _base=${1:?traffic-one <base> <session> <id>}; _iso=${2:?session}; _id=${3:?id}
-  _out=${LDIR:-${RDIR:-${TMPDIR:-/tmp}}}/runner-net1.json
+  _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net1.json
   _curl "$_base/ext.dart.io.getHttpProfileRequest?isolateId=$_iso&id=$_id" > "$_out" || exit 1
-  python3 "$RDIR/net.py" one "$_out"
+  python3 "$HERE/net.py" one "$_out"
   ;;
 
 prefs-prefix)

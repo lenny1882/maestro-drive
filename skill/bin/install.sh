@@ -6,9 +6,11 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")/../remote" && pwd)"
 
 _ssh "mkdir -p '$RDIR' '$RDIR/flows'"
-# vmservice.sh left this list on 18 Sep: it is the flutter framework runner's
-# own file now and goes with the modules below (BACKLOG item 87, 5.4).
-for f in hier.py net.py relay.py; do
+# vmservice.sh and net.py left this list on 18 Sep: both are the flutter
+# framework runner's own files now and go with the modules below (item 87, 5.4).
+# hier.py and relay.py stay — a Maestro hierarchy and a port forwarder are the
+# same whatever built the app.
+for f in hier.py relay.py; do
   ssh "${SSH_OPTS[@]}" "$MAC_HOST" "cat > '$RDIR/$f'" < "$HERE/$f" || exit 1
 done
 
