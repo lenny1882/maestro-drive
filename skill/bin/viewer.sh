@@ -42,7 +42,7 @@ case "${1:-start}" in
   list)
     ports=$(_viewer_ports)
     if [ -z "$ports" ]; then
-      echo "no Maestro viewer is running on $MAC_HOST"
+      echo "no Maestro viewer is running on $(_where)"
       echo "  one starts with every 'maestro mcp' — reconnect the MCP server, or run"
       echo "  maestro mcp --viewer-port=<port> yourself"
       exit 1
@@ -59,7 +59,7 @@ case "${1:-start}" in
   start)
     ports=$(_viewer_ports)
     if [ -z "$ports" ]; then
-      echo "no Maestro viewer is running on $MAC_HOST, so there is nothing to republish." >&2
+      echo "no Maestro viewer is running on $(_where), so there is nothing to republish." >&2
       echo "  A viewer starts with every 'maestro mcp'. Reconnect the MCP server," >&2
       echo "  or start one yourself:  maestro mcp --viewer-port=<port>" >&2
       echo "  Do NOT run 'maestro studio' — it starts its own XCUITest driver and" >&2

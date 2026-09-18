@@ -201,6 +201,22 @@ $1"
   return "$rc"
 }
 
+# Where the device is, for a message to name (item 94, 3.5).
+#
+# Thirteen messages across nine files said "on $MAC_HOST". In local transport
+# there is no alias, so every one of them read "on " followed by nothing —
+# `no booted device on  (platform: android)`, which names the platform
+# correctly and then trails off where the answer should be.
+#
+# A function rather than a variable set once, because _pick_host narrows
+# MAC_HOST from a list to the alias that answered, and a message printed after
+# that should name the one alias rather than all of them.
+_where() {
+  if [ "${TRANSPORT:-ssh}" = local ]; then printf 'this machine'
+  else printf '%s' "$MAC_HOST"
+  fi
+}
+
 # _push <file>... <destination>   — move files TO the machine holding the device.
 #
 # The destination is a path on that machine, with no host prefix: _push adds the
@@ -299,7 +315,7 @@ _dev() {
       echo "  pin one with DEV=<udid> in .maestro-mac.conf" >&2
     fi
   fi
-  [ -n "$DEV" ] || { echo "no booted device on $MAC_HOST (platform: ${PLATFORM:-ios})" >&2; return 1; }
+  [ -n "$DEV" ] || { echo "no booted device on $(_where) (platform: ${PLATFORM:-ios})" >&2; return 1; }
   printf '%s' "$DEV"
 }
 
@@ -458,7 +474,7 @@ _driver_bind() {
       local n; n=$(printf '%s\n' "$map" | grep -c .)
       if [ "$n" -eq 0 ]; then
         [ "${1:-}" = --fresh ] || { _driver_bind --fresh; return $?; }
-        echo "no driver is running on $MAC_HOST. Bring one up:  bin/drivers.sh up" >&2
+        echo "no driver is running on $(_where). Bring one up:  bin/drivers.sh up" >&2
         return 1
       elif [ "$n" -gt 1 ]; then
         # Driving the wrong simulator looks exactly like the app misbehaving,
