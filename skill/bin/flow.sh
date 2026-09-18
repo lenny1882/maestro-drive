@@ -92,8 +92,16 @@ _rc=\$?
 grep -vE '^\s*\$|Maestro Cloud|maestro cloud|Debug tests faster|^[│╭╰]' '$RDIR/flow.out' | tail -15
 $POST
 exit \$_rc"
+# The flow's status, caught the moment it arrives. Everything below runs
+# whatever it was — a screenshot of a flow that failed is the evidence — so
+# without this the script would end on the `if` and exit 0 for a failed flow,
+# which is the bug the remote `exit $_rc` above was meant to fix and did not.
+# Measured 18 Sep: a flow asserting text that is on no screen returned 0.
+rc=$?
 
 if [ -n "$SHOT" ]; then
   ssh "${SSH_OPTS[@]}" "$MAC_HOST" "base64 < '$RDIR/$SHOT.png'" | base64 -d > "$LDIR/$SHOT.png"
   echo "local: $LDIR/$SHOT.png"
 fi
+
+exit "$rc"
