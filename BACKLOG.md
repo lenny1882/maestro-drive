@@ -65,8 +65,8 @@ cards — and 64, 65 and 66 were done on 15 Sep. All four are in
 
 **85 is done, on 18 Sep.** It was the first item about setting the skill up
 rather than running it, and exercising it cost an afternoon and found eight
-faults — seven in the wizard, one of them a wrong conclusion drawn in its own
-comments. Nearly every one showed as the same sentence, a connection closed
+faults — eight in the wizard, one of them a wrong conclusion drawn in its own
+comments, and one found only by asking what a fresh Mac would do. Nearly every one showed as the same sentence, a connection closed
 during the banner exchange, which named none of them. Phases A, B and C have
 now run live end to end against the real Mac, including the `sudo` install and
 the Wi-Fi cycle, and the `--remove` round trip ran on the real three files.
@@ -83,7 +83,7 @@ file.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **DONE 18 Sep 2026; A, B and C all run live end to end, and the eight faults that took**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **DONE 18 Sep 2026; A, B and C all run live end to end, and the nine faults that took**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -658,6 +658,20 @@ carrying on rather than cycling Wi-Fi over a half-installed daemon. `-tt` and
 deliberately not `-n`, exempted from item 84's rule the way `ssh-copy-id` is, and
 a case caps the exemption at exactly one call.
 
+**A ninth, found by asking what a fresh Mac would do rather than by it
+failing.** `install` does not create parent directories, and `/usr/local/bin`
+does not exist on a Mac that has never had Homebrew or anything else put
+something there — so on a genuinely fresh machine the script install would fail
+with `No such file or directory`, which is the one machine phase C has never
+run against. `/Library/LaunchDaemons` always exists, so the plist needs no such
+step. The directory step is guarded rather than unconditional: measured on the
+Mac, BSD `install -d` on a directory that already exists returns 0 and rewrites
+its mode anyway — 700 came back 755 — so with `-o root -g wheel` it would rewrite
+the owner too, and on an Intel Mac Homebrew owns `/usr/local/bin` as the user.
+`[ -d ] ||` makes it a no-op on every machine that has run this before. Verified
+both ways on the Mac: an existing 700 directory comes back 700, a missing one is
+created 755.
+
 **The install and the cycle then ran end to end.** `network-change.sh.bak`
 records the file the install replaced, the new script is on the Mac and parses,
 the plist was reinstalled and bootstrapped, and `/tmp/netchange.log` shows the
@@ -672,7 +686,7 @@ names.
 all three, and the add put it back; `--list` now reports all three networks in
 all three files.
 
-**Coverage: 143 package cases, up from 37 when this started.** Seven are the
+**Coverage: 144 package cases, up from 37 when this started.** Seven are the
 fresh-machine path, which had none. The rest of today's are the diagnosis and
 the way back: each arm checked for the action it should name and the ones it
 should not, the retry, the editor, the list, and the count of questions the
