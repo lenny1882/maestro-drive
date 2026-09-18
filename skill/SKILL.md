@@ -156,6 +156,7 @@ front of you before the first tap.
 $SKILL/bin/drivers.sh rig up <udid> <udid>   # or RIG_DEVICES in the conf
 $SKILL/bin/drivers.sh rig status             # what is up, whose it is, on what port
 $SKILL/bin/drivers.sh rig down               # only what THIS session booted
+$SKILL/bin/drivers.sh rig reap               # booted, unclaimed, idle since a previous day
 ```
 
 `rig up` boots, waits each boot out, then starts a driver per device and names
@@ -165,6 +166,15 @@ driver begun during a boot storm is the one that dies.
 
 It does **not** build or install: `build.sh` must not run unprompted, and a rig
 that silently replaced the build under test would be worse than no rig.
+
+**`rig reap` is the other half, and it is the one for somebody else's leftovers.**
+`rig down` can only ever take what this session booted, so a simulator whose
+session has gone stays booted for ever — seven were found on 18 Sep 2026 against
+a claim ledger empty since the previous afternoon. `reap` applies the label
+reclaim's three tests to the boot instead of the name: nobody claims it, no
+driver is live on it, and nothing has written to it since a previous calendar
+day. It **lists and stops**; `rig reap --shutdown` is the second command that
+acts. A device used today is never listed, whoever booted it.
 
 `rig down` takes down only the simulators this session **booted**, recorded per
 session on the Mac. A device that was already up when the rig found it belongs

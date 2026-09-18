@@ -283,6 +283,104 @@ xcrun simctl shutdown '$d' 2>/dev/null; true" >/dev/null 2>&1 || true
   echo "rig down: $n device(s) this session booted. Nothing else was touched."
 }
 
+# --- reaping a boot nobody claims -------------------------------------------
+# Labels have a reclaim path and boots do not (item 88). `rig down` takes only
+# what THIS session booted, deliberately — a teardown that takes a peer's
+# simulator mid-run is worse than one that leaves something behind — so a
+# simulator whose session has gone stays booted for ever. Measured 18 Sep 2026:
+# seven booted, a claim ledger empty since the previous afternoon, and five of
+# them last written to two days earlier.
+#
+# The three tests are the label reclaim's, applied to the boot instead of the
+# name: nobody claims it, no driver is live on it, and nothing has written to it
+# since a previous calendar day. Calendar day rather than a count of hours
+# because that is the rule the wall already uses for a name, and for the reason
+# item 67's piece 4 chose it: a device driven at 23:00 is yesterday's work by
+# breakfast, though it is only ten hours old.
+#
+# It shuts nothing down unless asked. Listing is safe; acting is a judgement,
+# and item 74's lesson was a session that killed four working simulators to
+# recover from a boot storm it had misread.
+_rig_reap() {  # _rig_reap [--shutdown]
+  local act=0
+  [ "${1:-}" = "--shutdown" ] && act=1
+
+  local booted map claimed rows verdicts orphans n
+  booted=$(_booted)
+  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  map=$(_driver_map --fresh)
+  claimed=$(_ssh "cat '$RIG_OWNED'/* 2>/dev/null" 2>/dev/null)
+
+  # One round trip for every device's newest app-data write. An app container is
+  # the only thing on a simulator that records USE: the device directory's own
+  # mtime moves when it boots, so it says when it STARTED, not when anybody last
+  # did anything with it.
+  #
+  # Two levels deep, not one. A container directory's mtime only moves when its
+  # immediate contents change, so the container itself reported 16 Sep for a
+  # device driven all day on the 18th; Documents/ and Library/ inside it gave
+  # 18 Sep 12:56, which is exactly what a recursive find over the whole
+  # container returned, for the cost of a glob.
+  rows=$(_ssh 'today=$(date +%Y%m%d)
+for u in $(xcrun simctl list devices booted | sed -n "s/.*(\([0-9A-Fa-f-]\{36\}\)).*/\1/p"); do
+  d="$HOME/Library/Developer/CoreSimulator/Devices/$u/data/Containers/Data/Application"
+  l=$(ls -td "$d"/*/*/ 2>/dev/null | head -1)
+  [ -n "$l" ] || l=$(ls -td "$d"/*/ 2>/dev/null | head -1)
+  if [ -n "$l" ]; then
+    e=$(stat -f %m "$l" 2>/dev/null)
+    echo "$u|$(date -r "$e" +%Y%m%d 2>/dev/null)|$(date -r "$e" "+%Y-%m-%d %H:%M" 2>/dev/null)|$today"
+  else
+    echo "$u|none|never|$today"
+  fi
+done' 2>/dev/null)
+
+  # One pass, into a variable: a `while read` fed by a pipe runs in a subshell,
+  # so anything it decides is lost at the done.
+  verdicts=$(printf '%s\n' "$booted" | while read -r u name; do
+    [ -n "$u" ] || continue
+    local drv day today last why=""
+    drv=$(printf '%s\n' "$map"  | awk -v d="$u" '$1==d{print $2; exit}')
+    day=$(printf '%s\n' "$rows" | awk -F'|' -v d="$u" '$1==d{print $2; exit}')
+    last=$(printf '%s\n' "$rows" | awk -F'|' -v d="$u" '$1==d{print $3; exit}')
+    today=$(printf '%s\n' "$rows" | awk -F'|' -v d="$u" '$1==d{print $4; exit}')
+    if printf '%s\n' "$claimed" | grep -qx "$u"; then why="a session claims it"
+    elif [ -n "$drv" ];            then why="a driver is live on $drv"
+    elif [ "$day" = "$today" ];    then why="used today"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$u" "${drv:--}" "${last:-?}" "${why:-ORPHAN}" "$name"
+  done)
+
+  printf '%-38s %-7s %-17s %s\n' UDID DRIVER "LAST USED" VERDICT
+  printf '%s\n' "$verdicts" | while IFS=$'\t' read -r u drv last why name; do
+    [ -n "$u" ] || continue
+    case "$why" in
+      ORPHAN) printf '%-38s %-7s %-17s ORPHAN  (%s)\n' "$u" "$drv" "$last" "$name" ;;
+      *)      printf '%-38s %-7s %-17s keep — %s\n'    "$u" "$drv" "$last" "$why" ;;
+    esac
+  done
+
+  orphans=$(printf '%s\n' "$verdicts" | awk -F'\t' '$4=="ORPHAN"{print $1}')
+  echo
+  if [ -z "$orphans" ]; then
+    echo "rig reap: nothing to reap — every booted simulator fails at least one test."
+    return 0
+  fi
+  n=$(printf '%s\n' "$orphans" | grep -c .)
+  if [ "$act" = 0 ]; then
+    echo "rig reap: $n orphan(s). Nothing has been shut down."
+    echo "  To take them down:  $0 rig reap --shutdown"
+    echo "  A device used TODAY is never listed, whoever booted it."
+    return 0
+  fi
+  local u
+  for u in $orphans; do
+    echo "$u  shutting down"
+    _ssh "rm -f '$RDIR/labels/$u'; xcrun simctl shutdown '$u' 2>/dev/null; true" >/dev/null 2>&1 || true
+  done
+  _driver_scan >/dev/null
+  echo "rig reap: $n shut down, labels cleared. Claimed and same-day devices untouched."
+}
+
 _up_one() {  # _up_one <udid> <live-map> <ports-map>
   local udid=$1 map=$2 pmap=${3:-} port
   port=$(printf '%s\n' "$map" | awk -v d="$udid" '$1==d{print $2; exit}')
@@ -363,8 +461,9 @@ case "${1:-list}" in
     case "${2:-status}" in
       up)     shift 2; _rig_up "$@" ;;
       down)   _rig_down ;;
+      reap)   shift 2; _rig_reap "$@" ;;
       status) _rig_status ;;
-      *) echo "usage: $0 rig [up [<udid>...]|down|status]" >&2; exit 2 ;;
+      *) echo "usage: $0 rig [up [<udid>...]|down|reap [--shutdown]|status]" >&2; exit 2 ;;
     esac ;;
   ports)
     case "${2:-list}" in

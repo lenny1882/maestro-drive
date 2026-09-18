@@ -2539,6 +2539,75 @@ grep -q '^kill$' "$JD/maestro/journeys/x.journey" \
   && ok "journey: a bare name resolves in JOURNEY_DIR" \
   || no "journey: a bare name resolves in JOURNEY_DIR" "not resolved"
 
+echo "rig reap: a boot nobody claims, and only that (item 88)"
+# The decision is local, so call the function with the three things it asks the
+# Mac for stubbed: who claims what, which drivers are live, and when each device
+# was last written to.
+reap() { # reap <claimed-udids> <driver-map> <rows> [--shutdown] -> the verdict lines
+  # T_ prefixes, because _rig_reap declares `local claimed`, `local map` and
+  # `local rows` of its own — and bash scopes dynamically, so a stub reading
+  # $claimed from inside the call sees the function's EMPTY local, not this one.
+  local T_CLAIMED="$1" dmap="$2" rws="$3"; shift 3
+  ( eval "$(sed -n '/^_rig_reap() {/,/^}/p' "$REPO/bin/drivers.sh")"
+    MAC_HOST=x; RIG_OWNED=/x; RDIR=/x
+    _booted()      { printf 'AAAA\tiPhone A\nBBBB\tiPhone B\n'; }
+    _driver_map()  { printf '%s' "$dmap"; }
+    _driver_scan() { :; }
+    # The claimed list arrives as `cat '/x'/* ...` and the rows as a script
+    # containing simctl; matching on the quoted path does not work through the
+    # quotes, so discriminate on the command instead.
+    _ssh() { case "$*" in *simctl*) printf '%s' "$rws" ;;
+                          cat*)     printf '%s' "$T_CLAIMED" ;;
+                          *)        : ;; esac; }
+    _rig_reap "$@" ) 2>&1
+}
+TDY=$(date +%Y%m%d)
+ROWS_OLD="AAAA|20260916|2026-09-16 14:37|$TDY
+BBBB|20260916|2026-09-16 15:02|$TDY"
+ROWS_TODAY="AAAA|$TDY|today 09:00|$TDY
+BBBB|20260916|2026-09-16 15:02|$TDY"
+
+# Nobody claims them, no driver, last written on an earlier day: both orphans.
+out=$(reap "" "" "$ROWS_OLD")
+[ "$(printf '%s' "$out" | grep -c ORPHAN)" = 2 ] \
+  && ok "reap: an unclaimed, driverless, stale boot is an orphan" \
+  || no "reap: an unclaimed, driverless, stale boot is an orphan" "$(printf '%s' "$out" | tr '\n' '/')"
+
+printf '%s' "$out" | grep -q "Nothing has been shut down" \
+  && ok "reap: listing alone shuts nothing down" \
+  || no "reap: listing alone shuts nothing down" "it did not say so"
+
+# Each of the three tests on its own has to be enough to keep a device.
+out=$(reap "AAAA" "" "$ROWS_OLD")
+printf '%s' "$out" | grep -q "AAAA.*keep — a session claims it" \
+  && ok "reap: a device its session still claims is kept" \
+  || no "reap: a device its session still claims is kept" "$(printf '%s' "$out" | grep AAAA)"
+
+out=$(reap "" "AAAA 22087" "$ROWS_OLD")
+printf '%s' "$out" | grep -q "AAAA.*keep — a driver is live on 22087" \
+  && ok "reap: a device with a live driver is kept" \
+  || no "reap: a device with a live driver is kept" "$(printf '%s' "$out" | grep AAAA)"
+
+out=$(reap "" "" "$ROWS_TODAY")
+printf '%s' "$out" | grep -q "AAAA.*keep — used today" \
+  && ok "reap: a device used today is kept, whoever booted it" \
+  || no "reap: a device used today is kept, whoever booted it" "$(printf '%s' "$out" | grep AAAA)"
+
+# Calendar day, not an hour count: yesterday at 23:00 is yesterday's work.
+out=$(reap "" "" "AAAA|$(date -d yesterday +%Y%m%d 2>/dev/null || date -v-1d +%Y%m%d)|yesterday 23:00|$TDY
+BBBB|$TDY|today|$TDY")
+printf '%s' "$out" | grep -q "AAAA.*ORPHAN" \
+  && ok "reap: the rule is the calendar day, not a count of hours" \
+  || no "reap: the rule is the calendar day, not a count of hours" "$(printf '%s' "$out" | grep AAAA)"
+
+# Nothing to do must say so rather than printing an empty list.
+# One udid per line, as `cat $RIG_OWNED/*` yields them — grep -qx is strict
+# about that on purpose, so a space-separated list matches nothing.
+out=$(reap "$(printf 'AAAA\nBBBB\n')" "" "$ROWS_OLD")
+printf '%s' "$out" | grep -q "nothing to reap" \
+  && ok "reap: nothing to reap says so" \
+  || no "reap: nothing to reap says so" "$(printf '%s' "$out" | tail -2 | tr '\n' '/')"
+
 echo "a dead session's wall label is reclaimed, a live one is not (item 67)"
 # The decision is made by the remote shell, so test the shell script it sends
 # rather than mocking ssh: same conditions, same order.
