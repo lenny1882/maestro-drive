@@ -126,6 +126,33 @@ driver-scan)
   exit 0
   ;;
 
+installed-info)
+  # A phone gives version and build and NOTHING ELSE — devicectl's app record
+  # carries bundleIdentifier, version, bundleVersion and a containerAccessible
+  # flag, and no timestamp of any kind. Measured 18 Sep 2026.
+  #
+  # So `epoch` and `container` are simply absent here, and appcheck falls back
+  # to comparing the installed version+build against what the checkout would
+  # produce. That is a different claim from the timestamp one and a weaker one,
+  # and appcheck says which it made.
+  _id=${1:?installed-info <id> <app-id>}; _appid=${2:?app-id}
+  xcrun devicectl device info apps --device "$_id" --json-output /dev/stdout 2>/dev/null |
+    APPID="$_appid" python3 -c '
+import json, os, sys
+want = os.environ["APPID"]
+try:
+    apps = json.load(sys.stdin)["result"]["apps"]
+except Exception:
+    sys.exit(1)
+for a in apps:
+    if a.get("bundleIdentifier") == want:
+        if a.get("version"):       print("version=%s" % a["version"])
+        if a.get("bundleVersion"): print("build=%s" % a["bundleVersion"])
+        sys.exit(0)
+sys.exit(1)
+'
+  ;;
+
 container|data-container|prefs-read|prefs-flush|orientations|last-used)
   # UNANSWERED, and the same hole runners/android has. All of these assume a
   # readable app container, and a phone does not give you one: the app's bundle

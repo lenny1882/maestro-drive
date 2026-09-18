@@ -41,14 +41,21 @@ printf '%s' '$GS' | base64 -d > '$RDIR/gitstate.sh' 2>/dev/null
 # both to tell a lock file from somebody's work. gitstate.sh says so at length.
 sh '$RDIR/gitstate.sh' --run '$REPO'
 echo; echo '== app installed on $d? =='
-C=\$(sh '$PLATFORM_SH' container '$d' '$APP_ID' 2>/dev/null)
-if [ -n \"\$C\" ]; then echo \"\$C\"
-else sh '$PLATFORM_SH' container '$d' '$APP_ID' 2>&1 | tail -1
+# What the platform can say about the installed app, and only what it CAN say.
+# A simulator answers all four keys; a phone answers version and build and has
+# neither a timestamp nor a readable bundle (item 87, F40).
+sh '$PLATFORM_SH' installed-info '$d' '$APP_ID' > '$RDIR/appinfo' 2>/dev/null
+C=\$(sed -n 's/^container=//p' '$RDIR/appinfo' | tail -1)
+if [ -s '$RDIR/appinfo' ]; then sed 's/^/  /' '$RDIR/appinfo'
+else echo '  not installed, or the platform cannot see it'
 fi
 echo; echo '== is that the code under test? =='
 printf '%s' '$AC' | base64 -d > '$RDIR/appcheck.sh' 2>/dev/null
 # Run with sh, do NOT source — same reason as gitstate.sh above.
-sh '$RDIR/appcheck.sh' --run \"\$C\" '$REPO' '${BUILD_MARKER:-}'
+# The fourth argument is what a build from this checkout WOULD produce, which is
+# the only thing a device can be compared against.
+BV=\$(RDIR='$RDIR' sh '$FW' version '$REPO' 2>/dev/null) || BV=
+sh '$RDIR/appcheck.sh' --run '$RDIR/appinfo' '$REPO' '${BUILD_MARKER:-}' \"\$BV\"
 echo; echo '== supported orientations =='
 if [ -n \"\$C\" ]; then
   sh '$PLATFORM_SH' orientations \"\$C\" 2>&1

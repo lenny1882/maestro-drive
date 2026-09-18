@@ -653,6 +653,28 @@ cat > "$APP/Info.plist" <<'PLIST'
 PLIST
 echo 'a binary, with a marker: PROJ-1783-widget-key' > "$APP/Fake"
 
+# appcheck takes `platform.sh installed-info` output, not a path — so that a
+# platform which cannot give a path (a phone gives version and build and nothing
+# else) still gets an answer. This writes what runners/ios would, from the fake
+# bundle above, and the tests below go on testing appcheck's REASONING, which is
+# what they are for. The modules' extraction is verified against real devices.
+mkinfo() {  # mkinfo <bundle> [epoch] -> path to an info file
+  _f=$TMP/appinfo.$$; : > "$_f"
+  [ -n "${1:-}" ] || { printf '%s' "$_f"; return; }
+  echo "container=$1" >> "$_f"
+  _e=${2:-$(stat -c %Y "$1/Fake" 2>/dev/null || stat -f %m "$1/Fake" 2>/dev/null)}
+  [ -n "$_e" ] && echo "epoch=$_e" >> "$_f"
+  echo "version=1.0.0-dev" >> "$_f"
+  echo "build=26" >> "$_f"
+  printf '%s' "$_f"
+}
+# A phone's answer: version and build, no epoch and no container.
+mkinfo_device() {  # mkinfo_device <version> <build>
+  _f=$TMP/appinfo-dev.$$
+  printf 'version=%s\nbuild=%s\n' "${1:?}" "${2:?}" > "$_f"
+  printf '%s' "$_f"
+}
+
 GIT="$TMP/checkout"; mkdir -p "$GIT"
 (cd "$GIT" && git init -q . \
   && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first \
@@ -660,15 +682,15 @@ GIT="$TMP/checkout"; mkdir -p "$GIT"
 git -C "$GIT" log -1 --format=%ct >/dev/null 2>&1 || echo "  note: no usable git, the two comparison cases will be skipped"
 HEAD_AT=$(git -C "$GIT" log -1 --format=%ct 2>/dev/null)
 
-got=$(appcheck "" "$GIT" 2>&1)
+got=$(appcheck "$(mkinfo "")" "$GIT" 2>&1)
 case "$got" in *"not installed"*) ok "an app that is not installed says so" ;;
   *) no "an app that is not installed says so" "got '$got'" ;; esac
 
-got=$(appcheck "$APP" "" 2>&1)
+got=$(appcheck "$(mkinfo "$APP")" "" 2>&1)
 case "$got" in *"no checkout on the Mac"*) ok "no REPO says what is missing, not nothing" ;;
   *) no "no REPO says what is missing, not nothing" "got '$got'" ;; esac
 
-case "$(appcheck "$APP" "" 2>&1)" in
+case "$(appcheck "$(mkinfo "$APP")" "" 2>&1)" in
   *"1.0.0-dev build 26"*) ok "the installed version and build number are read from the bundle" ;;
   *) no "the installed version and build number are read from the bundle" "not in the output" ;;
 esac
@@ -678,14 +700,14 @@ if [ -n "$HEAD_AT" ]; then
   # that bit sessions A and B, both of which found the simulator running a
   # build from another branch.
   touch -d "@$((HEAD_AT - 172800))" "$APP/Fake" 2>/dev/null
-  got=$(appcheck "$APP" "$GIT" 2>&1)
+  got=$(appcheck "$(mkinfo "$APP")" "$GIT" 2>&1)
   case "$got" in *STALE*"2 days"*) ok "a build older than HEAD is called stale, with the gap" ;;
     *) no "a build older than HEAD is called stale, with the gap" "got '$got'" ;; esac
 
   # And the reverse must not overclaim: newer than HEAD is not proof of which
   # branch it came from, because a checkout can move after a build.
   touch -d "@$((HEAD_AT + 3600))" "$APP/Fake" 2>/dev/null
-  got=$(appcheck "$APP" "$GIT" 2>&1)
+  got=$(appcheck "$(mkinfo "$APP")" "$GIT" 2>&1)
   case "$got" in
     *STALE*) no "a build newer than HEAD is not called stale" "it was" ;;
     *"does not prove"*) ok "a newer build is reported without claiming the branch" ;;
@@ -693,11 +715,52 @@ if [ -n "$HEAD_AT" ]; then
   esac
 fi
 
-got=$(appcheck "$APP" "" "PROJ-1783-widget-key" 2>&1)
+got=$(appcheck "$(mkinfo "$APP")" "" "PROJ-1783-widget-key" 2>&1)
 case "$got" in *"marker: found"*) ok "a marker that is in the bundle is found" ;;
   *) no "a marker that is in the bundle is found" "got '$got'" ;; esac
 
-got=$(appcheck "$APP" "" "not-in-this-build" 2>&1)
+# A PHONE'S ANSWER: version and build, no install time and no bundle. This is
+# the case that had no answer at all before — appcheck needed a path, so "is the
+# app on this device the code under test" could not be asked of a device.
+got=$(appcheck "$(mkinfo_device 3.0.4-uat 43)" "$GIT" "" "3.0.4+43" 2>&1)
+case "$got" in
+  *"no install time"*"version ok"*) ok "a device with no install time is checked on its version instead" ;;
+  *) no "a device with no install time is checked on its version instead" "got: $got" ;;
+esac
+case "$got" in
+  *"flavour decorating the version"*) ok "a flavour suffix is named, not treated as a mismatch" ;;
+  *) no "a flavour suffix is named, not treated as a mismatch" "got: $got" ;;
+esac
+# The whole point: a build that is NOT this code is caught by the version even
+# when nothing can be read from the device but a version.
+got=$(appcheck "$(mkinfo_device 3.0.3-uat 41)" "$GIT" "" "3.0.4+43" 2>&1)
+case "$got" in
+  *"VERSION MISMATCH"*"not this code"*) ok "a device running an older build is caught by the version" ;;
+  *) no "a device running an older build is caught by the version" "got: $got" ;;
+esac
+# 1.0.0-beta against a checkout building 1.0.0 must still fail — the suffix rule
+# matches "the built version plus -<suffix>", it does not strip everything after
+# a dash.
+got=$(appcheck "$(mkinfo_device 1.0.0 9)" "$GIT" "" "2.0.0+9" 2>&1)
+case "$got" in
+  *"VERSION MISMATCH"*) ok "a different version is a mismatch whatever the suffix rule" ;;
+  *) no "a different version is a mismatch whatever the suffix rule" "got: $got" ;;
+esac
+# A marker cannot be checked without a bundle, and saying so beats reporting it
+# missing — "MARKER MISSING" on a device would read as the wrong build.
+got=$(appcheck "$(mkinfo_device 3.0.4 43)" "$GIT" "some-marker" "3.0.4+43" 2>&1)
+case "$got" in
+  *"cannot be checked"*"no readable app bundle"*) ok "a marker on a device says it cannot be checked, not that it is missing" ;;
+  *) no "a marker on a device says it cannot be checked, not that it is missing" "got: $got" ;;
+esac
+# And nothing at all to go on must not read as a pass.
+got=$(appcheck "$(mkinfo_device 3.0.4 43)" "" "" "" 2>&1)
+case "$got" in
+  *"nothing could be compared"*) ok "no comparable facts says so rather than looking like a pass" ;;
+  *) no "no comparable facts says so rather than looking like a pass" "got: $got" ;;
+esac
+
+got=$(appcheck "$(mkinfo "$APP")" "" "not-in-this-build" 2>&1)
 case "$got" in *"MARKER MISSING"*) ok "a marker that is absent is called out" ;;
   *) no "a marker that is absent is called out" "got '$got'" ;; esac
 

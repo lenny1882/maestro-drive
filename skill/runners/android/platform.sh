@@ -84,6 +84,18 @@ install)
   echo "installed  $_id"
   ;;
 
+installed-info)
+  # DOCUMENTED, NOT MEASURED. `dumpsys package <id>` reports versionName,
+  # versionCode and lastUpdateTime — so Android can answer version, build AND a
+  # timestamp, which is more than a phone gives and is why `container` being
+  # unanswerable here does not cost the check.
+  _id=${1:?installed-info <id> <app-id>}; _appid=${2:?app-id}
+  "$ADB" -s "$_id" shell dumpsys package "$_appid" 2>/dev/null | awk '
+    /versionName=/   { sub(/.*versionName=/, ""); print "version=" $1 }
+    /versionCode=/   { sub(/.*versionCode=/, ""); print "build=" $1 }
+    /lastUpdateTime=/{ sub(/.*lastUpdateTime=/, ""); print "when=" $0 }'
+  ;;
+
 container)
   # A REAL GAP, not a missing line. `container` exists so remote/appcheck.sh can
   # read the installed build's executable timestamp and its Info.plist, and
@@ -102,7 +114,19 @@ container)
   exit 2
   ;;
 
-data-container)
+data-installed-info)
+  # DOCUMENTED, NOT MEASURED. `dumpsys package <id>` reports versionName,
+  # versionCode and lastUpdateTime — so Android can answer version, build AND a
+  # timestamp, which is more than a phone gives and is why `container` being
+  # unanswerable here does not cost the check.
+  _id=${1:?installed-info <id> <app-id>}; _appid=${2:?app-id}
+  "$ADB" -s "$_id" shell dumpsys package "$_appid" 2>/dev/null | awk '
+    /versionName=/   { sub(/.*versionName=/, ""); print "version=" $1 }
+    /versionCode=/   { sub(/.*versionCode=/, ""); print "build=" $1 }
+    /lastUpdateTime=/{ sub(/.*lastUpdateTime=/, ""); print "when=" $0 }'
+  ;;
+
+container)
   # DOCUMENTED, NOT MEASURED, and only on a debuggable build: run-as is what
   # gives a non-root shell access to an app's own data directory, and it refuses
   # for a release build. Which is the same restriction the iOS side has in

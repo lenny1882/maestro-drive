@@ -59,6 +59,24 @@ install)
   exit 2
   ;;
 
+# --- installed-info <id> <app-id> --------------------------------------------
+# What is actually installed, as `key=value` lines. Print only the keys this
+# platform can answer and leave the rest out — an absent key means "cannot
+# tell", which the caller reasons from, and an empty one would read as "none".
+#
+#   version=3.0.4        the marketing version
+#   build=43             the build number
+#   epoch=1758230000     when the executable was installed, if that is knowable
+#   container=/path      the bundle, if it can be read at all
+#
+# `epoch` and `container` are the two a phone cannot give. That is the whole
+# reason this verb exists instead of `container` alone: remote/appcheck.sh used
+# to need a path, so "is the app the code under test" had no answer anywhere
+# without one. Now it reasons from whatever arrives.
+installed-info)
+  exit 2
+  ;;
+
 # --- container <id> <app-id> -------------------------------------------------
 # The installed bundle's path on the device or host, printed on stdout. This is
 # what remote/appcheck.sh reads to answer "is the app on the device the code
