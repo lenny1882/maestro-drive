@@ -275,6 +275,32 @@ one with a flutter dependency writes `flutter`, both marked detected, while a
 checkout neither claims writes the default and says so; the ssh path's conf
 diffs byte-identical against the pre-change script; suite 144 passed, 0 failed.
 
+**1.5 DONE 18 Sep — an AVD that exists is not an AVD Maestro can drive.**
+Raised by 3.3's docs read rather than planned. `--local --detect` and the
+`PLATFORM` evidence listed every AVD as though each were a candidate. Two of the
+four on this machine are not:
+
+```
+Maestro can drive:  Pixel_6_Pro_API_34 (34) Pixel_Tablet (34)
+API unsupported:    Medium_Phone (36.1) Small_Phone (36)
+```
+
+The supported set is quoted, not inferred, from the mirror at `skill/docs`
+(Maestro 2.8.0, mirrored 11 Aug 2026): *"Maestro currently supports API Levels
+29, 30, 31, 33, and 34. API 35 and 36 support is arriving in Q2 2026."* 32 is
+absent from that sentence and so it is absent here. Hard-coded because the
+answer moves on Maestro's release schedule and not on anything this machine can
+be asked — when it moves, this list and the mirrored page move together.
+
+The level comes from each AVD's own `config.ini`, whose `image.sysdir.1` carries
+it as `system-images/android-<level>/`. An unreadable config reads `(?)` and
+sorts as unsupported, because a level that cannot be established is not one that
+has been checked.
+
+*Files:* `skill/bin/init.sh`. *Verified:* the detect output and the written
+conf both split the four AVDs correctly and the conf comment still wraps inside
+80 columns; suite 144 passed, 0 failed.
+
 **Stage 2 — `_ssh` runs the script instead of sending it.** The 84 call sites do
 not change in any unit of this stage. That is the whole bet; if a call site has
 to change, the bet was wrong and the shape goes back to Stage 1.
