@@ -1095,10 +1095,12 @@ session" and carries the warning that no Metro is not the same as no
 against 25s. `--detect` is named as the framework's `describe`; `bin/runner.sh`
 joins the tool table.
 
-**5.2 `bin/init.sh` writes the runner.** Call `runner.sh detect` and put
-`RUNNER` and `PLATFORM` in the conf it writes, so the next session is not left
-to discover them. Write the `.gitignore` entry for the conf while it is there,
-the way this repo now has one.
+**5.2 DONE 18 Sep.** The framework is asked, not assumed — with a REPO, init
+runs `runner.sh detect` and writes what claimed it. Without one it writes the
+default AND SAYS SO, because a default presented as a finding is how a wrong
+runner survives a setup. PLATFORM is ios with the reason given: nothing is
+booted yet to ask about. The gitignore advice covers `.maestro-mac.conf.*` too,
+which is where a credential actually lives in a two-environment project.
 
 **5.3 `flutter-hot-reload-mac`.** The sister package, Flutter by definition, and
 it plugs into this same seam. Out of scope for this item and it will not stay
@@ -1114,9 +1116,14 @@ because that is where they were before the seam existed.
   `remote/deviceup.sh`   the physical-device driver bring-up, with its usbmux
                          forwarder and its tunnel wake
 
-The first two are a move into `runners/flutter/`, and `bin/install.sh` already
-pushes `runners/` keeping its layout, so the paths the module uses get shorter
-rather than longer.
+**The first two are DONE 18 Sep.** `remote/build.sh` and `remote/vmservice.sh`
+are `runners/flutter/`'s now. The gain was not tidiness: `variants` and
+`variant-for-appid` REPRODUCED build.sh's flavour rule rather than calling it,
+so the subtle part — a flavour is real only when both an xcscheme and a
+`lib/main_<f>.dart` exist — had two implementations that could drift. build.sh
+gained `--list-variants` and `--variant-for`, and both verbs ran for real
+against the seven-flavour repo for the first time: six flavours listed,
+`variant-for-appid` narrowing to exactly `uat`.
 
 **The third is not a move.** `remote/deviceup.sh` belongs to `runners/ios-device`,
 which does not exist — and both `bin/build.sh` and `runners/ios/platform.sh`
