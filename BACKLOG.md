@@ -950,10 +950,34 @@ and a framework with no prefix reads every key rather than none.
 the mechanical work means Stage 3 is done against a contract known to hold
 rather than one hoped to.
 
-**2.1 Verify the install half of call site 3.** No bytes have gone onto a device
-through `platform.sh install`. Boot the pinned simulator, build, install,
-confirm with `preflight.sh`. *Done when:* preflight reports the installed build
-as newer than the newest commit, through the new path.
+**2.1 DONE 18 Sep.** Every booted-device path in the platform contract has now
+run against a real device, which none of them had: Stages 1 and 3 were verified
+only on empty and error paths, because nothing was booted.
+
+Exercised through their real callers, not by hand — `boot`, `driver-up`,
+`driver-scan`, `devices --booted`, `install`, `container`, `orientations`,
+`data-container`, `prefs-flush`, `prefs-read`, `screenshot`, `capture-cmd`,
+`last-used`, `uninstall`, `driver-down`, `shutdown`. `locked` returns 2 for a
+simulator, which is the self-gate working.
+
+**The split's saving, measured rather than argued: `--install-only` is 3s
+against 25s for build-and-install.** That is the 22s the no-op build costs,
+recovered exactly as predicted.
+
+Two things it found:
+
+  `rig up` printed an awk error. The live-driver guard on the wall's label
+  reclaim is a $( ) inside a double-quoted _ssh string — expanded LOCALLY — and
+  its field references were escaped as though it ran on the Mac. awk died, the
+  substitution came back empty, and the guard has never fired. One of the three
+  tests protecting a peer's label was dead, leaving only the age check. Raised
+  and fixed as item 88.
+
+  The reclaim tests did not catch it because they reimplement the logic in shell
+  and test the intent rather than the shipped string. The new test reads the
+  file instead.
+
+Left as found: app installed, rig down, wall stopped, no simulator booted.
 
 **2.2 React Native on iOS, end to end.** The cheapest second target by a
 distance: `runners/ios` already works, so only `framework.sh` is new. Fill in
