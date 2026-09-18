@@ -448,11 +448,25 @@ no-op leaving the file intact; a missing source fails with `cp`'s own message
 and exit 1; `IMG_BACKEND=mac` on this machine now names the missing tool;
 suite 144 passed, 0 failed.
 
-**3.3 `bin/mcp.sh` execs ssh.** `mcp.sh:22` is `exec ssh …` — the MCP server
-process itself, not a command run through `_ssh`. It cannot use `_ssh` because
-it must replace the process and hold stdio open. *Files:* `skill/bin/mcp.sh`.
-*Done when:* a local MCP server starts without ssh and the registered entry in
-`.claude.json` needs no change to switch modes.
+**3.3 DONE 18 Sep — `bin/mcp.sh` execs the server here.** It was `exec ssh …`:
+the MCP server process itself, not a command sent through `_ssh`.
+
+**It cannot use `_ssh`, and the reason is structural.** `_ssh` wraps its command
+in `timeout $TMO` and returns. An MCP server holds stdio open for the life of
+the Claude session, so at the default `$TMO` it would be killed three minutes
+in and the session would lose every device tool with no error a reader could
+act on. `exec` replaces this process, which is what the config entry already
+expects — so the registered entry in `.claude.json` needs no change to follow
+the conf between transports.
+
+**Maestro is not installed on this machine.** `LOCAL_ENV` puts
+`$HOME/.maestro/bin` on `PATH` and there is no such directory here, so a real
+local MCP server cannot start yet. That is Stage 5.2's to fix, and it is the
+first hard prerequisite this item has turned up.
+
+*Files:* `skill/bin/mcp.sh`. *Verified:* with a stub `maestro` on `PATH` and a
+poisoned `ssh` that exits 99 and shouts, a local run execs `maestro mcp` and
+never touches ssh; suite 144 passed, 0 failed.
 
 **3.4 The two that measure or resolve the boundary.** `bench.sh:17` times an
 `ssh <host> true` round trip and `publish.sh:71` reads the Mac's address out of

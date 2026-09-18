@@ -17,6 +17,18 @@
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
+# Local transport execs the server here. NOT through _ssh, and the reason is
+# structural rather than stylistic: _ssh wraps its command in `timeout $TMO` and
+# returns, while an MCP server has to hold stdio open for the life of the Claude
+# session. Three minutes in, the default $TMO would kill it and the session
+# would lose every device tool with no error a reader could act on. `exec`
+# replaces this process, which is what the config entry already expects — so the
+# registered entry needs no change to follow the conf between transports.
+if [ "$TRANSPORT" = local ]; then
+  exec sh -c "$LOCAL_ENV
+exec maestro mcp"
+fi
+
 _pick_host || exit 1
 
 exec ssh \
