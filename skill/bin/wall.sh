@@ -44,7 +44,7 @@ _check_simulatorkit() {
   out=$(_ssh '~/.maestro/deps/simulator-server verify 2>&1 | grep -E "^\[[a-z]+\] ios:"')
   case "$out" in
     \[ok\]*) return 0 ;;
-    "")      echo "could not run simulator-server verify on $MAC_HOST" >&2; return 1 ;;
+    "")      echo "could not run simulator-server verify on $(_where)" >&2; return 1 ;;
     *)
       cat >&2 <<MSG
 $out

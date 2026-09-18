@@ -24,7 +24,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-echo "downloading on $MAC_HOST ..."
+echo "downloading on $(_where) ..."
 _ssh "
 set -e
 rm -rf '$RDIR/mdocs'; mkdir -p '$RDIR/mdocs/pages'; cd '$RDIR/mdocs'

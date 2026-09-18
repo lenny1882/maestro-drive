@@ -44,7 +44,7 @@ _list() {
   local map booted
   map=$(_driver_map --fresh)
   booted=$(_booted)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   printf '%-38s %-9s %-7s %s\n' UDID DRIVER RELAY DEVICE
   printf '%s\n' "$booted" | while read -r u name; do
     local port
@@ -256,7 +256,7 @@ _rig_up() {
 _rig_status() {
   local map booted mine labels rows u name port by
   map=$(_driver_map --fresh); booted=$(_booted); mine=$(_rig_claimed)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   # Every label in ONE call, before the loop. An _ssh inside a loop that is
   # reading from a pipe eats the rest of the pipe — _ssh passes stdin to the
   # remote command — so the first pass of this printed one device out of seven.
@@ -324,7 +324,7 @@ _rig_reap() {  # _rig_reap [--shutdown]
 
   local booted map claimed rows verdicts orphans n
   booted=$(_booted)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   map=$(_driver_map --fresh)
   claimed=$(_ssh "cat '$RIG_OWNED'/* 2>/dev/null" 2>/dev/null)
 
@@ -514,7 +514,7 @@ case "${1:-list}" in
     _driver_scan >/dev/null
     _driver_disown
     _ssh "rm -rf '$RDIR/labels'" >/dev/null 2>&1 || true
-    echo "stopped every driver on $MAC_HOST"
+    echo "stopped every driver on $(_where)"
     ;;
   *) echo "usage: drivers.sh [list|up [udid]|down <udid>|down-all|rig [up|down|status]|ports [list|adopt|forget [udid]]]" >&2; exit 2 ;;
 esac
