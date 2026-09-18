@@ -412,6 +412,50 @@ phase_a_followup() {
 # Exit status is about the ADDRESS, not about success: 0 means the address is
 # worth re-typing on a retry, 1 means it is not. A refusal comes from the Mac
 # itself, so the address reached it and re-asking for it is noise.
+# Two machines on one subnet with nothing passing between them. Found 18 Sep
+# after an afternoon spent on the Mac: Remote Login on for all users, sshd
+# accepting loopback, the Mac holding the address it said it held, and neither
+# machine able to ping the other. The access point was blocking
+# station-to-station traffic, which no amount of looking at the Mac reveals.
+#
+# ARP is the test, not ping. A host that drops ICMP still answers ARP, so a
+# neighbour entry that resolves rules this out however silent the pings are;
+# FAILED or INCOMPLETE after an attempt means nothing on the segment claimed the
+# address. Inside a Claude session there is no route to anything and same_subnet
+# is false, so this cannot fire there and wrongly blame a router.
+arp_unanswered() { # arp_unanswered <addr> -> 0 when it is on our subnet and does not answer ARP
+  command -v ip >/dev/null 2>&1 || return 1
+  same_subnet "$1" || return 1
+  # Provokes the resolution; its own success or failure is not the answer.
+  ping -c1 -W1 "$1" >/dev/null 2>&1 && return 1
+  case "$(ip neigh show "$1" 2>/dev/null)" in
+    *REACHABLE*|*STALE*|*DELAY*|*PROBE*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+isolation_help() { # isolation_help <addr>
+  # Defaulted on its own line, not inside ${src:-...}: bash parses quotes inside
+  # that word, and an apostrophe in the fallback text took the parser with it.
+  local src
+  src=$(ip route get "$1" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
+  [ -n "$src" ] || src="this machine's address"
+  warn "$1 is on a subnet this machine is attached to and does not answer ARP."
+  say ""
+  say "  Both machines are on the same network and the network will not carry a"
+  say "  packet between them. That is the access point refusing station-to-station"
+  say "  traffic — client isolation, AP isolation, or a guest network that implies"
+  say "  it. Nothing on the Mac or on this machine can change it, and nothing on"
+  say "  the Mac looks wrong: Remote Login is on, sshd answers itself, and the"
+  say "  address is the one the Mac holds."
+  say ""
+  say "  Confirm it from the Mac, which should fail in the same way:"
+  say ""
+  say "    ping -c2 $src"
+  say ""
+  say "  Then turn client isolation off for this SSID, or use another SSID."
+}
+
 # Turning Remote Login on, named in one place because three of the arms below
 # need it and the reason they need it differs. It is the cheapest thing to check
 # and the one a person cannot guess, so no arm that could be it stays silent.
@@ -437,6 +481,14 @@ PROBE_USER_SUSPECT=0
 probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address is suspect
   local err="$1" addr="$2" user="${3:-}"
   PROBE_USER_SUSPECT=0
+  # Ahead of the case, because this is a measurement and the arms below are
+  # readings of a message. ssh says "No route to host" here, which is also what
+  # it says when there is no route at all — the ARP check tells the two apart,
+  # and only one of them is a router setting.
+  if arp_unanswered "$addr"; then
+    isolation_help "$addr"
+    return 1
+  fi
   case "$err" in
     *"Permission denied"*|*"Too many authentication failures"*)
       PROBE_USER_SUSPECT=1
@@ -489,7 +541,19 @@ probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address
       say ""
       remote_login_help "$user"
       say ""
-      say "  3. Remote Login was turned on seconds ago and sshd is still starting,"
+      say "  3. OpenSSH 9.8 and later penalise a source address that keeps failing,"
+      say "     and drop it here. Check on the Mac with"
+      say ""
+      say "       sudo sshd -T | grep -i penal"
+      say ""
+      say "     A min: of 15 and a max: of 600 means any penalty lasts at least"
+      say "     fifteen seconds and can reach ten minutes — and a connection the"
+      say "     penalty drops counts as another failure, so retrying at once keeps"
+      say "     it alive. Wait, or clear it:"
+      say ""
+      say "       sudo launchctl kickstart -k system/com.openssh.sshd"
+      say ""
+      say "  4. Remote Login was turned on seconds ago and sshd is still starting,"
       say "     in which case try again and nothing else."
       return 1 ;;
     *"Network is unreachable"*|*"No route to host"*)
@@ -561,6 +625,12 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     if probe_diagnosis "$err" "$addr" "$user"; then suspect=1; else suspect=0; fi
     say ""
     say "  Nothing has been written yet, so there is nothing to undo."
+    # A penalised source that retries at once stays penalised: the dropped
+    # connection is itself another failure. The loop is what kept one alive for
+    # an afternoon on 18 Sep, so where that is a candidate it says to wait.
+    if [ "$PROBE_USER_SUSPECT" = 1 ]; then
+      say "  If this is a penalty, retrying now renews it — wait, or clear it first."
+    fi
     # Offered where a wrong account is what the error means. The new name is
     # used for the retry and written nowhere until a probe with it succeeds —
     # an unproven username in every Host block is worse than the stale one.
