@@ -1087,9 +1087,13 @@ SDK and a booted emulator.*
 
 **Stage 5 — what falls out once a second runner works.**
 
-**5.1 `SKILL.md` stops assuming.** Its description, its `flutter run` section
-and its build section all say Flutter and iOS as facts. It is read at the start
-of every session, so wrong prose there is expensive.
+**5.1 DONE 18 Sep.** A paragraph beside the config step saying what a runner is
+and why there are two settings, and the sentence that does the work: everything
+Flutter or iOS in the rest of the file is one runner's answer. Step 5 is "a dev
+session" and carries the warning that no Metro is not the same as no
+`flutter run`. The build numbers are 18 Sep's, including `--install-only` at 3s
+against 25s. `--detect` is named as the framework's `describe`; `bin/runner.sh`
+joins the tool table.
 
 **5.2 `bin/init.sh` writes the runner.** Call `runner.sh detect` and put
 `RUNNER` and `PLATFORM` in the conf it writes, so the next session is not left
@@ -1124,9 +1128,8 @@ a usbmux forwarder, a lock refusal, and `remote/iproxy.py` with it.
 iOS-specific helpers is what a second PLATFORM trips over, so 5.4 wants doing
 before 4.3 and 4.4 rather than after them.
 
-**Order.** Stage 1, then 2.1, then 2.2 if there is an RN checkout to use, then
-Stage 3, then 5.4, then Stage 4. The rest of Stage 5 follows whenever a second
-runner actually works.
+**Order.** Stage 1, then 2.1, then Stage 3, then 5.1 — all done. Then 5.4,
+then Stage 4, with 2.2 whenever there is an RN checkout to use.
 
 **Answered 18 Sep: neither is on that Mac today.** No `adb`, no SDK directory,
 no `~/.android/avd`, no emulator binary; `~/.maestro/deps` holds the iOS capture
