@@ -47,9 +47,9 @@ case "${1:-list}" in
         echo "device: $udid is not a physical device udid — a simulator is bin/drivers.sh up" >&2
         exit 2; }
     _ssh "mkdir -p '$RMODS/ios-device'" >/dev/null
-    scp "${SSH_OPTS[@]}" "$HERE/../runners/ios-device/platform.sh" \
-        "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
-        "$MAC_HOST:$RMODS/ios-device/" >/dev/null ||
+    _push "$HERE/../runners/ios-device/platform.sh" \
+          "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
+          "$RMODS/ios-device/" ||
       { echo "device: could not copy the ios-device module" >&2; exit 1; }
     # The driver cold-starts in tens of seconds; the default timeout is too short.
     out=$(TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"); rc=$?

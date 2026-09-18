@@ -194,7 +194,7 @@ _ensure_device() {
 _start() {
   [ "$(_up)" = "200" ] && return 0
   _ssh "mkdir -p '$RDIR'" >/dev/null
-  scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RHELP/relay.py" >/dev/null || return 1
+  _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || return 1
   # pkill matches any relay on this DPORT, whatever its target: a stale relay left
   # pointing at the wrong port holds the socket and beats the correct one to it,
   # so an exact <DPORT> <DRIVER_PORT> match would leave it running (seen 10 Sep).

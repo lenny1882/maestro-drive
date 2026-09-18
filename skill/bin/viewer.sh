@@ -73,7 +73,7 @@ case "${1:-start}" in
     echo "republishing the viewer on 127.0.0.1:$rport" >&2
 
     _ssh "mkdir -p '$RDIR'"
-    scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RHELP/relay.py" >/dev/null || exit 1
+    _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || exit 1
 
     # relay.py explains its own failures on stderr. An earlier version sent them
     # to /dev/null and printed a guess instead, so the one line that said what

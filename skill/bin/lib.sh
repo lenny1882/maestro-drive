@@ -201,6 +201,42 @@ $1"
   return "$rc"
 }
 
+# _push <file>... <destination>   — move files TO the machine holding the device.
+#
+# The destination is a path on that machine, with no host prefix: _push adds the
+# host across ssh and does not need one locally. A destination ending in / or
+# naming an existing directory takes the file's own basename, as scp does.
+#
+# Locally every caller in this package is pushing a file onto itself, because
+# after item 94's 2.2 the destinations ARE the checkout: $RHELP is remote/ and
+# $RMODS is runners/, and every source is $HERE/../remote/x or
+# $HERE/../runners/y. So the local branch tests for that first — and it must,
+# because `cp a a` exits 1 with "are the same file" and every call site here
+# ends in `|| exit 1` or `|| return 1`. A bare cp would fail every local run.
+#
+# The two that are real copies rather than self-copies are mac.sh --send and
+# img.sh, which put a file the user named into the scratch directory.
+_push() {
+  local n=$# dest src target
+  [ "$n" -ge 2 ] || { echo "_push needs at least one file and a destination" >&2; return 2; }
+  dest=${!n}
+  local srcs=("${@:1:n-1}")
+
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    for src in "${srcs[@]}"; do
+      target=$dest
+      case "$dest" in */) target="$dest$(basename "$src")" ;; esac
+      [ -d "$dest" ] && target="${dest%/}/$(basename "$src")"
+      [ "$src" -ef "$target" ] && continue
+      mkdir -p "$(dirname "$target")" || return 1
+      cp "$src" "$target" || return 1
+    done
+    return 0
+  fi
+
+  scp "${SSH_OPTS[@]}" "${srcs[@]}" "$MAC_HOST:$dest" >/dev/null || return 1
+}
+
 # Who is driving, for a wall label. The session colour first, because it is what
 # the terminal is already showing and is the only one of these a person reads at
 # a glance; seven characters of the session id break a tie between two sessions

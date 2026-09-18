@@ -22,7 +22,7 @@ if [ "${1:-}" = "--send" ]; then
   rscript="$RDIR/send/$base"
 
   _ssh "mkdir -p '$RDIR/send'"
-  scp "${SSH_OPTS[@]}" "$file" "$MAC_HOST:$rscript" >/dev/null || exit 1
+  _push "$file" "$rscript" || exit 1
 
   # Export APP_* values into the remote environment so the script can read
   # them without interpolation on this side.

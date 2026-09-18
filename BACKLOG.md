@@ -378,14 +378,35 @@ do is anything that moves a file — Stage 3.
 problems. Each unit does every call site of its shape, because a half-converted
 shape is the state that hides the next bug.
 
-**3.1 Push a file to the Mac → `_push`.** Eleven sites, all the same: `scp` or
-`ssh "cat > …"` moving one file from the checkout into `$RDIR`.
-`install.sh:14,31`, `drivers.sh:406`, `wall.sh:144,148`, `device.sh:50`,
-`driver.sh:197`, `viewer.sh:76`, `build.sh:115`, `mac.sh:25`, `img.sh:146`. One
-helper in `lib.sh` beside `_ssh`, `cp` locally, and after 2.2 most of them are
-already-in-place no-ops. *Files:* `skill/bin/lib.sh` and the eight scripts.
-*Done when:* no `scp` or `cat >` remains outside `lib.sh`, and the ssh path
-still passes its existing tests unchanged.
+**3.1 DONE 18 Sep — push a file to the machine with the device → `_push`.**
+Eleven sites, one helper in `lib.sh` beside `_ssh`. It takes files and a
+destination path with no host prefix, adds the host across ssh, and copies
+locally. A destination ending in `/` or naming an existing directory takes the
+file's own basename, as `scp` does.
+
+**Nine of the eleven are a file onto itself locally, and the tenth and eleventh
+are not.** Every source is `$HERE/../remote/x` or `$HERE/../runners/y`, and
+after 2.2 the destinations ARE those directories. `mac.sh --send` and `img.sh`
+are the exceptions: they put a file the user named into the scratch directory,
+which is a real copy in both transports.
+
+**The same-path test is load-bearing, not tidiness.** `cp a a` exits 1 with
+*are the same file*, and every call site ends in `|| exit 1` or `|| return 1`.
+A bare `cp` would fail every local run of `rig up`, the wall, the viewer and a
+build.
+
+**Three `cat >` forms stay, and they are not pushes.** `drivers.sh:196`,
+`flow.sh:89` and `wall.sh:112` write a label or a flow body from a pipe through
+`_ssh`, which already carries stdin. `docs-refresh.sh:45` is the one remaining
+`scp` and it runs the other way — that is 3.2's.
+
+*Files:* `skill/bin/lib.sh`, `install.sh`, `drivers.sh`, `wall.sh`, `device.sh`,
+`driver.sh`, `viewer.sh`, `build.sh`, `mac.sh`, `img.sh`, `test/run-tests.sh`.
+*Verified:* a self-push exits 0 and leaves the file intact; a push into a
+directory, to a new path whose parent does not exist, and of several files at
+once all land; the two driver stubs needed `_push` defined the same way they
+needed `RHELP`, which is the modelled-lib.sh lesson landing twice; suite 144
+passed, 0 failed.
 
 **3.2 Pull a file back → `_pull`, and the base64 round-trips go.**
 `shot.sh:37-38`, `flow.sh:103` and `img.sh:148-149` each base64 a PNG through
