@@ -110,3 +110,19 @@ appcheck() {  # appcheck <app-container> <repo-on-the-mac> [marker]
     fi
   fi
 }
+
+# Executed rather than sourced: `sh appcheck.sh --run <container> <repo> [marker]`.
+#
+# Nothing in this file happens to need zsh's differences today — there is no
+# unquoted expansion in a `for`, and no variable standing as a `case` pattern.
+# That is luck rather than design. remote/gitstate.sh had both, was sourced into
+# the shell ssh hands over, and reported every lock file as somebody's work for
+# as long as it was parameterised; the fix was to stop sourcing it. This takes
+# the same entry point so that the next edit here cannot reintroduce the same
+# bug in a file nobody is watching for it.
+#
+# An explicit sentinel, because a sourced file sees the sourcing script's $1 and
+# there is no $BASH_SOURCE in POSIX sh to tell the two apart.
+if [ "${1:-}" = --run ]; then
+  appcheck "${2:-}" "${3:-}" "${4:-}"
+fi

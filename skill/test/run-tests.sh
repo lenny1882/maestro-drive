@@ -2046,6 +2046,36 @@ if command -v git >/dev/null 2>&1; then
     && no "preflight runs gitstate.sh rather than sourcing it into zsh" "it still sources it" \
     || ok "preflight runs gitstate.sh rather than sourcing it into zsh"
 
+  # Same rule for appcheck.sh. Nothing in it happens to need zsh's differences
+  # today — no unquoted expansion in a `for`, no variable standing as a `case`
+  # pattern — but that is luck, and gitstate.sh had both while nobody was
+  # watching. Both files take the same entry point so the next edit cannot
+  # reintroduce the bug in whichever one is not being looked at.
+  grep -q "\. '\$RDIR/appcheck.sh'" "$REPO/bin/preflight.sh" \
+    && no "preflight runs appcheck.sh rather than sourcing it into zsh" "it still sources it" \
+    || ok "preflight runs appcheck.sh rather than sourcing it into zsh"
+  # NOT $out: the untracked check further down still reads the one from the
+  # gitstate run above, and clobbering it fails a test that has nothing to do
+  # with this. Second time in this file.
+  aco=$(sh "$REPO/remote/appcheck.sh" --run "" "" 2>&1)
+  case "$aco" in
+    *"not installed"*) ok "sh appcheck.sh --run answers without being sourced" ;;
+    *) no "sh appcheck.sh --run answers without being sourced" "got: $aco" ;;
+  esac
+
+  # flow.sh ran `maestro test | grep | tail`, so the pipeline returned tail's
+  # status — always 0 — and a FAILED flow reported success to anything reading
+  # the exit code. The failure text was in the output and the status disagreed
+  # with it. Third instance of this shape: item 88, item 87's 1.3, and this.
+  # Comment lines stripped first — flow.sh's own explanation of this bug names
+  # the shape it is warning about, and would otherwise match the lint.
+  grep -v '^ *#' "$REPO/bin/flow.sh" | grep -qE "maestro .*test .*\| *grep" \
+    && no "flow.sh takes maestro's status before filtering the output" "it still pipes it" \
+    || ok "flow.sh takes maestro's status before filtering the output"
+  grep -q 'exit .._rc' "$REPO/bin/flow.sh" \
+    && ok "flow.sh returns that status rather than the filter's" \
+    || no "flow.sh returns that status rather than the filter's" "no exit of the captured status"
+
   # Call site 2. The two frameworks must give OPPOSITE advice from the same empty
   # result — no flutter run costs only the inside-the-app reads, no Metro may
   # cost the app starting at all — which is the whole reason the text belongs to

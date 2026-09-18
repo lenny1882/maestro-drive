@@ -79,10 +79,19 @@ echo '--- screenshot ---'
 sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$SHOT.png' && echo '$RDIR/$SHOT.png'"
 
 # Body goes over stdin, so quotes and \$ in the YAML survive intact.
+# The status is captured BEFORE the filter, not after it. `maestro test | grep
+# | tail` returns tail's status, which is always 0, so a failed flow used to
+# read as a passed one to anything checking the exit code — the failure text was
+# in the output and the status said fine. Same shape as items 88 and 87's 1.3.
+#
+# $POST still runs on a failure: a screenshot of a flow that went wrong is worth
+# more than one of a flow that did not.
 printf '%s\n' "$BODY" | _ssh "cat > '$RDIR/flows/_adhoc.yaml'
-maestro --device $d test ${ENVS[*]+\"${ENVS[*]}\"} '$RDIR/flows/_adhoc.yaml' 2>&1 \
-  | grep -vE '^\s*\$|Maestro Cloud|maestro cloud|Debug tests faster|^[│╭╰]' | tail -15
-$POST"
+maestro --device $d test ${ENVS[*]+\"${ENVS[*]}\"} '$RDIR/flows/_adhoc.yaml' > '$RDIR/flow.out' 2>&1
+_rc=\$?
+grep -vE '^\s*\$|Maestro Cloud|maestro cloud|Debug tests faster|^[│╭╰]' '$RDIR/flow.out' | tail -15
+$POST
+exit \$_rc"
 
 if [ -n "$SHOT" ]; then
   ssh "${SSH_OPTS[@]}" "$MAC_HOST" "base64 < '$RDIR/$SHOT.png'" | base64 -d > "$LDIR/$SHOT.png"
