@@ -1076,9 +1076,41 @@ the way this repo now has one.
 it plugs into this same seam. Out of scope for this item and it will not stay
 out.
 
-**Order.** Stage 1, then 2.1, then 2.2 if there is an RN checkout to use, then
-Stage 3, then Stage 4. Stage 5 follows whenever a second runner actually works.
+**5.4 `remote/` keeps only shared code.** Raised by Stage 3 rather than planned:
+three files there are a module's own territory and sit outside `runners/`
+because that is where they were before the seam existed.
 
-**Open, and it changes the size of this item.** Is there an Android SDK and an
-emulator on that Mac? If Android is far off, 4.3 and 4.4 drop out and the whole
-thing is two stages shorter.
+  `remote/vmservice.sh`  the Dart VM Service discovery — the flutter framework
+                         runner's `inspect`, which already shells into it
+  `remote/build.sh`      the Flutter build — the same runner's `build`
+  `remote/deviceup.sh`   the physical-device driver bring-up, with its usbmux
+                         forwarder and its tunnel wake
+
+The first two are a move into `runners/flutter/`, and `bin/install.sh` already
+pushes `runners/` keeping its layout, so the paths the module uses get shorter
+rather than longer.
+
+**The third is not a move.** `remote/deviceup.sh` belongs to `runners/ios-device`,
+which does not exist — and both `bin/build.sh` and `runners/ios/platform.sh`
+already name `ios-device` as a platform that ought to. Creating it is closer in
+size to 2.2 than to a file move: devicectl rather than simctl, a profile build,
+a usbmux forwarder, a lock refusal, and `remote/iproxy.py` with it.
+
+**This one has a dependency the rest of Stage 5 does not.** `remote/` holding
+iOS-specific helpers is what a second PLATFORM trips over, so 5.4 wants doing
+before 4.3 and 4.4 rather than after them.
+
+**Order.** Stage 1, then 2.1, then 2.2 if there is an RN checkout to use, then
+Stage 3, then 5.4, then Stage 4. The rest of Stage 5 follows whenever a second
+runner actually works.
+
+**Answered 18 Sep: neither is on that Mac today.** No `adb`, no SDK directory,
+no `~/.android/avd`, no emulator binary; `~/.maestro/deps` holds the iOS capture
+binary and nothing else. And no React Native checkout — both runners were asked
+to claim all sixteen repos on the Mac and every one is Flutter, including
+`hb-phase2`, which the name does not give away.
+
+So 2.2, 4.3 and 4.4 are each blocked on an install rather than on a decision,
+and the two are not the same size: an RN checkout is node, a `react-native init`
+app and a `pod install`, while Android is an SDK, an emulator and Maestro's
+Android driver on top.
