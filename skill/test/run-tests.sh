@@ -2162,6 +2162,20 @@ if command -v git >/dev/null 2>&1; then
   sh "$REPO/runners/react-native/framework.sh" inspect dev cache >/dev/null 2>&1
   [ $? = 2 ] && ok "a framework with no written inspect exits 2, not 1" \
               || no "a framework with no written inspect exits 2, not 1" "wrong status"
+  # The traffic verbs run on EITHER side, so every file they touch must resolve
+  # from the module rather than from $RDIR — which is a path on the MAC and
+  # means nothing in the sandbox. net.py was addressed as $RDIR/net.py until
+  # 18 Sep, so the fast path through the published relay could never have
+  # worked; only the SSH fallback did, and nothing had exercised the fast path.
+  grep -q '\$RDIR' "$RS/flutter/framework.sh" \
+    && no "the flutter module addresses its own files, not \$RDIR" \
+          "$(grep -n '\$RDIR' "$RS/flutter/framework.sh" | head -1)" \
+    || ok "the flutter module addresses its own files, not \$RDIR"
+  for f in build.sh vmservice.sh net.py; do
+    [ -r "$RS/flutter/$f" ] || no "the flutter module carries $f" "missing"
+  done
+  ok "the flutter module carries build.sh, vmservice.sh and net.py"
+
   grep -q '_profiling' "$REPO/bin/publish.sh" \
     && no "publish.sh arms capture through the module" "it still has _profiling" \
     || ok "publish.sh arms capture through the module"
