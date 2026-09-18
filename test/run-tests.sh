@@ -237,6 +237,92 @@ else
   ok "fresh machine: --dry-run wrote nothing"
 fi
 
+# --- the write path, for real ------------------------------------------------
+# Everything above runs --dry-run, so until 18 Sep 2026 the wizard had never
+# written anything, even to a copy. Running it for real found three defects in
+# one pass. sudo is stubbed on PATH rather than invoked, so /etc/hosts here is a
+# file in $TMP and the real one is never touched.
+RW="$TMP/realwrite"; mkdir -p "$RW/lib" "$RW/bin"
+printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
+  "$TMP/fake-key" > "$RW/ssh_config"
+: > "$TMP/fake-key"
+printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local"]}}}\n' > "$RW/settings.json"
+printf '127.0.0.1 localhost\n' > "$RW/hosts"
+date +%F > "$RW/lib/phase-a-done"
+
+rw_run() { # rw_run <sudo-exit> -> output; answers are fixed
+  printf '#!/bin/sh\nexit %s\n' "$1" > "$RW/bin/sudo"
+  chmod +x "$RW/bin/sudo"
+  printf 'y\nmac-test\n192.168.99.50\ny\ny\nn\ny\ny\ny\n' | \
+    PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
+    HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1
+}
+
+rw_out=$(rw_run 1)
+
+# The alias just written is already on disk by the time /etc/hosts runs, and
+# configured_aliases prints one per LINE. A membership test written with spaces
+# never matched, so the network was offered twice as "which do you use most".
+[ "$(printf '%s' "$rw_out" | grep -c '^    mac-test ')" = 1 ] \
+  && ok "write path: the new alias is listed once, not twice" \
+  || no "write path: the new alias is listed once, not twice" \
+        "$(printf '%s' "$rw_out" | grep '^    mac-test ' | tr '\n' '/')"
+
+# write_etc_hosts is called as `write_etc_hosts || warn`, which suspends set -e
+# for its whole body, so a failing sudo did not abort and `ok written` ran
+# anyway. /etc/hosts is the third leg of the all-three-or-none, so a false
+# success here is the failure this script exists to prevent.
+# Anchored to end of line, not a bare -q: settings.json needs no sudo and
+# legitimately reports `ok    written (backup: ...)` in the same run, and that
+# line ends in a bracket. Not -qx either — confirm() leaves the prompt and the
+# result on one line, so there is no line that is only the result.
+printf '%s' "$rw_out" | grep -qE 'ok    written$' \
+  && no "write path: a failed sudo is not reported as written" "it said written" \
+  || ok "write path: a failed sudo is not reported as written"
+
+printf '%s' "$rw_out" | grep -q "UNCHANGED" \
+  && printf '%s' "$rw_out" | grep -q "two of three" \
+  && ok "write path: a failed sudo names what is now inconsistent" \
+  || no "write path: a failed sudo names what is now inconsistent" \
+        "$(printf '%s' "$rw_out" | sed -n '/Apply that/,$p' | head -4)"
+
+[ "$(cat "$RW/hosts")" = "127.0.0.1 localhost" ] \
+  && ok "write path: a failed sudo leaves the hosts file alone" \
+  || no "write path: a failed sudo leaves the hosts file alone" "$(cat "$RW/hosts")"
+
+# The ssh config is the one file written without sudo, so it lands either way.
+grep -q "^Host mac-test$" "$RW/ssh_config" \
+  && ok "write path: the Host block is written" \
+  || no "write path: the Host block is written" "no Host mac-test in $RW/ssh_config"
+
+ls "$RW"/ssh_config.bak-* >/dev/null 2>&1 \
+  && ok "write path: the ssh config is backed up before it is changed" \
+  || no "write path: the ssh config is backed up before it is changed" "no .bak-* beside it"
+
+# With sudo working, the same run must report the write and say so once.
+rm -f "$RW"/ssh_config.bak-*
+printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
+  "$TMP/fake-key" > "$RW/ssh_config"
+rw_ok=$(rw_run 0)
+printf '%s' "$rw_ok" | grep -qE 'ok    written$' \
+  && ok "write path: a working sudo does report the write" \
+  || no "write path: a working sudo does report the write" \
+        "$(printf '%s' "$rw_ok" | sed -n '/Apply that/,$p' | head -3)"
+
+# The .local name is read back from settings.json, so declining that step costs
+# /etc/hosts too. Saying "nothing to map" read as though there were nothing to
+# do; it has to name the consequence.
+printf '{}\n' > "$RW/settings.json"
+printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
+  "$TMP/fake-key" > "$RW/ssh_config"
+rw_noname=$(printf 'y\nmac-test\n192.168.99.50\ny\nn\nn\nn\nn\n' | \
+  PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
+  HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1)
+printf '%s' "$rw_noname" | grep -q "cannot be written" \
+  && ok "write path: an unknown .local name names what it costs" \
+  || no "write path: an unknown .local name names what it costs" \
+        "$(printf '%s' "$rw_noname" | sed -n '/etc\/hosts/,$p' | head -3)"
+
 echo "installer"
 # Two pre-existing hooks from some other package, to prove we leave them alone.
 # The second is on matcher "Bash", which is the one this package also wants:

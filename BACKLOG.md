@@ -77,7 +77,7 @@ rather than how it works.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep, DRY-RUN AGAINST THE MAC 18 Sep; the real write path is still untested**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; WRITE PATH RUN AND TESTED 18 Sep; only `ssh-copy-id` and phase C are still unexercised**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -419,7 +419,49 @@ actual writes to `~/.ssh/config`, `settings.json` and `/etc/hosts`, and phase C'
 install-and-cycle on the Mac. The cycle command itself was verified live on
 17 Sep; the wizard's wrapping of it was not.
 
-**Coverage: 59 package cases, up from 37 when this started.** Seven of them are
+**The write path was run for real on 18 Sep, and it found three defects.** Every
+earlier test passed `--dry-run`, and the suite's own header said so — *"nothing
+talks to a Mac and nothing touches the real files"* — so until now the wizard had
+never written anything, not even to a copy. Run against `SSH_CONFIG`, `SETTINGS`,
+`HOSTS_FILE` and `LIB_DIR` pointed at a throwaway directory, with `sudo` stubbed
+on `PATH`:
+
+- **A failed `sudo` was reported as a successful write.** `write_etc_hosts` ends
+  `sudo cp; sudo cp; ok "written"` with no status check. It is called as
+  `write_etc_hosts || warn`, and a function invoked with `||` runs with `set -e`
+  suspended for its whole body, so the failure did not abort either. Measured
+  against a sandbox whose `sudo` is not setuid: two `sudo: must be owned by uid 0`
+  lines, then `ok written`, with the file untouched. `/etc/hosts` is the third leg
+  of the all-three-or-none this item opens with, so a false success here is
+  precisely the failure it exists to prevent. Both calls are now checked and the
+  warning names what is inconsistent: the ssh config and settings.json written,
+  this one not.
+- **The network just configured was offered twice.** `configured_aliases` prints
+  one alias per LINE; the guard against listing `$B_ALIAS` twice tested
+  `case " $aliases " in *" $B_ALIAS "*`, which cannot match a newline-separated
+  list beyond its first entry. The `/etc/hosts` step then asked which network you
+  use most and listed the same one twice. Now newline-delimited.
+- **Declining `settings.json` silently costs `/etc/hosts`.** The `.local` name is
+  read back from `allowedDomains`, so without that write `MAC_NAME` is never
+  learned and the step skipped with *"no .local name known, so there is nothing to
+  map"* — which describes the cause and reads as though there were nothing to do.
+  It now says the file cannot be written, where the name comes from, and what
+  fails without it.
+
+**Eight cases added, and they run the wizard rather than a function out of it.**
+`sudo` is stubbed to fail and then to succeed, so both branches are covered; the
+hosts file is asserted unchanged after the failure; and the `.local`-unknown
+message is asserted to name its consequence. One of the eight was wrong when
+first written — it matched `ok    written` loosely and caught settings.json's own
+`written (backup: …)` from the same run — which is the same class of mistake as
+the defect it was written for.
+
+**Still unexercised, and not exercisable from a sandbox.** `ssh-copy-id` connects
+to a raw address rather than an alias, so it gets no `ProxyCommand` and has no
+route out; phase C installs and cycles a script on the Mac. Both need a person at
+the terminal on a machine with a route to it.
+
+**Coverage: 67 package cases, up from 37 when this started.** Seven of them are
 the fresh-machine path, which had none, and they were checked against the bug
 they exist for — reintroducing the unassigned `local` turns six of the seven red.
 
