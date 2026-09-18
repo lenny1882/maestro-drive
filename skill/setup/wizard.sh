@@ -4,6 +4,7 @@
 #   ./wizard.sh            run it
 #   ./wizard.sh --status   what is already in place, change nothing
 #   ./wizard.sh --hosts    rewrite the /etc/hosts block only, to reorder it
+#   ./wizard.sh --remove <alias>   take one network back out, all three files
 #   ./wizard.sh --dry-run  ask everything, read everything, write nothing
 #
 # Why this exists rather than more prose. reference/setup.md describes all of
@@ -39,14 +40,23 @@ SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 # another.
 FALLBACK_KEY="$HOME/.ssh/mac_rc"
 
-STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0
-for a in "$@"; do
-  case "$a" in
-    --status)  STATUS_ONLY=1 ;;
-    --hosts)   HOSTS_ONLY=1 ;;
-    --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,5p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "unknown option: $a" >&2; exit 2 ;;
+STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""
+# A while loop rather than `for a in "$@"`, because --remove takes a value.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --status)   STATUS_ONLY=1; shift ;;
+    --hosts)    HOSTS_ONLY=1; shift ;;
+    --dry-run)  DRY=1; shift ;;
+    --remove)   REMOVE="${2:-}"
+                [ -n "$REMOVE" ] || { echo "--remove needs an alias" >&2; exit 2; }
+                shift 2 ;;
+    --remove=*) REMOVE="${1#--remove=}"
+                [ -n "$REMOVE" ] || { echo "--remove needs an alias" >&2; exit 2; }
+                shift ;;
+    # 2,9p, not 2,5p: the old range stopped at --status, so --help never
+    # mentioned --hosts or --dry-run at all.
+    -h|--help)  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
@@ -759,6 +769,145 @@ HOSTS_FILE="${HOSTS_FILE:-/etc/hosts}"
 HOSTS_MARKER="# mac for ios simulator work"
 
 # The Host block on disk, or the address this run just configured for it.
+# --- removing a network ------------------------------------------------------
+# The anti-wizard. Adding a network writes three things that must agree, and
+# setup.md's sentence cuts both ways: two out of three produces a failure that
+# looks like something else, whether you got there by adding or by taking away.
+# Removing an address from /etc/hosts and leaving it in allowedDomains means the
+# sandbox still permits a host that no longer resolves; leaving the Host block
+# means `ssh <alias>` hangs on an address nothing answers.
+#
+# Order is the mirror of phase B. The Host block goes first because everything
+# else is derived from it: allowedDomains loses the address the block named, and
+# /etc/hosts is rebuilt from the aliases that remain, which is the same
+# write_etc_hosts the add path ends with.
+
+ssh_block_remove() { # <alias>
+  if dry; then would "remove the Host $1 block from $SSH_CONFIG"; return 0; fi
+  local tmp; tmp=$(mktemp)
+  ALIAS="$1" python3 - "$SSH_CONFIG" > "$tmp" <<'PY'
+import os, sys
+
+alias = os.environ["ALIAS"]
+lines = open(sys.argv[1]).read().split("\n")
+out, skipping = [], False
+for ln in lines:
+    head = ln.strip().split()
+    if head and head[0].lower() == "host":
+        skipping = alias in head[1:]
+        if skipping:
+            # Drop the blank line that separated this block from the one above,
+            # so removing a block from the middle does not leave a double gap.
+            while out and not out[-1].strip():
+                out.pop()
+            continue
+    if skipping:
+        continue
+    out.append(ln)
+sys.stdout.write("\n".join(out).rstrip("\n") + "\n")
+PY
+  cat "$tmp" > "$SSH_CONFIG"
+  rm -f "$tmp"
+}
+
+allowed_domains_drop() { # <value>
+  [ -r "$SETTINGS" ] || { warn "$SETTINGS does not exist"; return 1; }
+  jq empty "$SETTINGS" 2>/dev/null || { warn "$SETTINGS is not valid JSON"; return 1; }
+  local tmp; tmp=$(mktemp)
+  jq --arg d "$1" '
+    .sandbox.network.allowedDomains =
+      ((.sandbox.network.allowedDomains // []) | map(select(. != $d)))
+  ' "$SETTINGS" > "$tmp"
+  if diff -q <(jq -S . "$SETTINGS") <(jq -S . "$tmp") >/dev/null; then
+    ok "allowedDomains does not carry $1"
+    rm -f "$tmp"; return 0
+  fi
+  say ""
+  say "  $SETTINGS would change:"
+  diff <(jq -S . "$SETTINGS") <(jq -S . "$tmp") | sed 's/^/    /' || true
+  say ""
+  if dry; then would "apply that to $SETTINGS"; rm -f "$tmp"; return 0; fi
+  if confirm "Apply that?" y; then
+    local b; b=$(backup_of "$SETTINGS")
+    cat "$tmp" > "$SETTINGS"
+    ok "written (backup: $b)"
+  else
+    warn "left unchanged — the sandbox will still permit $1, which now resolves"
+    warn "to nothing. That is two of three."
+  fi
+  rm -f "$tmp"
+}
+
+remove_network() { # <alias>
+  local alias="$1" addr others a shared=""
+  step "Remove $alias"
+
+  addr=$(ssh_block_hostname "$alias" || true)
+  if [ -z "$addr" ]; then
+    warn "no Host block named $alias in $SSH_CONFIG."
+    say  ""
+    say  "  Configured: $(configured_aliases | tr '\n' ' ')"
+    return 2
+  fi
+
+  # A Host line naming several aliases is one block serving all of them, so
+  # removing "the block" would take the others with it silently.
+  if [ "$(awk -v a="$alias" 'tolower($1)=="host" { for (i=2;i<=NF;i++) if ($i==a) print NF-1 }' "$SSH_CONFIG" | head -1)" != "1" ]; then
+    warn "the Host line naming $alias names other aliases too."
+    warn "Removing the block would take them with it. Split it by hand first."
+    return 1
+  fi
+
+  others=$(configured_aliases | grep -vx "$alias" || true)
+  if [ -z "$others" ]; then
+    warn "$alias is the only configured network."
+    warn "Phase A's key path and the Mac's username are both read back FROM a"
+    warn "Host block, so removing the last one loses the record of them as well"
+    warn "as the route. Add another network before taking this one out."
+    return 1
+  fi
+
+  # An address two aliases share is not this alias's to withdraw.
+  for a in $others; do
+    [ "$(ssh_block_hostname "$a" || true)" = "$addr" ] && shared="$shared $a"
+  done
+
+  say ""
+  say "  $alias points at $addr."
+  say "  What goes:"
+  say "    the Host $alias block in $SSH_CONFIG"
+  if [ -n "$shared" ]; then
+    say "    NOT $addr from allowedDomains —$shared still uses it"
+    say "    NOT its /etc/hosts line, for the same reason"
+  else
+    say "    $addr from allowedDomains in $SETTINGS"
+    say "    its line in $HOSTS_FILE, rebuilt from what is left"
+  fi
+  say ""
+  say "  Staying: the key, the phase A marker, and every other network."
+  say ""
+  confirm "Remove $alias?" n || { warn "left alone"; return 0; }
+
+  local b; b=$(backup_of "$SSH_CONFIG")
+  ssh_block_remove "$alias"
+  ok "Host $alias removed (backup: $b)"
+
+  if [ -z "$shared" ]; then
+    allowed_domains_drop "$addr" || true
+  fi
+
+  # Rebuilt, not edited: write_etc_hosts regenerates the whole block from the
+  # aliases that remain, so the file cannot end up describing a network that is
+  # no longer configured.
+  write_etc_hosts || warn "$HOSTS_FILE was not rewritten"
+
+  say ""
+  say "  The Mac may still hold a network-change profile for this network. This"
+  say "  script has no record of which SSID belonged to which alias — phase C"
+  say "  reads it off the interface live — so that one is by hand:"
+  say "    ssh <an alias that still works> and edit $REMOTE_SCRIPT"
+}
+
 hosts_addr_for() { # <alias>
   local a; a=$(ssh_block_hostname "$1")
   if [ -z "$a" ] && [ "$1" = "${B_ALIAS:-}" ]; then a="${B_ADDR:-}"; fi
@@ -923,6 +1072,11 @@ command -v jq >/dev/null 2>&1 || {
   say "  jq is needed and is missing — install it and re-run."
   exit 1
 }
+
+if [ -n "$REMOVE" ]; then
+  remove_network "$REMOVE"
+  exit $?
+fi
 
 if [ "$HOSTS_ONLY" = 1 ]; then
   write_etc_hosts

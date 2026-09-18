@@ -496,6 +496,42 @@ where it reported `warn no marker`, so the re-run branch — "Phase A ran on …
 nothing to do" — is live from here, and that is the branch every subsequent
 network depends on.
 
+**An anti-wizard, built 18 Sep: `wizard.sh --remove <alias>`.** Adding a network
+writes three things that must agree, and this item's opening sentence cuts both
+ways — two out of three is a failure that looks like something else whether you
+got there by adding or by taking away. An address left in `allowedDomains` after
+its `/etc/hosts` line has gone means the sandbox permits a host that no longer
+resolves; a Host block left behind means `ssh <alias>` hangs on an address
+nothing answers.
+
+It is the mirror of phase B and reuses its parts: the Host block goes first
+because the rest is derived from it, then `allowedDomains` loses the address that
+block named, then `write_etc_hosts` — the same function the add path ends with —
+rebuilds the whole block from the aliases that remain, so the file cannot end up
+describing a network that is no longer configured.
+
+Four refusals, each for a way of stranding the machine:
+
+- **the last network**, because phase A's key path and the Mac's username are
+  both read back *from* a Host block, so removing the last one loses the record
+  of them as well as the route;
+- **a Host line naming several aliases**, which is one block serving all of them
+  — removing "the block" would take the others silently;
+- **an unknown alias**, which exits 2 and prints what *is* configured, because a
+  typo's useful answer is the list;
+- **an address another alias still uses**, which is kept, and the message names
+  the alias keeping it.
+
+What it deliberately does not touch: the key, the phase A marker, and the Mac's
+own network-change profile. The last of those is not squeamishness — nothing
+local records which SSID belonged to which alias, because phase C reads it off
+the interface live, so the script says so and points at the file to edit.
+
+**Nine cases, and the round trip is the one that matters**: add a network, remove
+it, and all three files are back where they started — `ssh_config` and
+`/etc/hosts` byte-identical, `allowedDomains` identical in value (jq rewrites the
+file, so the bytes move and the values must not).
+
 **Still unexercised: phases B and C.** B needs something to write, and this
 machine has nothing — see above. C cannot be reached on its own: it is offered
 only inside `if phase_b; then … if confirm "Run phase C"`, so a successful B has
@@ -503,7 +539,7 @@ to happen first. C also cycles the Mac's Wi-Fi on purpose, taking down every SSH
 session, the wall and any running driver with it, and polls up to 40 times for
 recovery — so it wants a moment when nothing else on the Mac matters.
 
-**Coverage: 71 package cases, up from 37 when this started.** Seven of them are
+**Coverage: 80 package cases, up from 37 when this started.** Seven of them are
 the fresh-machine path, which had none, and they were checked against the bug
 they exist for — reintroducing the unassigned `local` turns six of the seven red.
 
