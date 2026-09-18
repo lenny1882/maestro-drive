@@ -1135,8 +1135,24 @@ a usbmux forwarder, a lock refusal, and `remote/iproxy.py` with it.
 iOS-specific helpers is what a second PLATFORM trips over, so 5.4 wants doing
 before 4.3 and 4.4 rather than after them.
 
-**Order.** Stage 1, then 2.1, then Stage 3, then 5.1 — all done. Then 5.4,
-then Stage 4, with 2.2 whenever there is an RN checkout to use.
+**The flutter module is verified end to end as of 18 Sep, every verb but one.**
+`claim` against sixteen checkouts, `describe`, `variants` and
+`variant-for-appid` against the seven-flavour repo, `build`, `residue`,
+`devsession`, `prefs-prefix`, `inspect` in both failure modes AND in success,
+`traffic-arm` live with both states, `traffic-list` end to end.
+
+`traffic-one` is the one not exercised. It needs a recorded request, and the app
+under test fetches its store list at startup and caches it — tapping through the
+picker made no further call, and a login needs a PIN. It differs from
+`traffic-list` only in the RPC name and net.py's mode, both exercised.
+
+The live run also found a bug in 1.4 that could never have worked: the module
+addressed net.py as `$RDIR/net.py`, a path on the MAC, for verbs that run in the
+sandbox. Only the SSH fallback worked, and nothing had reached the fast path.
+
+**Order.** Stage 1, 2.1, Stage 3, 5.1, 5.2, 5.4's first half and the traffic
+verification — all done. Left: 5.4's second half (`runners/ios-device`), Stage 4,
+5.3, and 2.2 whenever there is an RN checkout to use.
 
 **Answered 18 Sep: neither is on that Mac today.** No `adb`, no SDK directory,
 no `~/.android/avd`, no emulator binary; `~/.maestro/deps` holds the iOS capture
