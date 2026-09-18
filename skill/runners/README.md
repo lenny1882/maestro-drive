@@ -122,6 +122,7 @@ One executable, `runners/<name>/platform.sh`. All of it runs on the Mac except
 | `driver-up <id> <port>` | start a Maestro driver for that device on that port | `remote/driverup.sh`, `remote/deviceup.sh` |
 | `driver-down <id>` | stop it | `drivers.sh down` |
 | `driver-scan` | the live map: `<id> <port> <pid>` per line | `_driver_scan` in `bin/lib.sh` |
+| `last-used` | `<id>\|<yyyymmdd>\|<human>\|<today>` per booted device, in one call, for `rig reap` | the CoreSimulator container walk in `bin/drivers.sh` |
 | `capture-cmd <id>` | the command line for the wall's per-device capture process | `simulator-server ios --id <udid>` in `remote/wall.py` |
 
 `driver-up` and `driver-scan` are the two that carry the most iOS in them —

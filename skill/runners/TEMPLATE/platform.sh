@@ -132,6 +132,19 @@ driver-scan)
   exit 2
   ;;
 
+# --- last-used ---------------------------------------------------------------
+# "<id>|<yyyymmdd>|<human>|<today-yyyymmdd>" for every booted device, one per
+# line, in ONE call. `drivers.sh rig reap` needs it to tell a leftover from
+# somebody's live work: a device touched today is never reaped, whoever booted
+# it. Today's date comes from the device's own host, not from the caller, so a
+# clock skew between the two cannot reap a live device.
+#
+# An empty date field means "cannot tell", and the caller must treat that as
+# recent rather than stale.
+last-used)
+  exit 2
+  ;;
+
 # --- capture-cmd <id> --------------------------------------------------------
 # The command line the wall should run for a live view of that device, printed
 # as one line. The wall spawns it, reads its frames and restarts it when it goes

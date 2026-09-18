@@ -2807,15 +2807,18 @@ reap() { # reap <claimed-udids> <driver-map> <rows> [--shutdown] -> the verdict 
   local T_CLAIMED="$1" dmap="$2" rws="$3"; shift 3
   ( eval "$(sed -n '/^_rig_reap() {/,/^}/p' "$REPO/bin/drivers.sh")"
     MAC_HOST=x; RIG_OWNED=/x; RDIR=/x
+    # The reap probe is a platform verb now, so the stub needs its path to
+    # discriminate on — lib.sh would normally set it.
+    PLATFORM_SH=/x/runners/ios/platform.sh
     _booted()      { printf 'AAAA\tiPhone A\nBBBB\tiPhone B\n'; }
     _driver_map()  { printf '%s' "$dmap"; }
     _driver_scan() { :; }
-    # The claimed list arrives as `cat '/x'/* ...` and the rows as a script
-    # containing simctl; matching on the quoted path does not work through the
-    # quotes, so discriminate on the command instead.
-    _ssh() { case "$*" in *simctl*) printf '%s' "$rws" ;;
-                          cat*)     printf '%s' "$T_CLAIMED" ;;
-                          *)        : ;; esac; }
+    # The claimed list arrives as `cat '/x'/* ...` and the rows as a call to the
+    # platform's last-used; matching on the quoted path does not work through the
+    # quotes, so discriminate on the verb instead.
+    _ssh() { case "$*" in *last-used*) printf '%s' "$rws" ;;
+                          cat*)        printf '%s' "$T_CLAIMED" ;;
+                          *)           : ;; esac; }
     _rig_reap "$@" ) 2>&1
 }
 TDY=$(date +%Y%m%d)

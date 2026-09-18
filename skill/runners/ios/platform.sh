@@ -143,6 +143,30 @@ driver-scan)
   exit 0
   ;;
 
+last-used)
+  # "<id>|<yyyymmdd>|<human>" for every booted device, plus today's date, in one
+  # call. `rig reap` needs it to tell a leftover from somebody's live work.
+  #
+  # Two levels deep, not one. A container directory's mtime only moves when its
+  # IMMEDIATE contents change, so the container itself reported 16 Sep for a
+  # device driven all day on the 18th; Documents/ and Library/ inside it gave the
+  # right answer, which is what a recursive walk would return for the cost of a
+  # glob.
+  _today=$(date +%Y%m%d)
+  for _u in $(xcrun simctl list devices booted | sed -n "s/.*(\([0-9A-Fa-f-]\{36\}\)).*/\1/p"); do
+    _d="$HOME/Library/Developer/CoreSimulator/Devices/$_u/data/Containers/Data/Application"
+    _l=$(ls -td "$_d"/*/*/ 2>/dev/null | head -1)
+    [ -n "$_l" ] || _l=$(ls -td "$_d"/*/ 2>/dev/null | head -1)
+    if [ -n "$_l" ]; then
+      _e=$(stat -f %m "$_l" 2>/dev/null)
+      echo "$_u|$(date -r "$_e" +%Y%m%d 2>/dev/null)|$(date -r "$_e" "+%Y-%m-%d %H:%M" 2>/dev/null)|$_today"
+    else
+      echo "$_u|||$_today"
+    fi
+  done
+  exit 0
+  ;;
+
 capture-cmd)
   # Maestro's own capture binary, one per device, started by the wall's scan
   # loop whether or not a browser is attached. It takes the platform as its
