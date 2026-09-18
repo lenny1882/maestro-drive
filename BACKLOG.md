@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 93.** Items 1–92 are allocated; new items start from 93.
+**Next item number: 94.** Items 1–93 are allocated; new items start from 94.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -88,6 +88,55 @@ work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
 
 ---
+
+## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **OPEN, raised 18 Sep**
+
+Split out of item 87's Stage 5, where it was 5.3. **The work is in the
+`flutter-hot-reload-mac` repo, not this one** — it is raised here because this
+is where the seam it should plug into lives.
+
+The sister skill installs alongside this one, reads **the same
+`.maestro-mac.conf`**, and does the half this package deliberately does not:
+build from source, launch under `flutter run`, push local edits as hot reloads.
+
+**It defaults where this package discovers, from the same conf file.**
+
+```
+flutter-hot-reload-mac                    runners/flutter
+bin/lib.sh:46  FLUTTER_BIN               build.sh  _flutter(), eight candidates
+   := .fvm/flutter/bin/flutter                     in preference order, the
+                                                   pinned SDK first
+bin/lib.sh:48  TARGET                    build.sh  derived from the flavour,
+   := lib/main_dev.dart                            which is derived from APP_ID
+remote/frun.py:34  FRUN_FLUTTER          build.sh  the same discovery
+   := .fvm/flutter/bin/flutter
+remote/frun.py:55  --flavor FLAVOR       build.sh  _flavour_for_appid, which
+                                                   REFUSES rather than guessing
+```
+
+`lib/main_dev.dart` is hardcoded as the entrypoint. This package works it out
+from the bundle id under test and refuses when two flavours build the same one,
+because building the wrong flavour installs a different app and leaves the one
+under test untouched — which nothing reports. So a project that is not
+`dev`-flavoured gets the right answer from one skill and the wrong one from the
+other, **reading the same file**.
+
+**And it has the sharper problem item 24 recorded:** `bin/start.sh` runs
+`git checkout` on the single shared `$REPO`, so pointing it at a review branch
+silently clobbers uncommitted work in whatever else is using that checkout. That
+is a safety requirement for concurrent reviews, not a tidiness one.
+
+**What it should consume.** `describe`, `build` and `inspect` are already the
+verbs it needs. `inspect` especially: it has its own VM Service discovery in
+`frun.py` reading `/tmp/frun.log`, which is the SECOND log file
+`runners/flutter/vmservice.sh` already checks by name — the two were written
+against each other by hand rather than sharing one answer.
+
+**The payoff is not tidiness.** It is that "hot reload a React Native app"
+becomes a module rather than a second skill, and that two skills reading one
+conf stop being able to disagree about which flavour a project builds.
+
+**Gated on:** item 87 landing, so there is a stable contract to plug into.
 
 ## 90. The wall shows simulators only, and a phone is a device too — **OPEN, raised 18 Sep**
 
@@ -1210,9 +1259,9 @@ runner survives a setup. PLATFORM is ios with the reason given: nothing is
 booted yet to ask about. The gitignore advice covers `.maestro-mac.conf.*` too,
 which is where a credential actually lives in a two-environment project.
 
-**5.3 `flutter-hot-reload-mac`.** The sister package, Flutter by definition, and
-it plugs into this same seam. Out of scope for this item and it will not stay
-out.
+**5.3 is now item 93** and left this one. It is work in another repo, and
+keeping it inside 87 made 87 look unfinished when what remains is a separate
+package's to do.
 
 **5.4 `remote/` keeps only shared code.** Raised by Stage 3 rather than planned:
 three files there are a module's own territory and sit outside `runners/`
