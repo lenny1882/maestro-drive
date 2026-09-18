@@ -19,6 +19,12 @@ the driver's HTTP API, relayed onto the LAN. It reads the hierarchy in 0.28 s,
 taps in 0.46 s, resolves elements by label itself — applying the marker
 transform rather than guessing — and drives several devices at once.
 
+**Driving is the same whatever built the app; building it is not.** A tap is a
+tap, so everything above generalises. Working out how the project builds,
+installing the result and reading inside the running app do not — those are
+Flutter's answers, or React Native's, or a plain Xcode project's, and they come
+from two plug-in modules rather than from the scripts. See **Runners** below.
+
 ## What you actually see
 
 A Claude session on Linux that can be told "drive the app" and does, on a
@@ -148,11 +154,54 @@ Removes `~/.claude/skills/maestro-remote-mac`. If you added either hook to
 `settings.json` by hand, remove those entries yourself — the installer never put
 them there, so the uninstaller will not take them out.
 
+## Runners
+
+Two questions are being answered and they are independent, so there are two
+modules rather than one setting:
+
+```
+: "${RUNNER:=flutter}"     # framework: how it is built, how you see inside it
+: "${PLATFORM:=ios}"       # platform:  how it is installed and driven
+```
+
+They cross — Flutter-on-Android is a real combination — which is why `flutter`
+and `android` cannot be alternatives to each other. Both default to what the
+package has always done, so a conf that does not mention them is unchanged.
+
+```sh
+skill/bin/runner.sh which     # the two in use, and what else exists
+skill/bin/runner.sh detect    # ask each framework to claim the checkout
+```
+
+`skill/runners/README.md` is the contract: the verbs each module answers, which
+side of the SSH boundary each runs on, and the rules a new one has to keep.
+`runners/TEMPLATE/` is the module to copy.
+
+| module | state |
+| --- | --- |
+| `runners/flutter` | complete — every verb verified against a live app |
+| `runners/ios` | complete — every verb verified against a booted simulator |
+| `runners/ios-device` | complete — every answerable verb verified against a physical iPhone |
+| `runners/react-native` | stub; nothing in it has been run |
+| `runners/android` | stub; nothing in it has been run |
+
+Both stubs say so at the top and mark each verb as documented-not-measured or
+unanswered. Six are unanswered on purpose, because each is a question the
+contract does not yet settle — an AVD name and an emulator serial are not the
+same identifier, Maestro's Android driver is an instrumented APK rather than an
+`xcodebuild` run, and so on. `runners/README.md` lists them.
+
+**A module that lacks a verb says so rather than failing.** Exit 2 means "this
+framework does not have that", so `bin/net.sh` under a framework with no traffic
+endpoint prints why and exits 2 — which is not a broken relay, and the
+distinction is the point.
+
 ## How it works
 
 `skill/` is the whole of what gets installed; everything else in this repo is
-packaging. Inside it, `bin/` runs on the Linux box and `remote/` is copied to
-the Mac on demand and run there.
+packaging. Inside it, `bin/` runs on the Linux box, `runners/` holds the plug-in
+modules, and `remote/` is what is copied to the Mac and run there regardless of
+which modules are in use — a Maestro hierarchy reader and a port forwarder.
 
 Two undocumented behaviours the toolkit depends on, both of which could be
 withdrawn without notice:

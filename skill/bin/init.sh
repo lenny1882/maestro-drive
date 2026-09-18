@@ -136,6 +136,34 @@ EOF
 #: "${APP_PIN:=}"
 VALS
   [ -n "$REPO" ] && printf '\n# Checkout on the Mac, for git and source reading.\n: "${REPO:=%s}"\n' "$REPO" >> "$OUT"
+
+  # Which runner modules this project uses (BACKLOG item 87). Driving is the
+  # same whatever built the app; building it, installing it and reading inside
+  # it are not, and those come from two plug-in modules.
+  #
+  # The framework is ASKED rather than assumed, because the checkout is right
+  # there and a wrong guess sends a session down a path that cannot work.
+  # PLATFORM is written as ios and not detected: nothing has been booted at this
+  # point in a first-time setup, so there is no device to ask about.
+  _rn=
+  if [ -n "$REPO" ]; then
+    _rn=$(MAESTRO_MAC_CONF="$OUT" MAC_HOST="$HOST" MAC_FQDN="$FQDN" APP_ID="$APP" REPO="$REPO" \
+          "$(dirname "$0")/runner.sh" detect 2>/dev/null |
+          sed -n 's/^RUNNER=\([a-z-][a-z-]*\).*/\1/p')
+  fi
+  {
+    printf '\n# Which runner modules build and install this app. Driving is the same\n'
+    printf '# whatever built it; these two decide the rest. runners/README.md is the\n'
+    printf '# contract, and bin/runner.sh which says what else is available.\n'
+    if [ -n "$_rn" ]; then
+      printf ': "${RUNNER:=%s}"     # detected from the checkout on the Mac\n' "$_rn"
+    else
+      printf '# No framework module claimed the checkout, or REPO was not given, so this\n'
+      printf '# is the default rather than a finding. bin/runner.sh detect asks again.\n'
+      printf ': "${RUNNER:=flutter}"\n'
+    fi
+    printf ': "${PLATFORM:=ios}"      # not detected: nothing is booted yet to ask about\n'
+  } >> "$OUT"
   [ -n "$DEVU" ] && printf '\n# Pin a simulator. Empty means the first booted one.\n: "${DEV:=%s}"\n' "$DEVU" >> "$OUT"
   echo "wrote $OUT"
   sed 's/^/  /' "$OUT"
@@ -145,11 +173,17 @@ VALS
     cat <<'NOTE'
 
 This is a git working tree. .maestro-mac.conf and maestro/ are untracked, so
-they will show in `git status` and can be committed by accident. Decide with
-whoever owns the repo whether they belong in it; to keep them out, add:
+they will show in `git status` and can be committed by accident.
+
+The conf is the one file that must stay out: it is where a credential goes, and
+bin/secrets.sh only checks it is gitignored once a project value exists — so the
+first APP_PIN written into it would land in an untracked, unignored file that a
+`git add -A` sweeps straight in. The second pattern is the PROFILE layering.
+maestro/ is your decision; the journeys and notes in it are usually worth
+committing.
 
   .maestro-mac.conf
-  maestro/
+  .maestro-mac.conf.*
 NOTE
   fi
   exit 0

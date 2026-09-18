@@ -27,22 +27,23 @@ _dsuffix() { local dv=${DEV:-}; [ -n "$dv" ] || dv=$(_dev 2>/dev/null) || dv=; p
 _sfx=$(_dsuffix)
 STATE="$LDIR/published${_sfx:+-$_sfx}.state"
 
-# _vm <base> <rpc-with-query>   — a VM Service call through the sandbox proxy
+# Finding the app's debug endpoint, and arming its traffic capture, are the
+# framework's job — the Dart VM Service for Flutter, Metro for React Native,
+# nothing at all for a plain Xcode app (BACKLOG item 87, call site 4). Publishing
+# it is not: relay.py forwards a loopback port to the LAN and does not care what
+# is behind it, so the relay, the state file and the per-device suffix stay here.
+HERE=$(cd "$(dirname "$0")" && pwd)
+FW_LOCAL=$("$HERE/runner.sh" path framework) || exit 1
+FW_REMOTE=$("$HERE/runner.sh" rpath framework) || exit 1
+
+# _vm <base> <rpc-with-query>   — a VM Service call through the sandbox proxy.
+# Kept for the by-hand recipe _report prints; nothing above it uses it now.
 _vm() { curl -s -x "$grpc_proxy" --max-time 8 "$1/$2" 2>/dev/null; }
 
-# on|off|unknown
-_profiling() { # _profiling <base> <isolate>
-  local r; r=$(_vm "$1" "ext.dart.io.httpEnableTimelineLogging?isolateId=$2")
-  case "$r" in
-    *'"enabled":true'*)  echo on ;;
-    *'"enabled":false'*) echo off ;;
-    *)                   echo unknown ;;
-  esac
-}
-
-_profiling_on() { # _profiling_on <base> <isolate>
-  _vm "$1" "ext.dart.io.httpEnableTimelineLogging?isolateId=$2&enabled=true" >/dev/null
-  _profiling "$1" "$2"
+# "<was> <now>", each on|off|unknown. The module runs here in the sandbox and
+# reaches the published relay through $grpc_proxy.
+_arm() { # _arm <base> <isolate>
+  sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null || true
 }
 
 # Everything a later ad-hoc call needs, in one place. Both sessions reviewed on
@@ -79,7 +80,7 @@ case "${1:-start}" in
     read -r BASE ISO < "$STATE" 2>/dev/null || { echo "nothing published — run: $0"; exit 1; }
     if [ -n "$BASE" ] && _vm "$BASE" getVersion | grep -q '"type"'; then
       echo "reachable"
-      _report "$BASE" "$ISO" "$(_profiling "$BASE" "$ISO")"
+      _report "$BASE" "$ISO" "$(_arm "$BASE" "$ISO" | awk '{print $2}')"
     else
       echo "not reachable — the app has probably restarted. Re-run: $0" ; exit 1
     fi
@@ -87,9 +88,22 @@ case "${1:-start}" in
   start)
     d=$(_dev) || exit 1
     STATE="$LDIR/published-$d.state"      # the resolved device is authoritative here
-    V=$(_ssh "bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice-$d' | tail -1") || exit 1
+    # No pipe on the remote side. `| tail -1` there would hand back tail's exit
+    # status, which is always 0, and the whole point here is telling an exit 2
+    # ("this framework has no debug endpoint") from an exit 1 ("it has one and
+    # the app is not running under it"). Tail locally instead.
+    V=$(_ssh "RDIR='$RDIR' sh '$FW_REMOTE' inspect '$d' '$RDIR/vmservice-$d'")
+    _rc=$?
+    V=$(printf '%s\n' "$V" | tail -1)
+    if [ "$_rc" = 2 ]; then
+      echo "the ${RUNNER:-?} runner has no debug endpoint to publish, so there is" >&2
+      echo "  nothing for the relay to point at and bin/net.sh will stay empty." >&2
+      echo "  That is a fact about this framework, not a broken relay." >&2
+      exit 2
+    fi
+    [ "$_rc" = 0 ] || exit 1
     VBASE=${V%% *}; ISO=${V##* }
-    [ -n "$VBASE" ] || { echo "no VM service - is the app running under flutter run?" >&2; exit 1; }
+    [ -n "$VBASE" ] || { echo "no debug endpoint — is a dev session running? bin/preflight.sh says." >&2; exit 1; }
     RPORT=$(printf '%s' "$VBASE" | sed -E 's|.*:([0-9]+)/.*|\1|')
     RPATH=$(printf '%s' "$VBASE" | sed -E 's|.*:[0-9]+||')
 
@@ -101,9 +115,8 @@ case "${1:-start}" in
     printf 'http://%s:%s%s %s\n' "$MACIP" "$PUBPORT" "$RPATH" "$ISO" > "$STATE"
     read -r PBASE _ < "$STATE"
 
-    was=$(_profiling "$PBASE" "$ISO")
-    now=$was
-    [ "$was" = on ] || now=$(_profiling_on "$PBASE" "$ISO")
+    read -r was now <<< "$(_arm "$PBASE" "$ISO")"
+    was=${was:-unknown}; now=${now:-unknown}
     case "$was:$now" in
       off:on) note="was off, now on — only calls made from here on are captured" ;;
       on:on)  note="already on" ;;

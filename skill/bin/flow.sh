@@ -76,15 +76,32 @@ python3 '$RDIR/hier.py' '$RDIR/hier.json'"
 
 [ -n "$SHOT" ] && POST="$POST
 echo '--- screenshot ---'
-xcrun simctl io $d screenshot '$RDIR/$SHOT.png' >/dev/null 2>&1 && echo '$RDIR/$SHOT.png'"
+sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$SHOT.png' && echo '$RDIR/$SHOT.png'"
 
 # Body goes over stdin, so quotes and \$ in the YAML survive intact.
+# The status is captured BEFORE the filter, not after it. `maestro test | grep
+# | tail` returns tail's status, which is always 0, so a failed flow used to
+# read as a passed one to anything checking the exit code — the failure text was
+# in the output and the status said fine. Same shape as items 88 and 87's 1.3.
+#
+# $POST still runs on a failure: a screenshot of a flow that went wrong is worth
+# more than one of a flow that did not.
 printf '%s\n' "$BODY" | _ssh "cat > '$RDIR/flows/_adhoc.yaml'
-maestro --device $d test ${ENVS[*]+\"${ENVS[*]}\"} '$RDIR/flows/_adhoc.yaml' 2>&1 \
-  | grep -vE '^\s*\$|Maestro Cloud|maestro cloud|Debug tests faster|^[│╭╰]' | tail -15
-$POST"
+maestro --device $d test ${ENVS[*]+\"${ENVS[*]}\"} '$RDIR/flows/_adhoc.yaml' > '$RDIR/flow.out' 2>&1
+_rc=\$?
+grep -vE '^\s*\$|Maestro Cloud|maestro cloud|Debug tests faster|^[│╭╰]' '$RDIR/flow.out' | tail -15
+$POST
+exit \$_rc"
+# The flow's status, caught the moment it arrives. Everything below runs
+# whatever it was — a screenshot of a flow that failed is the evidence — so
+# without this the script would end on the `if` and exit 0 for a failed flow,
+# which is the bug the remote `exit $_rc` above was meant to fix and did not.
+# Measured 18 Sep: a flow asserting text that is on no screen returned 0.
+rc=$?
 
 if [ -n "$SHOT" ]; then
   ssh "${SSH_OPTS[@]}" "$MAC_HOST" "base64 < '$RDIR/$SHOT.png'" | base64 -d > "$LDIR/$SHOT.png"
   echo "local: $LDIR/$SHOT.png"
 fi
+
+exit "$rc"

@@ -53,8 +53,13 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SIMSERVER = os.path.expanduser("~/.maestro/deps/simulator-server")
-XCRUN = "/usr/bin/xcrun"
+# The platform runner, beside this file's own directory on the Mac (BACKLOG item
+# 87). Which devices exist, and what streams one of them, are the two platform
+# questions the wall asks — everything else it does is layout.
+PLATFORM_SH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "runners", os.environ.get("PLATFORM", "ios"), "platform.sh",
+)
 BOUNDARY = b"--NextFrame"
 SCAN_SECONDS = 5
 UDID_RE = re.compile(r"^[0-9A-Fa-f-]{36}$")
@@ -143,19 +148,24 @@ def read_label(udid):
     return label
 
 
-def parse_booted(data):
-    """[(udid, name)] from `simctl list devices booted -j`, grouped by runtime.
+def parse_booted(rows):
+    """[(udid, name)] from `platform.sh devices --booted`.
 
-    simctl lists every runtime it knows, most of them empty, and reports state
-    per device — so both have to be filtered rather than assumed.
+    Tab separated, `<id> <state> <name> <runtime>`, already filtered and already
+    sorted by runtime then name — so two iPhone 16s on different iOS versions
+    sort with their own kind rather than interleaving. The runtime is read and
+    dropped; it exists for that ordering and nothing here needs it otherwise.
+
+    A short row is skipped rather than guessed at: the runtime column is
+    optional by contract, but the id is not.
     """
     found = []
-    for runtime, devices in (data.get("devices") or {}).items():
-        for d in devices:
-            if d.get("state") == "Booted" and d.get("udid"):
-                found.append((d["udid"], d.get("name") or d["udid"], runtime))
-    found.sort(key=lambda t: (t[2], t[1]))
-    return [(u, n) for u, n, _ in found]
+    for line in (rows or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or not parts[0]:
+            continue
+        found.append((parts[0], parts[2] or parts[0]))
+    return found
 
 
 def split_frames(buf):
@@ -185,16 +195,25 @@ def split_frames(buf):
 
 
 def booted_devices():
-    """[(udid, name)] for every booted simulator."""
+    """[(udid, name)] for every booted device."""
     try:
         out = subprocess.run(
-            [XCRUN, "simctl", "list", "devices", "booted", "-j"],
+            ["sh", PLATFORM_SH, "devices", "--booted"],
             capture_output=True, timeout=30,
         ).stdout
-        return parse_booted(json.loads(out or b"{}"))
-    except Exception as e:                      # simctl missing, Xcode broken
-        log("simctl failed:", e)
+        return parse_booted((out or b"").decode("utf-8", "replace"))
+    except Exception as e:                      # module missing, Xcode broken
+        log("devices failed:", e)
         return []
+
+
+def capture_cmd(udid):
+    """The command line that streams one device, from the platform runner."""
+    out = subprocess.run(
+        ["sh", PLATFORM_SH, "capture-cmd", udid],
+        capture_output=True, timeout=15,
+    )
+    return (out.stdout or b"").decode("utf-8", "replace").strip()
 
 
 class Stream:
@@ -218,12 +237,20 @@ class Stream:
 
     # -- lifecycle ----------------------------------------------------------
     def start(self):
-        if not os.path.exists(SIMSERVER):
-            self.error = "simulator-server not found at %s" % SIMSERVER
+        # What streams a device is the platform's answer. Maestro's capture
+        # binary takes the platform as its first argument, so an Android runner
+        # differs in that word and in nothing else this class can see.
+        cmd = capture_cmd(self.udid).split()
+        if not cmd:
+            self.error = "the %s runner gave no capture command" % os.environ.get("PLATFORM", "ios")
+            log(self.udid, self.error)
+            return False
+        if not os.path.exists(cmd[0]):
+            self.error = "capture binary not found at %s" % cmd[0]
             log(self.udid, self.error)
             return False
         self.proc = subprocess.Popen(
-            [SIMSERVER, "ios", "--id", self.udid],
+            cmd,
             stdin=subprocess.PIPE,              # held open: closing it exits it
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

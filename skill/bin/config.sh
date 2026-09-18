@@ -114,6 +114,20 @@ fi
 # not.
 : "${BUILD_MARKER:=}"
 
+# Which runner modules this project uses (BACKLOG item 87, runners/README.md).
+# Two axes, because they cross: the framework decides how the app is built and
+# how you see inside it, the platform decides how it is installed and driven,
+# and Flutter-on-Android is a real combination.
+#
+# Both default to what this package does today, so an existing conf is
+# unchanged by their arrival. `bin/runner.sh which` says what is selected and
+# what else is available; `bin/runner.sh detect` asks the checkout on the Mac.
+#
+# Nothing in bin/ or remote/ reads these yet — the Flutter and iOS logic is
+# still in the files it has always been in.
+: "${RUNNER:=flutter}"      # framework: flutter | react-native | ios | android
+: "${PLATFORM:=ios}"        # platform:  ios | ios-device | android
+
 # Flutter flavour and entrypoint, for bin/build.sh. Both are normally worked
 # out from the repo — the flavour from which Xcode configuration produces
 # APP_ID, the entrypoint from the flavour — so these are only needed when a

@@ -46,6 +46,13 @@ echo "sanity"
 for f in "$REPO"/bin/*.sh "$REPO"/hooks/*.sh; do
   bash -n "$f" && ok "$(basename "$f") parses" || no "$(basename "$f") parses" "syntax error"
 done
+# The runner modules are POSIX sh, and the template's stubs are the shape every
+# new module starts from — a syntax error in one is a module nobody can copy.
+for f in "$REPO"/runners/*/*.sh; do
+  [ -r "$f" ] || continue
+  n="runners/$(basename "$(dirname "$f")")/$(basename "$f")"
+  sh -n "$f" && ok "$n parses" || no "$n parses" "syntax error"
+done
 python3 -c "import py_compile,sys; py_compile.compile('$REPO/bin/resolve.py', doraise=True)" \
   && ok "resolve.py compiles" || no "resolve.py compiles" "syntax error"
 for f in ipad-landscape-keyboard-up ipad-landscape-system-alert iphone-portrait-keyboard-up; do
@@ -646,6 +653,28 @@ cat > "$APP/Info.plist" <<'PLIST'
 PLIST
 echo 'a binary, with a marker: PROJ-1783-widget-key' > "$APP/Fake"
 
+# appcheck takes `platform.sh installed-info` output, not a path — so that a
+# platform which cannot give a path (a phone gives version and build and nothing
+# else) still gets an answer. This writes what runners/ios would, from the fake
+# bundle above, and the tests below go on testing appcheck's REASONING, which is
+# what they are for. The modules' extraction is verified against real devices.
+mkinfo() {  # mkinfo <bundle> [epoch] -> path to an info file
+  _f=$TMP/appinfo.$$; : > "$_f"
+  [ -n "${1:-}" ] || { printf '%s' "$_f"; return; }
+  echo "container=$1" >> "$_f"
+  _e=${2:-$(stat -c %Y "$1/Fake" 2>/dev/null || stat -f %m "$1/Fake" 2>/dev/null)}
+  [ -n "$_e" ] && echo "epoch=$_e" >> "$_f"
+  echo "version=1.0.0-dev" >> "$_f"
+  echo "build=26" >> "$_f"
+  printf '%s' "$_f"
+}
+# A phone's answer: version and build, no epoch and no container.
+mkinfo_device() {  # mkinfo_device <version> <build>
+  _f=$TMP/appinfo-dev.$$
+  printf 'version=%s\nbuild=%s\n' "${1:?}" "${2:?}" > "$_f"
+  printf '%s' "$_f"
+}
+
 GIT="$TMP/checkout"; mkdir -p "$GIT"
 (cd "$GIT" && git init -q . \
   && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first \
@@ -653,15 +682,15 @@ GIT="$TMP/checkout"; mkdir -p "$GIT"
 git -C "$GIT" log -1 --format=%ct >/dev/null 2>&1 || echo "  note: no usable git, the two comparison cases will be skipped"
 HEAD_AT=$(git -C "$GIT" log -1 --format=%ct 2>/dev/null)
 
-got=$(appcheck "" "$GIT" 2>&1)
+got=$(appcheck "$(mkinfo "")" "$GIT" 2>&1)
 case "$got" in *"not installed"*) ok "an app that is not installed says so" ;;
   *) no "an app that is not installed says so" "got '$got'" ;; esac
 
-got=$(appcheck "$APP" "" 2>&1)
+got=$(appcheck "$(mkinfo "$APP")" "" 2>&1)
 case "$got" in *"no checkout on the Mac"*) ok "no REPO says what is missing, not nothing" ;;
   *) no "no REPO says what is missing, not nothing" "got '$got'" ;; esac
 
-case "$(appcheck "$APP" "" 2>&1)" in
+case "$(appcheck "$(mkinfo "$APP")" "" 2>&1)" in
   *"1.0.0-dev build 26"*) ok "the installed version and build number are read from the bundle" ;;
   *) no "the installed version and build number are read from the bundle" "not in the output" ;;
 esac
@@ -671,14 +700,14 @@ if [ -n "$HEAD_AT" ]; then
   # that bit sessions A and B, both of which found the simulator running a
   # build from another branch.
   touch -d "@$((HEAD_AT - 172800))" "$APP/Fake" 2>/dev/null
-  got=$(appcheck "$APP" "$GIT" 2>&1)
+  got=$(appcheck "$(mkinfo "$APP")" "$GIT" 2>&1)
   case "$got" in *STALE*"2 days"*) ok "a build older than HEAD is called stale, with the gap" ;;
     *) no "a build older than HEAD is called stale, with the gap" "got '$got'" ;; esac
 
   # And the reverse must not overclaim: newer than HEAD is not proof of which
   # branch it came from, because a checkout can move after a build.
   touch -d "@$((HEAD_AT + 3600))" "$APP/Fake" 2>/dev/null
-  got=$(appcheck "$APP" "$GIT" 2>&1)
+  got=$(appcheck "$(mkinfo "$APP")" "$GIT" 2>&1)
   case "$got" in
     *STALE*) no "a build newer than HEAD is not called stale" "it was" ;;
     *"does not prove"*) ok "a newer build is reported without claiming the branch" ;;
@@ -686,11 +715,52 @@ if [ -n "$HEAD_AT" ]; then
   esac
 fi
 
-got=$(appcheck "$APP" "" "PROJ-1783-widget-key" 2>&1)
+got=$(appcheck "$(mkinfo "$APP")" "" "PROJ-1783-widget-key" 2>&1)
 case "$got" in *"marker: found"*) ok "a marker that is in the bundle is found" ;;
   *) no "a marker that is in the bundle is found" "got '$got'" ;; esac
 
-got=$(appcheck "$APP" "" "not-in-this-build" 2>&1)
+# A PHONE'S ANSWER: version and build, no install time and no bundle. This is
+# the case that had no answer at all before — appcheck needed a path, so "is the
+# app on this device the code under test" could not be asked of a device.
+got=$(appcheck "$(mkinfo_device 3.0.4-uat 43)" "$GIT" "" "3.0.4+43" 2>&1)
+case "$got" in
+  *"no install time"*"version ok"*) ok "a device with no install time is checked on its version instead" ;;
+  *) no "a device with no install time is checked on its version instead" "got: $got" ;;
+esac
+case "$got" in
+  *"flavour decorating the version"*) ok "a flavour suffix is named, not treated as a mismatch" ;;
+  *) no "a flavour suffix is named, not treated as a mismatch" "got: $got" ;;
+esac
+# The whole point: a build that is NOT this code is caught by the version even
+# when nothing can be read from the device but a version.
+got=$(appcheck "$(mkinfo_device 3.0.3-uat 41)" "$GIT" "" "3.0.4+43" 2>&1)
+case "$got" in
+  *"VERSION MISMATCH"*"not this code"*) ok "a device running an older build is caught by the version" ;;
+  *) no "a device running an older build is caught by the version" "got: $got" ;;
+esac
+# 1.0.0-beta against a checkout building 1.0.0 must still fail — the suffix rule
+# matches "the built version plus -<suffix>", it does not strip everything after
+# a dash.
+got=$(appcheck "$(mkinfo_device 1.0.0 9)" "$GIT" "" "2.0.0+9" 2>&1)
+case "$got" in
+  *"VERSION MISMATCH"*) ok "a different version is a mismatch whatever the suffix rule" ;;
+  *) no "a different version is a mismatch whatever the suffix rule" "got: $got" ;;
+esac
+# A marker cannot be checked without a bundle, and saying so beats reporting it
+# missing — "MARKER MISSING" on a device would read as the wrong build.
+got=$(appcheck "$(mkinfo_device 3.0.4 43)" "$GIT" "some-marker" "3.0.4+43" 2>&1)
+case "$got" in
+  *"cannot be checked"*"no readable app bundle"*) ok "a marker on a device says it cannot be checked, not that it is missing" ;;
+  *) no "a marker on a device says it cannot be checked, not that it is missing" "got: $got" ;;
+esac
+# And nothing at all to go on must not read as a pass.
+got=$(appcheck "$(mkinfo_device 3.0.4 43)" "" "" "" 2>&1)
+case "$got" in
+  *"nothing could be compared"*) ok "no comparable facts says so rather than looking like a pass" ;;
+  *) no "no comparable facts says so rather than looking like a pass" "got: $got" ;;
+esac
+
+got=$(appcheck "$(mkinfo "$APP")" "" "not-in-this-build" 2>&1)
 case "$got" in *"MARKER MISSING"*) ok "a marker that is absent is called out" ;;
   *) no "a marker that is absent is called out" "got '$got'" ;; esac
 
@@ -1366,12 +1436,17 @@ out=$(drv script "$TMP/fail.journey" 2>&1); rc=$?
 
 echo
 echo "a dead device driver names the real cause, not the relay (item 46)"
-# _devdrv_hint probes lockState and the Mac's device driver log on a status
-# failure. Extract just that function and drive it with a fake _ssh that answers
-# both probes, so no Mac is needed. DEV is set because the function names it.
+# _devdrv_hint asks the platform whether the device is locked, and reads the
+# Mac's device driver log, on a status failure. Extract just that function and
+# drive it with a fake _ssh, so no Mac is needed.
+#
+# The lock probe answers by EXIT STATUS now, not by printing: 0 locked, 1 not,
+# 2 the question does not apply — which is what a simulator udid gets, and is
+# how the check self-gates. PLATFORM_SH is what lib.sh would have set.
 DRVLOG='Testing started\nThe connection was invalidated\n** TEST EXECUTE FAILED **\n'
 if ( DEV=devudid
-     _ssh(){ case "$*" in *lockState*) echo "  passcodeRequired: false" ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 1 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
      printf '%s' "$out" | grep -q 'devdrv.log' &&
@@ -1383,7 +1458,8 @@ else
   no "an unlocked device with a dead driver surfaces ~/devdrv.log and item 46" "hint missing or wrong"
 fi
 if ( DEV=devudid
-     _ssh(){ case "$*" in *lockState*) echo "  passcodeRequired: true" ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 0 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
      printf '%s' "$out" | grep -q 'LOCKED' &&
@@ -1392,7 +1468,11 @@ if ( DEV=devudid
 else
   no "a locked phone is named first — unlock it — ahead of the relay/log noise" "lock hint missing"
 fi
-if ( DEV=simudid; _ssh(){ return 0; }
+# A simulator: the lock question does not apply, so the verb exits 2 and the
+# hint must stay silent. `return 0` here would mean "locked" and is the bug this
+# guards.
+if ( DEV=simudid; PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 2 ;; *) return 0 ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1); [ -z "$out" ] ); then
   ok "no lock and no device log means no extra output (a simulator run is unaffected)"
@@ -1565,7 +1645,7 @@ pbx(){ # pbx <dir> <config> <bundle id>
   printf '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = %s;\n\t\t\tname = "%s";\n' \
     "$3" "$2" >> "$1/ios/Runner.xcodeproj/project.pbxproj"
 }
-B="sh $REPO/remote/build.sh"
+B="sh $REPO/runners/flutter/build.sh"
 RP="$TMP/repo"; mkrepo "$RP" dev uat prod
 pbx "$RP" Debug           com.example.app.dev      # the unflavoured default
 pbx "$RP" Debug-dev       com.example.app.dev
@@ -1648,7 +1728,7 @@ RP4="$TMP/repo4"; mkdir -p "$RP4/lib" "$TMP/minbin"
 # A PATH with a shell on it and nothing else: this machine has a flutter on its
 # own PATH, and the point is a Mac that has none.
 ln -sf "$(command -v sh)" "$TMP/minbin/sh"
-out=$(PATH="$TMP/minbin" HOME="$TMP/nohome" "$TMP/minbin/sh" "$REPO/remote/build.sh" \
+out=$(PATH="$TMP/minbin" HOME="$TMP/nohome" "$TMP/minbin/sh" "$REPO/runners/flutter/build.sh" \
         --repo "$RP4" --detect 2>&1); rc=$?
 [ "$rc" != 0 ] && case "$out" in
   *"fvm install"*) ok "no SDK anywhere says what to do about it" ;;
@@ -1720,7 +1800,7 @@ case "$u" in
 esac
 CURLV
 chmod +x "$TMP/vmstub/curl"
-VMS="bash $REPO/remote/vmservice.sh"
+VMS="bash $REPO/runners/flutter/vmservice.sh"
 
 printf 'A Dart VM Service on iPhone 16 Pro is available at: http://127.0.0.1:55407/R-KhdenhVwM=/\n' > "$TMP/frun-test.log"
 out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/frun-test.log" FRUN_LOG="$TMP/none.log" \
@@ -1777,7 +1857,7 @@ XR
 chmod +x "$DVSTUB/osascript" "$DVSTUB/security" "$DVSTUB/xcrun"
 DPROF="$TMP/dvhome/Library/Developer/Xcode/UserData/Provisioning Profiles"
 mkdir -p "$DPROF"; : > "$DPROF/x.mobileprovision"
-DVB(){ PATH="$DVSTUB:$PATH" HOME="$TMP/dvhome" sh "$REPO/remote/build.sh" \
+DVB(){ PATH="$DVSTUB:$PATH" HOME="$TMP/dvhome" sh "$REPO/runners/flutter/build.sh" \
          --repo "$DVREPO" --app-id com.example.app.uat --flavor uat --device DEVUDID "$@" 2>&1; }
 
 out=$(INSTALL_BUNDLE=com.example.app.uat DVB)
@@ -1795,12 +1875,260 @@ out=$(INSTALL_BUNDLE=com.example.app.dev DVB); rc=$?
   && ok "a build that installs the wrong bundle id is caught, not passed (item 45)" \
   || no "a build that installs the wrong bundle id is caught, not passed (item 45)" "rc=$rc: $out"
 
-out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/remote/build.sh" \
+out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/runners/flutter/build.sh" \
         --repo "$DVREPO" --app-id com.example.app.uat --flavor uat --device DEVUDID 2>&1); rc=$?
 { [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "no local provisioning profile"; } \
   && ok "the device build refuses when no profile covers the app (never touches the account)" \
   || no "the device build refuses when no profile covers the app (never touches the account)" "rc=$rc: $out"
 
+echo
+echo "build and install are separable (item 87)"
+# The framework's job ends at an artefact; installing it is the platform's. The
+# split is what lets a Flutter build reach an Android emulator, and the proof
+# that it is a real split is that --build-only produces the path and runs no
+# install command at all.
+SMSTUB="$TMP/smstub"; mkdir -p "$SMSTUB"
+cat > "$SMSTUB/xcrun" <<XR
+#!/bin/sh
+echo "XCRUN \$*" >> "$TMP/xcrun.calls"
+exit 0
+XR
+chmod +x "$SMSTUB/xcrun"
+SMREPO="$TMP/smrepo"; mkrepo "$SMREPO" uat
+pbx "$SMREPO" Debug-uat com.example.app.uat
+mkdir -p "$SMREPO/build/ios/iphonesimulator/Runner.app"
+
+: > "$TMP/xcrun.calls"
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/runners/flutter/build.sh" --repo "$SMREPO" \
+        --app-id com.example.app.uat --flavor uat --build-only --install SIMUDID 2>&1); rc=$?
+case "$out" in
+  *"artifact   "*"iphonesimulator/Runner.app"*) ok "--build-only names the artefact it produced" ;;
+  *) no "--build-only names the artefact it produced" "rc=$rc: $out" ;;
+esac
+grep -q 'simctl install' "$TMP/xcrun.calls" 2>/dev/null \
+  && no "--build-only installs nothing, even when a device was named" "it ran simctl install" \
+  || ok "--build-only installs nothing, even when a device was named"
+
+# Without it, the old behaviour is untouched: build, then install, then confirm.
+: > "$TMP/xcrun.calls"
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/runners/flutter/build.sh" --repo "$SMREPO" \
+        --app-id com.example.app.uat --flavor uat --install SIMUDID 2>&1); rc=$?
+case "$out" in
+  *"artifact   "*"installed  SIMUDID"*) ok "a full run still installs, and names the artefact as well" ;;
+  *) no "a full run still installs, and names the artefact as well" "rc=$rc: $out" ;;
+esac
+grep -q 'simctl install SIMUDID' "$TMP/xcrun.calls" 2>/dev/null \
+  && ok "the install went to the device that was named" \
+  || no "the install went to the device that was named" "calls: $(cat "$TMP/xcrun.calls" 2>/dev/null)"
+
+# The physical-device path is the one where the two were genuinely welded
+# together, inside the script handed to the GUI session. --build-only must stop
+# the devicectl half without stopping the codesigning build.
+out=$(INSTALL_BUNDLE=com.example.app.uat DVB --build-only); rc=$?
+case "$out" in
+  *"artifact   "*"iphoneos/Runner.app"*)
+    case "$out" in
+      *"installed  DEVUDID"*) no "--build-only skips devicectl on the device path" "it installed anyway" ;;
+      *) ok "--build-only skips devicectl on the device path" ;;
+    esac ;;
+  *) no "--build-only skips devicectl on the device path" "rc=$rc: $out" ;;
+esac
+
+
+echo
+echo "the runner modules the split calls out to (item 87)"
+# bin/build.sh needs SSH and cannot be tested here, but everything it now
+# delegates to is pure logic and can be. These are the verbs it depends on.
+RS="$REPO/runners"
+
+# platform.sh claim replaces the UUID-shape test that used to sit inside
+# bin/build.sh. A physical iPhone reaching the simulator path builds for the
+# wrong target and installs nothing, silently, which is what it is there to stop.
+sh "$RS/ios/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA \
+  && ok "ios claims a simulator UDID" || no "ios claims a simulator UDID" "it refused"
+sh "$RS/ios/platform.sh" claim 00008020-0011223344556677 2>/dev/null \
+  && no "ios refuses a physical device's udid" "it claimed the phone" \
+  || ok "ios refuses a physical device's udid"
+# 4.1: boot returns the id it booted, last line. A simulator keeps one UDID
+# whether it is up or not, so it echoes its argument — the verb returns it for
+# the platforms where it changes, which is Android: an AVD name becomes
+# emulator-NNNN once the emulator takes a port.
+grep -q 'echo "\$_id"' "$RS/ios/platform.sh" \
+  && ok "ios boot ends by printing the id it booted" \
+  || no "ios boot ends by printing the id it booted" "it does not"
+
+sh "$RS/android/platform.sh" claim emulator-5554 \
+  && ok "android claims an emulator serial" || no "android claims an emulator serial" "it refused"
+sh "$RS/android/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA 2>/dev/null \
+  && no "android refuses a simulator UDID" "it claimed it" \
+  || ok "android refuses a simulator UDID"
+
+# ios and ios-device are exact complements: every device id belongs to one of
+# them and never to both, which is what lets a caller pick without knowing
+# which kind of device it holds.
+for _d in 6EA2EBFE-7483-4422-9E51-A345A74DADEA 00008020-000A396C3606002E; do
+  sh "$RS/ios/platform.sh" claim "$_d" 2>/dev/null; _a=$?
+  sh "$RS/ios-device/platform.sh" claim "$_d" 2>/dev/null; _b=$?
+  [ "$_a$_b" = "01" ] || [ "$_a$_b" = "10" ] \
+    && ok "exactly one of ios / ios-device claims $_d" \
+    || no "exactly one of ios / ios-device claims $_d" "ios=$_a ios-device=$_b"
+done
+
+# The verbs a phone genuinely cannot answer. They exit 2 and say why, because a
+# missing container is not a failure to read one — and the consequence, that
+# appcheck has no device form, is the thing a reader needs told.
+for _v in container prefs-read orientations; do
+  out=$(sh "$RS/ios-device/platform.sh" "$_v" x y 2>&1); rc=$?
+  { [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no readable app container'; } \
+    && ok "ios-device $_v exits 2 naming the reason" \
+    || no "ios-device $_v exits 2 naming the reason" "rc=$rc: $out"
+done
+
+# devices --booted is what --all now reads. Tab separated, one per line, so the
+# caller's `IFS=$'\t' read` takes the id and leaves the name alone however many
+# spaces are in it.
+SIMSTUB="$TMP/simstub"; mkdir -p "$SIMSTUB"
+# -j, because that is what the module asks for: simctl's human listing puts the
+# runtime on a heading line above its devices, so a line-at-a-time parse cannot
+# carry it down to the rows.
+cat > "$SIMSTUB/xcrun" <<'XR'
+#!/bin/sh
+cat <<'OUT'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
+    {"udid": "6EA2EBFE-7483-4422-9E51-A345A74DADEA", "name": "iPhone 16 Pro", "state": "Booted"},
+    {"udid": "7C0331AA-1111-2222-3333-444455550331", "name": "iPad Pro 11-inch", "state": "Booted"},
+    {"udid": "9999AAAA-1111-2222-3333-444455550000", "name": "iPhone SE", "state": "Shutdown"}
+  ],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-4": []
+}}
+OUT
+XR
+chmod +x "$SIMSTUB/xcrun"
+out=$(PATH="$SIMSTUB:$PATH" sh "$RS/ios/platform.sh" devices --booted)
+[ "$(printf '%s\n' "$out" | grep -c .)" = 2 ] \
+  && ok "devices --booted lists every booted simulator" \
+  || no "devices --booted lists every booted simulator" "got: $out"
+# A here-string, not a pipe: `read` in a pipeline runs in a subshell and the
+# variables never reach here — which is the same trap bin/build.sh's --all loop
+# avoids with process substitution.
+# Four fields, not three: `read` puts every remaining field into the last
+# variable, so a three-variable read glues the runtime onto the name.
+IFS=$'\t' read -r _u _st _nm _rt <<< "$(printf '%s\n' "$out" | head -1)"
+case "$_u:$_nm" in
+  "7C0331AA-1111-2222-3333-444455550331:iPad Pro 11-inch")
+    ok "devices --booted separates the id from a name with spaces in it" ;;
+  *) no "devices --booted separates the id from a name with spaces in it" "got '$_u' / '$_nm'" ;;
+esac
+
+# framework.sh build maps the contract's arguments onto remote/build.sh, and it
+# must always pass --build-only: the whole point of the split is that the
+# framework stops at an artefact.
+# The module calls the build script BESIDE ITSELF, not one at $RDIR — they are
+# one runner's files and travel together. So the stub is a copy of the module
+# with a fake build.sh next to it, which also checks the sibling resolution.
+FWSTUB="$TMP/fwstub"; mkdir -p "$FWSTUB"
+cp "$RS/flutter/framework.sh" "$FWSTUB/framework.sh"
+printf '#!/bin/sh\necho "ARGS $*"\n' > "$FWSTUB/build.sh"; chmod +x "$FWSTUB/build.sh"
+FB(){ sh "$FWSTUB/framework.sh" build /some/repo "$@" 2>&1; }
+
+# variants and variant-for-appid ASK build.sh rather than reproducing its rule.
+# Two copies of "what counts as a flavour" is one too many: the pair test is
+# subtle, and a second implementation drifting from it would refuse the right
+# build or accept the wrong one.
+vo=$(sh "$RS/flutter/framework.sh" variants "$RP" | sort | tr '\n' ' ')
+bo=$($B --repo "$RP" --list-variants | sort | tr '\n' ' ')
+{ [ "$vo" = "$bo" ] && [ -n "$vo" ]; } \
+  && ok "variants comes from build.sh, not a second copy of the rule" \
+  || no "variants comes from build.sh, not a second copy of the rule" "module '$vo' / build '$bo'"
+vo=$(sh "$RS/flutter/framework.sh" variant-for-appid "$RP" com.example.app.uat | tr '\n' ' ')
+[ "$vo" = "uat " ] \
+  && ok "variant-for-appid comes from build.sh too" \
+  || no "variant-for-appid comes from build.sh too" "got '$vo'"
+grep -q 'xcshareddata/xcschemes' "$RS/flutter/framework.sh" \
+  && no "the flavour rule has one home" "framework.sh still reproduces it" \
+  || ok "the flavour rule has one home"
+
+# 4.2: --platform is optional, and a framework whose variants span both
+# platforms accepts it and answers the same. Flutter's do — one --flavor uat
+# builds the iOS app and the Android one — so ignoring it is the right answer
+# rather than an omission, and a caller can pass it unconditionally.
+vo=$(sh "$RS/flutter/framework.sh" variants "$RP" | sort | tr '\n' ' ')
+vp=$(sh "$RS/flutter/framework.sh" variants "$RP" --platform ios | sort | tr '\n' ' ')
+{ [ "$vo" = "$vp" ] && [ -n "$vo" ]; } \
+  && ok "--platform is accepted and changes nothing for a framework that spans both" \
+  || no "--platform is accepted and changes nothing for a framework that spans both" \
+       "without '$vo' / with '$vp'"
+vo=$(sh "$RS/flutter/framework.sh" variant-for-appid "$RP" com.example.app.uat --platform ios | tr '\n' ' ')
+[ "$vo" = "uat " ] \
+  && ok "variant-for-appid takes --platform too" \
+  || no "variant-for-appid takes --platform too" "got '$vo'"
+
+out=$(FB --platform ios --variant uat --app-id com.example.app.uat)
+case "$out" in
+  *--build-only*--flavor\ uat*) ok "build passes --build-only and maps --variant to --flavor" ;;
+  *) no "build passes --build-only and maps --variant to --flavor" "got: $out" ;;
+esac
+case "$out" in
+  *--install*) no "build never asks remote/build.sh to install" "it passed --install" ;;
+  *) ok "build never asks remote/build.sh to install" ;;
+esac
+
+out=$(FB --platform ios --mode release)
+case "$out" in
+  *--release*) ok "build maps --mode release" ;;
+  *) no "build maps --mode release" "got: $out" ;;
+esac
+
+# $DEV does not cross an SSH boundary, so a device build that was not told which
+# device must refuse rather than build for an empty udid.
+out=$(FB --platform ios-device); rc=$?
+{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'needs --device'; } \
+  && ok "a device build with no --device refuses rather than guessing" \
+  || no "a device build with no --device refuses rather than guessing" "rc=$rc: $out"
+
+out=$(FB --platform ios-device --device DEVUDID)
+case "$out" in
+  *--device\ DEVUDID*) ok "a device build passes the udid it was given" ;;
+  *) no "a device build passes the udid it was given" "got: $out" ;;
+esac
+
+# Flutter-on-Android is the combination the seam exists for, and remote/build.sh
+# has no android path. Exit 2 says "not this runner's job yet", not "failed".
+out=$(FB --platform android 2>&1); rc=$?
+{ [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no android path'; } \
+  && ok "an android build exits 2 saying why, rather than failing obscurely" \
+  || no "an android build exits 2 saying why, rather than failing obscurely" "rc=$rc: $out"
+
+echo
+echo "the conf init.sh writes names its runner (item 87, 5.2)"
+# No --repo, so nothing is asked of a Mac and this runs offline. The point is
+# that the conf SAYS which modules it uses: a conf that does not mention them
+# inherits flutter and ios silently, which is a modular package set up
+# non-modularly.
+ICONF="$TMP/initproj"; mkdir -p "$ICONF"
+( cd "$ICONF" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --host mac-x --fqdn mac-x.local \
+    --app com.example.app --write >/dev/null 2>&1 )
+if [ -r "$ICONF/.maestro-mac.conf" ]; then
+  grep -q 'RUNNER:=' "$ICONF/.maestro-mac.conf" \
+    && ok "init writes RUNNER" || no "init writes RUNNER" "absent"
+  grep -q 'PLATFORM:=ios' "$ICONF/.maestro-mac.conf" \
+    && ok "init writes PLATFORM" || no "init writes PLATFORM" "absent"
+  # With no REPO there is nothing to ask, and the conf must not claim it found
+  # out. A default presented as a finding is how a wrong runner survives.
+  grep -q 'default rather than a finding' "$ICONF/.maestro-mac.conf" \
+    && ok "an undetected runner is written as a default, not as a finding" \
+    || no "an undetected runner is written as a default, not as a finding" \
+         "$(grep -A1 'RUNNER:=' "$ICONF/.maestro-mac.conf" | head -2)"
+else
+  no "init writes RUNNER" "no conf written"
+fi
+# The gitignore advice it prints in a git tree covers the PROFILE layering too:
+# .maestro-mac.conf.uat is where APP_PIN actually lives in a two-environment
+# project, and an entry that names only the base file leaves it exposed.
+grep -q 'maestro-mac\.conf\.\*' "$REPO/bin/init.sh" \
+  && ok "the gitignore advice covers the profile confs, where the credentials are" \
+  || no "the gitignore advice covers the profile confs, where the credentials are" "base file only"
 
 echo
 echo "build residue in the checkout, told apart from real changes"
@@ -1843,6 +2171,163 @@ if command -v git >/dev/null 2>&1; then
     *"checkout --"*"lib.dart"*) no "the discard command covers only the residue" "lib.dart is in it" ;;
     *) ok "the discard command covers only the residue" ;;
   esac
+
+  # Call site 1: the list is the framework's answer, and preflight exports it
+  # into the remote shell before sourcing this. A React-Native-shaped list must
+  # reclassify BOTH ways round — yarn.lock becomes residue and pubspec.lock
+  # becomes somebody's change — or the override is only half working.
+  echo two > "$GR/yarn.lock"; git -C "$GR" add yarn.lock >/dev/null 2>&1
+  git -C "$GR" commit -qm yarn >/dev/null 2>&1; echo three > "$GR/yarn.lock"
+  rngs(){ RESIDUE_GLOBS='yarn.lock
+*/yarn.lock' sh -c '. '"$REPO"'/remote/gitstate.sh; gitstate "$1"' _ "$1" 2>&1; }
+  rgo=$(rngs "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$rgo" in
+    *"residue yarn.lock"*) ok "an overridden residue list is the one that is used" ;;
+    *) no "an overridden residue list is the one that is used" "got: $rgo" ;;
+  esac
+  case "$rgo" in
+    *"changed"*"pubspec.lock"*) ok "a path the override does not name is a change again" ;;
+    *) no "a path the override does not name is a change again" "got: $rgo" ;;
+  esac
+
+  # The entry point preflight actually uses. It sourced this file and called the
+  # function until 18 Sep, which put the matching inside zsh — where an unquoted
+  # expansion neither splits nor globs, so `*/Podfile.lock` matched only a file
+  # of that literal name. Nothing here can run zsh, so the test is that the
+  # executable entry point exists and behaves, and that preflight uses it.
+  rno=$(sh "$REPO/remote/gitstate.sh" --run "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$rno" in
+    *"residue"*"Podfile.lock"*) ok "sh gitstate.sh --run classifies a nested residue path" ;;
+    *) no "sh gitstate.sh --run classifies a nested residue path" "got: $rno" ;;
+  esac
+  grep -q "\. '\$RDIR/gitstate.sh'" "$REPO/bin/preflight.sh" \
+    && no "preflight runs gitstate.sh rather than sourcing it into zsh" "it still sources it" \
+    || ok "preflight runs gitstate.sh rather than sourcing it into zsh"
+
+  # Same rule for appcheck.sh. Nothing in it happens to need zsh's differences
+  # today — no unquoted expansion in a `for`, no variable standing as a `case`
+  # pattern — but that is luck, and gitstate.sh had both while nobody was
+  # watching. Both files take the same entry point so the next edit cannot
+  # reintroduce the bug in whichever one is not being looked at.
+  grep -q "\. '\$RDIR/appcheck.sh'" "$REPO/bin/preflight.sh" \
+    && no "preflight runs appcheck.sh rather than sourcing it into zsh" "it still sources it" \
+    || ok "preflight runs appcheck.sh rather than sourcing it into zsh"
+  # NOT $out: the untracked check further down still reads the one from the
+  # gitstate run above, and clobbering it fails a test that has nothing to do
+  # with this. Second time in this file.
+  aco=$(sh "$REPO/remote/appcheck.sh" --run "" "" 2>&1)
+  case "$aco" in
+    *"not installed"*) ok "sh appcheck.sh --run answers without being sourced" ;;
+    *) no "sh appcheck.sh --run answers without being sourced" "got: $aco" ;;
+  esac
+
+  # flow.sh ran `maestro test | grep | tail`, so the pipeline returned tail's
+  # status — always 0 — and a FAILED flow reported success to anything reading
+  # the exit code. The failure text was in the output and the status disagreed
+  # with it. Third instance of this shape: item 88, item 87's 1.3, and this.
+  # Comment lines stripped first — flow.sh's own explanation of this bug names
+  # the shape it is warning about, and would otherwise match the lint.
+  grep -v '^ *#' "$REPO/bin/flow.sh" | grep -qE "maestro .*test .*\| *grep" \
+    && no "flow.sh takes maestro's status before filtering the output" "it still pipes it" \
+    || ok "flow.sh takes maestro's status before filtering the output"
+  # flow.sh must END on that status. The first version of this test grepped for
+  # `exit $_rc` and was satisfied by the one inside the REMOTE string — while
+  # flow.sh itself ended on `if [ -n "$SHOT" ]`, whose false condition exits 0.
+  # Measured 18 Sep: a flow asserting text on no screen returned 0 with the test
+  # passing. So check the last line of the file, which is the status the caller
+  # actually sees.
+  [ "$(grep -v '^ *$' "$REPO/bin/flow.sh" | tail -1)" = 'exit "$rc"' ] \
+    && ok "flow.sh ends on the flow's status, not on its last conditional" \
+    || no "flow.sh ends on the flow's status, not on its last conditional" \
+         "last line: $(grep -v '^ *$' "$REPO/bin/flow.sh" | tail -1)"
+
+  # Call site 2. The two frameworks must give OPPOSITE advice from the same empty
+  # result — no flutter run costs only the inside-the-app reads, no Metro may
+  # cost the app starting at all — which is the whole reason the text belongs to
+  # the module. A module that copied Flutter's wording would pass a "says
+  # something" test and fail a reader.
+  dso=$(sh "$REPO/runners/flutter/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'Driving still works'; } \
+    && ok "flutter devsession says driving is unaffected" \
+    || no "flutter devsession says driving is unaffected" "rc=$rc: $dso"
+  dso=$(sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'may *not start'; } \
+    && ok "react-native devsession says the app may not start at all" \
+    || no "react-native devsession says the app may not start at all" "rc=$rc: $dso"
+  grep -q 'DEVSESSION_PGREP' "$REPO/bin/preflight.sh" \
+    && no "preflight asks the module rather than pgrepping for itself" "it still has its own pattern" \
+    || ok "preflight asks the module rather than pgrepping for itself"
+
+  # Call site 3 (publish.sh). traffic-arm prints TWO words — what it found and
+  # what it left — because "already on" and "was off, now on" are different
+  # facts: in the second, nothing before that moment was recorded, and a short
+  # list afterwards is not a quiet app.
+  ta=$(sh "$REPO/runners/flutter/framework.sh" traffic-arm http://127.0.0.1:1/x iso 2>&1); rc=$?
+  [ "$(printf '%s' "$ta" | wc -w | tr -d ' ')" = 2 ] \
+    && ok "traffic-arm prints the state it found and the state it left" \
+    || no "traffic-arm prints the state it found and the state it left" "got: $ta"
+  { [ "$rc" = 1 ] && [ "$ta" = "unknown unknown" ]; } \
+    && ok "an unreachable endpoint is unknown rather than off" \
+    || no "an unreachable endpoint is unknown rather than off" "rc=$rc: $ta"
+
+  # And the two failures publish.sh must keep apart. React Native has a debug
+  # endpoint that is not written yet; a plain Xcode app has none at all. Both
+  # exit 2, and neither is "the relay is broken".
+  sh "$REPO/runners/react-native/framework.sh" inspect dev cache >/dev/null 2>&1
+  [ $? = 2 ] && ok "a framework with no written inspect exits 2, not 1" \
+              || no "a framework with no written inspect exits 2, not 1" "wrong status"
+  # The traffic verbs run on EITHER side, so every file they touch must resolve
+  # from the module rather than from $RDIR — which is a path on the MAC and
+  # means nothing in the sandbox. net.py was addressed as $RDIR/net.py until
+  # 18 Sep, so the fast path through the published relay could never have
+  # worked; only the SSH fallback did, and nothing had exercised the fast path.
+  grep -q '\$RDIR' "$RS/flutter/framework.sh" \
+    && no "the flutter module addresses its own files, not \$RDIR" \
+          "$(grep -n '\$RDIR' "$RS/flutter/framework.sh" | head -1)" \
+    || ok "the flutter module addresses its own files, not \$RDIR"
+  for f in build.sh vmservice.sh net.py; do
+    [ -r "$RS/flutter/$f" ] || no "the flutter module carries $f" "missing"
+  done
+  ok "the flutter module carries build.sh, vmservice.sh and net.py"
+
+  grep -q '_profiling' "$REPO/bin/publish.sh" \
+    && no "publish.sh arms capture through the module" "it still has _profiling" \
+    || ok "publish.sh arms capture through the module"
+
+  # Call site 5 (net.sh). No VM Service RPC names left in it, and no curl of its
+  # own — both halves, the published-relay fast path and the SSH fallback, go
+  # through the same three verbs.
+  grep -q 'ext\.dart\.io' "$REPO/bin/net.sh" \
+    && no "net.sh names no VM Service RPC of its own" "it still has ext.dart.io" \
+    || ok "net.sh names no VM Service RPC of its own"
+  grep -q 'net\.py' "$REPO/bin/net.sh" \
+    && no "net.sh leaves the profile format to the module" "it still calls net.py" \
+    || ok "net.sh leaves the profile format to the module"
+
+  # Call site 6 (prefs.sh), the only one that needs both modules. WHERE the store
+  # lives is the platform's; WHICH keys are the app's own is the framework's.
+  [ "$(sh "$REPO/runners/flutter/framework.sh" prefs-prefix)" = flutter ] \
+    && ok "flutter's prefs prefix is the shared_preferences one" \
+    || no "flutter's prefs prefix is the shared_preferences one" "got: $(sh "$REPO/runners/flutter/framework.sh" prefs-prefix)"
+  # AsyncStorage keeps its own store rather than the platform's, so there is no
+  # prefix. Empty with exit 0 means "no prefix", and the caller must then show
+  # every key — showing none would be reading the absence as a filter.
+  rnp=$(sh "$REPO/runners/react-native/framework.sh" prefs-prefix); rc=$?
+  { [ "$rc" = 0 ] && [ -z "$rnp" ]; } \
+    && ok "react-native has no prefs prefix, and says so with exit 0" \
+    || no "react-native has no prefs prefix, and says so with exit 0" "rc=$rc: '$rnp'"
+  grep -qE 'plutil|get_app_container|notifyutil' "$REPO/bin/prefs.sh" \
+    && no "prefs.sh names no platform command of its own" "it still runs one" \
+    || ok "prefs.sh names no platform command of its own"
+
+  # And the flutter runner's answer is the list gitstate defaults to, so wiring
+  # the two together cannot change what this project sees.
+  a=$(sh "$REPO/runners/flutter/framework.sh" residue | sort)
+  b=$(sh -c '. '"$REPO"'/remote/gitstate.sh; printf "%s\n" $RESIDUE_GLOBS' | sort)
+  [ "$a" = "$b" ] \
+    && ok "the flutter runner's residue list matches gitstate's default exactly" \
+    || no "the flutter runner's residue list matches gitstate's default exactly" \
+          "runner: $(echo "$a" | tr '\n' ' ') / default: $(echo "$b" | tr '\n' ' ')"
   case "$out" in
     *"untracked 1 file"*) ok "untracked files are counted and excused" ;;
     *) no "untracked files are counted and excused" "got: $out" ;;
@@ -1957,9 +2442,13 @@ cat > "$DDIR/lib.sh" <<LIBSH
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
 DEVICE_MAP=$DDIR/devmap
+PLATFORM_SH=/x/platform.sh
 _driver_bind(){ return 0; }
 _rebind(){ return 1; }
-_ssh(){ echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
+# The lock probe answers by status; 1 is "not locked", which is what this case
+# is about — the failure is the face-up crash in the log, not a locked screen.
+_ssh(){ case "\$*" in *locked*) return 1 ;; esac
+        echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
 LIBSH
 printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) printf 500;; *) printf "{}";; esac\n' > "$DSTUB/curl"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$DSTUB/scp"
@@ -2025,21 +2514,19 @@ check("split-boundary-then-emits", lambda: frames == [b"XY"])
 check("empty", lambda: w.split_frames(b"") == ([], b""))
 check("rubbish", lambda: w.split_frames(b"not multipart at all") == ([], b"not multipart at all"))
 
-# simctl lists every runtime it knows, nearly all of them empty
-data = {"devices": {
-    "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
-        {"udid": "B" * 36, "name": "iPhone 16", "state": "Booted"},
-        {"udid": "C" * 36, "name": "iPhone 16 Pro", "state": "Shutdown"},
-    ],
-    "com.apple.CoreSimulator.SimRuntime.iOS-26-4": [],
-    "com.apple.CoreSimulator.SimRuntime.iOS-15-5": [
-        {"udid": "A" * 36, "name": "iPhone 8", "state": "Booted"},
-    ],
-}}
-got = w.parse_booted(data)
+# The platform runner filters and sorts; the wall reads four tab-separated
+# columns and keeps two. The runtime is the fourth and exists only so that two
+# iPhone 16s on different iOS versions sort with their own kind.
+rows = "\t".join(("A" * 36, "Booted", "iPhone 8", "iOS-15-5")) + "\n" + \
+       "\t".join(("B" * 36, "Booted", "iPhone 16", "iOS-18-6")) + "\n"
+got = w.parse_booted(rows)
 check("booted-only", lambda: [n for _, n in got] == ["iPhone 8", "iPhone 16"])
-check("empty-runtimes", lambda: w.parse_booted({"devices": {}}) == [])
-check("no-key", lambda: w.parse_booted({}) == [])
+check("empty-rows", lambda: w.parse_booted("") == [])
+check("none-at-all", lambda: w.parse_booted(None) == [])
+# The runtime column is optional by contract; the id is not. A row without one
+# is skipped rather than guessed at.
+check("short-row", lambda: w.parse_booted("X\tBooted\tiPhone X\n\tBooted\tno id\nrubbish\n")
+      == [("X", "iPhone X")])
 
 # labels: written by whoever drives, read by the wall, never posted to it
 import os, tempfile, time
@@ -2120,7 +2607,7 @@ os.utime(p2, (late, late))
 check("day-crossed-midnight-hidden", lambda: w.read_label(udid2) == {})
 PYEOF
 )
-for line in one-complete partial-kept three split-boundary-waits split-boundary-then-emits empty rubbish booted-only empty-runtimes no-key label-basic label-equals label-junk label-none label-missing label-read label-stale label-empty-file label-by label-no-by day-today-fresh day-today-not-stale day-today-old-kept day-today-old-greyed day-yesterday-hidden day-crossed-midnight-hidden; do
+for line in one-complete partial-kept three split-boundary-waits split-boundary-then-emits empty rubbish booted-only empty-rows none-at-all short-row label-basic label-equals label-junk label-none label-missing label-read label-stale label-empty-file label-by label-no-by day-today-fresh day-today-not-stale day-today-old-kept day-today-old-greyed day-yesterday-hidden day-crossed-midnight-hidden; do
   case "$wall_out" in
     *"$line True"*) ok "wall.py: $line" ;;
     *)              no "wall.py: $line" "$(printf '%s' "$wall_out" | grep "^$line " || echo 'no result')" ;;
@@ -2550,15 +3037,18 @@ reap() { # reap <claimed-udids> <driver-map> <rows> [--shutdown] -> the verdict 
   local T_CLAIMED="$1" dmap="$2" rws="$3"; shift 3
   ( eval "$(sed -n '/^_rig_reap() {/,/^}/p' "$REPO/bin/drivers.sh")"
     MAC_HOST=x; RIG_OWNED=/x; RDIR=/x
+    # The reap probe is a platform verb now, so the stub needs its path to
+    # discriminate on — lib.sh would normally set it.
+    PLATFORM_SH=/x/runners/ios/platform.sh
     _booted()      { printf 'AAAA\tiPhone A\nBBBB\tiPhone B\n'; }
     _driver_map()  { printf '%s' "$dmap"; }
     _driver_scan() { :; }
-    # The claimed list arrives as `cat '/x'/* ...` and the rows as a script
-    # containing simctl; matching on the quoted path does not work through the
-    # quotes, so discriminate on the command instead.
-    _ssh() { case "$*" in *simctl*) printf '%s' "$rws" ;;
-                          cat*)     printf '%s' "$T_CLAIMED" ;;
-                          *)        : ;; esac; }
+    # The claimed list arrives as `cat '/x'/* ...` and the rows as a call to the
+    # platform's last-used; matching on the quoted path does not work through the
+    # quotes, so discriminate on the verb instead.
+    _ssh() { case "$*" in *last-used*) printf '%s' "$rws" ;;
+                          cat*)        printf '%s' "$T_CLAIMED" ;;
+                          *)           : ;; esac; }
     _rig_reap "$@" ) 2>&1
 }
 TDY=$(date +%Y%m%d)
@@ -2634,6 +3124,26 @@ reclaim(){ # reclaim <label-contents> <mine> <live-port-or-empty> <age-secs> -> 
 [ "$(reclaim "by=orange · zzz" "blue · aaa" "22087" 46800)" = KEPT ] \
   && ok "label: a peer with a live driver keeps its name" \
   || no "label: a peer with a live driver keeps its name" "renamed a live peer"
+
+# ...and the same case against the SHIPPED code rather than a model of it.
+#
+# Everything above reimplements the reclaim in shell, which is why it passed
+# throughout a period when the live-driver guard did not work at all. The guard
+# is a $( ) inside a double-quoted _ssh string, so THIS shell expands it and the
+# awk runs locally — but its field references were escaped as \$1 and \$2, as
+# though they ran on the Mac. awk died with "backslash not last character on
+# line", the substitution came back empty, and the test was always false. A
+# recent label is kept by the age check regardless, so nothing showed until a
+# live `rig up` printed the awk error on 18 Sep.
+#
+# Reading the file rather than running it, because the string cannot be
+# extracted from the function without rebuilding the very thing under test.
+if grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" >/dev/null 2>&1; then
+  no "no awk inside a local \$( ) escapes its field references" \
+     "$(grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" | head -1)"
+else
+  ok "no awk inside a local \$( ) escapes its field references"
+fi
 # ... and a peer whose driver Maestro just tore down is still protected by age
 [ "$(reclaim "by=orange · zzz" "blue · aaa" "" 60)" = KEPT ] \
   && ok "label: a recently-named peer survives a torn-down driver" \

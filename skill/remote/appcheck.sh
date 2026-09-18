@@ -56,40 +56,58 @@ _ac_plist() {  # one key out of a bundle's Info.plist, or nothing
     sed -n "s|.*<key>$2</key>[^<]*<string>\([^<]*\)</string>.*|\1|p"
 }
 
-appcheck() {  # appcheck <app-container> <repo-on-the-mac> [marker]
-  _c=$1; _repo=${2:-}; _marker=${3:-}
+appcheck() {  # appcheck <info-file> <repo> [marker] [built-version]
+  # <info-file> is `platform.sh installed-info` — key=value lines, with only the
+  # keys that platform can answer. An ABSENT key means "cannot tell" and is
+  # reasoned from; it is not an error.
+  #
+  #   version=3.0.4     build=43        every platform
+  #   epoch=1758230000                  simulator and Android; a phone has none
+  #   container=/path                   simulator only
+  #
+  # [built-version] is `framework.sh version` — what a build FROM THIS CHECKOUT
+  # would produce, as <version>+<build>. It is what makes the check work at all
+  # on a device: devicectl reports a version and a build and no timestamp of any
+  # kind, so there is nothing to compare against a commit date.
+  _info=${1:-}; _repo=${2:-}; _marker=${3:-}; _built=${4:-}
 
-  if [ -z "$_c" ] || [ ! -d "$_c" ]; then
-    echo "the app is not installed on this simulator, so there is nothing to compare"
+  if [ -z "$_info" ] || [ ! -r "$_info" ]; then
+    echo "the app is not installed on this device, so there is nothing to compare"
+    return 0
+  fi
+  _c=$(sed -n 's/^container=//p'  "$_info" | tail -1)
+  _it=$(sed -n 's/^epoch=//p'     "$_info" | tail -1)
+  _ver=$(sed -n 's/^version=//p'  "$_info" | tail -1)
+  _bld=$(sed -n 's/^build=//p'    "$_info" | tail -1)
+  if [ -z "$_ver$_bld$_it" ]; then
+    echo "the app is not installed on this device, so there is nothing to compare"
     return 0
   fi
 
-  # The executable, not the bundle: installing rewrites the directory's
-  # timestamp, so the directory says when it was put there and the binary says
-  # what it is. Fall back to the bundle when the plist cannot be read.
-  _exe=$(_ac_plist "$_c" CFBundleExecutable)
-  _bin=$_c
-  [ -n "$_exe" ] && [ -f "$_c/$_exe" ] && _bin=$_c/$_exe
-
-  _it=$(_ac_epoch "$_bin")
-  _ver=$(_ac_plist "$_c" CFBundleShortVersionString)
-  _bld=$(_ac_plist "$_c" CFBundleVersion)
   _tag=""
   [ -n "$_ver" ] && _tag="  ($_ver${_bld:+ build $_bld})"
-  echo "installed  $(_ac_when "$_it")$_tag"
-
-  if [ -z "$_repo" ] || [ ! -d "$_repo/.git" ]; then
-    echo "(no checkout on the Mac to compare it with — set REPO in the conf)"
+  if [ -n "$_it" ]; then
+    echo "installed  $(_ac_when "$_it")$_tag"
   else
+    echo "installed  ${_ver:-?}${_bld:+ build $_bld}  (no install time — this platform does not report one)"
+  fi
+
+  # --- 1. the timestamp, where there is one ---------------------------------
+  # The strongest of the three: a build older than a commit cannot contain it.
+  _did=0
+  # An install time with nothing to compare it against is a setting that is
+  # missing, not a platform that cannot answer — say which, because the two have
+  # different fixes and only one of them is the reader's to make.
+  if [ -n "$_it" ] && { [ -z "$_repo" ] || [ ! -d "$_repo/.git" ]; }; then
+    echo "(no checkout on the Mac to compare it with — set REPO in the conf)"
+  fi
+  if [ -n "$_it" ] && [ -n "$_repo" ] && [ -d "$_repo/.git" ]; then
     _ht=$(cd "$_repo" && git log -1 --format=%ct 2>/dev/null)
     _br=$(cd "$_repo" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
-    if [ -z "$_ht" ]; then
-      echo "(no commits in $_repo, so there is nothing to compare it with)"
-    else
+    if [ -n "$_ht" ]; then
+      _did=1
       echo "newest commit  $(_ac_when "$_ht")  on $_br"
-      if [ -z "$_it" ]; then
-        echo "(could not read the installed build's timestamp, so nothing is compared)"
-      elif [ "$_it" -lt "$_ht" ]; then
+      if [ "$_it" -lt "$_ht" ]; then
         echo "STALE: the installed build is $(_ac_ago $((_ht - _it))) older than that"
         echo "       commit, so it cannot contain it. Rebuild before trusting"
         echo "       anything on screen."
@@ -101,12 +119,72 @@ appcheck() {  # appcheck <app-container> <repo-on-the-mac> [marker]
     fi
   fi
 
+  # --- 2. the version, which is all a phone has -----------------------------
+  # A different claim from the timestamp, and in one way a better one: it
+  # compares what was BUILT rather than when, so it catches a build from another
+  # branch that a timestamp cannot. It is only as good as the build number
+  # moving between builds, and it says so rather than implying more.
+  if [ -n "$_built" ] && [ -n "$_ver" ]; then
+    _did=1
+    _bv=${_built%%+*}; _bb=${_built#*+}; [ "$_bb" = "$_built" ] && _bb=""
+
+    # A FLAVOUR DECORATES THE VERSION. pubspec says 3.0.4 and the uat build
+    # installs as 3.0.4-uat, so a literal comparison reports a mismatch on a
+    # build that is exactly this code — measured 18 Sep 2026 against the phone,
+    # and it would have been the first thing this check ever said to anybody.
+    #
+    # Matched as "the built version, optionally followed by -<suffix>" rather
+    # than by stripping everything after a dash: a project whose real version is
+    # 1.0.0-beta must still fail against a checkout building 1.0.0.
+    _sfx=""
+    case "$_ver" in
+      "$_bv") : ;;
+      "$_bv"-*) _sfx=${_ver#"$_bv"-} ;;
+    esac
+    if { [ "$_ver" = "$_bv" ] || [ -n "$_sfx" ]; } && { [ -z "$_bb" ] || [ "$_bld" = "$_bb" ]; }; then
+      echo "version ok: installed $_ver${_bld:+ build $_bld} matches what this checkout builds"
+      [ -n "$_sfx" ] && echo "            (the -$_sfx is the flavour decorating the version, not a difference)"
+      [ -n "$_bb" ] || echo "            (no build number in the checkout, so only the version was compared)"
+    else
+      echo "VERSION MISMATCH: installed $_ver${_bld:+ build $_bld}, this checkout builds $_built."
+      echo "                  Whatever is on the device, it is not this code."
+    fi
+  fi
+
+  # --- 3. the marker, which needs a readable bundle -------------------------
   if [ -n "$_marker" ]; then
-    if LC_ALL=C grep -rq -- "$_marker" "$_c" 2>/dev/null; then
+    if [ -z "$_c" ]; then
+      echo "marker: cannot be checked — this platform has no readable app bundle"
+    elif LC_ALL=C grep -rq -- "$_marker" "$_c" 2>/dev/null; then
+      _did=1
       echo "marker: found \"$_marker\" in the installed bundle"
     else
+      _did=1
       echo "MARKER MISSING: \"$_marker\" is not in the installed bundle, so this is"
       echo "                not the build you are looking for."
     fi
   fi
+
+  # Never leave the reader thinking a check ran when none did.
+  [ "$_did" = 1 ] || cat <<'MSG'
+nothing could be compared: this platform reports no install time, the framework
+gave no version to compare against, and no BUILD_MARKER is set. Set BUILD_MARKER
+in the conf, or read the version above against what you expect.
+MSG
 }
+
+# Executed rather than sourced: `sh appcheck.sh --run <container> <repo> [marker]`.
+#
+# Nothing in this file happens to need zsh's differences today — there is no
+# unquoted expansion in a `for`, and no variable standing as a `case` pattern.
+# That is luck rather than design. remote/gitstate.sh had both, was sourced into
+# the shell ssh hands over, and reported every lock file as somebody's work for
+# as long as it was parameterised; the fix was to stop sourcing it. This takes
+# the same entry point so that the next edit here cannot reintroduce the same
+# bug in a file nobody is watching for it.
+#
+# An explicit sentinel, because a sourced file sees the sourcing script's $1 and
+# there is no $BASH_SOURCE in POSIX sh to tell the two apart.
+if [ "${1:-}" = --run ]; then
+  appcheck "${2:-}" "${3:-}" "${4:-}" "${5:-}"
+fi
