@@ -80,6 +80,31 @@ if [ -n "${PROFILE:-}" ] && [ -n "$MAESTRO_MAC_CONF_FOUND" ]; then
   fi
 fi
 
+# Which transport reaches the device (BACKLOG item 94):
+#
+#   ssh     a Mac across the network. What this package was built for, and the
+#           default, so an existing conf is unchanged by this setting's arrival.
+#   local   a simulator or emulator on the machine running the skill. MAC_HOST
+#           and MAC_FQDN are then neither needed nor used.
+#
+# An explicit setting rather than inferring it from an empty MAC_HOST. A conf
+# with a misspelt MAC_HOST has to keep failing as a broken remote conf; if
+# emptiness meant local, that typo would instead start looking for a device on
+# this machine and report it as missing, which is a true statement about the
+# wrong machine.
+#
+# Named TRANSPORT rather than MODE because it sits beside RUNNER, PLATFORM and
+# PROFILE, which each select one thing and say which in their name.
+: "${TRANSPORT:=ssh}"
+case "$TRANSPORT" in
+  ssh | local) ;;
+  *)
+    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh or local." >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+export TRANSPORT
+
 # SSH host alias from ~/.ssh/config. It must be an alias with a Host block: a
 # bare name gets no ProxyCommand, and without one there is no route out of the
 # sandbox at all. Never a .local name. reference/setup.md §3.

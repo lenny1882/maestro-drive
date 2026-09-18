@@ -170,14 +170,22 @@ Every stage keeps the SSH path working — there is no cut-over commit.
 **Stage 1 — the switch, and what a local project must set.** All four units are
 `bin/config.sh` and `bin/init.sh`. Nothing else knows the mode exists yet.
 
-**1.1 One setting names the transport.** `.maestro-mac.conf` gains `MODE`,
-defaulting to `ssh`, read in `bin/config.sh` next to `MAC_HOST` and exported
-with it. Nothing reads it yet. It is an explicit setting rather than "`MAC_HOST`
-is empty, so we must be local", because a conf with a misspelt `MAC_HOST` has to
-keep failing as a broken remote conf instead of silently becoming a local one.
-*Files:* `skill/bin/config.sh`. *Done when:* `MODE=local` survives `config.sh`
-and is exported; an unset `MODE` reads `ssh`; any other value is refused by
-name.
+**1.1 DONE 18 Sep — one setting names the transport.** `.maestro-mac.conf`
+gains `TRANSPORT`, defaulting to `ssh`, read in `bin/config.sh` above
+`MAC_HOST` and exported. Nothing reads it yet. It is an explicit setting rather
+than "`MAC_HOST` is empty, so we must be local", because a conf with a misspelt
+`MAC_HOST` has to keep failing as a broken remote conf — if emptiness meant
+local, the typo would instead start hunting for a device on this machine and
+report it missing, which is a true statement about the wrong machine.
+
+**Named `TRANSPORT`, not `MODE`.** It sits beside `RUNNER`, `PLATFORM` and
+`PROFILE`, each of which selects one thing and says which in its name. `MODE`
+says only that there is more than one of something.
+
+*Files:* `skill/bin/config.sh`. *Verified:* an unset value reads `ssh`;
+`TRANSPORT=local` survives and is exported; `TRANSPORT=sssh` is refused by name
+with exit 1; and the unconfigured-project message is byte-identical to the one
+`git stash` produces, diffed rather than eyeballed.
 
 **1.2 The required-settings check is per mode.** `config.sh:239` demands
 `MAC_HOST`, `MAC_FQDN` and `APP_ID` together. Local mode needs `APP_ID` alone —
