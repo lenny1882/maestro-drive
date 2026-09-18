@@ -151,6 +151,16 @@ than discovering it at the end.
 
 **Gated on:** nothing. Item 87 touches `_ssh` only as a caller.
 
+**Item 87's 4.4 is gated on THIS item's Stage 2**, which is the reverse
+direction and was not seen when either was raised. 4.4 — the Android driver
+trio, and whether Maestro's Android client lets its port be chosen per device —
+is the one unit of 87 whose note reads *needs an Android SDK and a booted
+emulator*. There are emulators on the Linux machine this package is driven
+from, and none on the Mac it drives. So the hardware 87 is waiting for is here
+already and unreachable: every verb gets to a device by SSH to a Mac with no
+Android SDK on it. Stage 2.1 is what turns this machine into a device host, and
+87's last hardware-blocked unit falls out of it.
+
 ### The plan, in stages
 
 Each unit is one commit. Stage 1 decides the shape; Stages 2 and 3 are
@@ -303,19 +313,36 @@ runs without a Mac. It needs a local-mode pass over the conf shapes from 1.2 and
 the no-op paths from 2.3 and 3.1. *Files:* `skill/test/run-tests.sh`. *Done
 when:* the suite covers both modes and still needs no Mac.
 
-**5.2 One live run, end to end, on a machine with its own simulator.** The
+**5.2 One live run, end to end, against an emulator on this machine.** The
 lesson item 87 paid for twice: a contract verified only on empty and error paths
-is not verified. `rig up`, a flow, a screenshot, `net.sh`, `prefs.sh`. *Done
-when:* each has run locally and the result is recorded here, verb by verb.
+is not verified. `rig up`, a flow, a screenshot, `net.sh`, `prefs.sh`. The
+device is an Android emulator here rather than a simulator — this is a Linux
+machine and there is no local iOS — so this unit runs `PLATFORM=android` and is
+the first caller `runners/android` has ever had. *Done when:* each has run
+locally and the result is recorded here, verb by verb.
 
-**5.3 The docs stop describing a Mac across a network as the only shape.**
+**5.3 `runners/android` stops being a stub, and 87's 4.4 is answered.** The
+module opens *NOTHING IN THIS FILE HAS BEEN RUN* and leaves three verbs
+unanswered on purpose, on the grounds that filling them in with something
+plausible is how somebody loses an afternoon. 5.2 gives it a caller, so this
+unit reads each verb against a real emulator and replaces what the documentation
+says with what the tool does. The verb that decides a contract rather than a
+line of code is the driver port: `bin/drivers.sh` exists only because Maestro's
+iOS client hardcodes 22087, and whether the Android client takes a port per
+device decides whether several-devices-at-once crosses platforms at all. Record
+the answer in item 87's 4.4, not here. *Files:*
+`skill/runners/android/platform.sh`. *Done when:* every verb in the module has
+run against a booted emulator, each one's header says measured rather than
+documented, and 4.4's question has an answer with the command that produced it.
+
+**5.4 The docs stop describing a Mac across a network as the only shape.**
 `SKILL.md`, `README.md`, `reference/setup.md`. `setup.md` is entirely SSH and
 network setup — locally none of its seven parts apply, which is a section
 saying so rather than a rewrite. *Files:* `skill/SKILL.md`, `README.md`,
 `skill/reference/setup.md`. *Done when:* a local reader is not sent through
 `ssh-copy-id`.
 
-**5.4 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
+**5.5 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
 describes one of two shapes once this lands. A rename is the repo, the installed
 skill directory, the MCP server entry and every path in every doc. Decide it
 here; do not discover it at the end.
