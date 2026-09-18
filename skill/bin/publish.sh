@@ -67,9 +67,17 @@ TXT
 # published URI is built with no host at all — http://:9100/... (item 39). Narrow
 # to the alias that answers first (a no-op for a single-host config), then read
 # its LAN IP.
-_pick_host
-MACIP=$(ssh -G "$MAC_HOST" 2>/dev/null | awk '/^hostname /{print $2}')
-[ -n "$MACIP" ] || { echo "could not resolve a LAN IP for '$MAC_HOST' — ssh -G returned no hostname" >&2; exit 1; }
+# Locally there is nothing to resolve and no ssh to ask. The endpoint, the
+# relay and whatever reads the published URL are all on this machine, so the
+# address is the loopback — and asking ssh -G for a host that is not in the conf
+# would fail on a question that has no reason to be asked.
+if [ "$TRANSPORT" = local ]; then
+  MACIP=127.0.0.1
+else
+  _pick_host
+  MACIP=$(ssh -G "$MAC_HOST" 2>/dev/null | awk '/^hostname /{print $2}')
+  [ -n "$MACIP" ] || { echo "could not resolve a LAN IP for '$MAC_HOST' — ssh -G returned no hostname" >&2; exit 1; }
+fi
 
 case "${1:-start}" in
   stop)

@@ -494,13 +494,34 @@ first hard prerequisite this item has turned up.
 poisoned `ssh` that exits 99 and shouts, a local run execs `maestro mcp` and
 never touches ssh; suite 144 passed, 0 failed.
 
-**3.4 The two that measure or resolve the boundary.** `bench.sh:17` times an
-`ssh <host> true` round trip and `publish.sh:71` reads the Mac's address out of
-`ssh -G`. Locally the first has nothing to measure and the second is
-`127.0.0.1`. Both should say so rather than print a zero or an empty string.
-*Files:* `skill/bin/bench.sh`, `skill/bin/publish.sh`. *Done when:* local
-`bench.sh` reports that there is no round trip to measure, and `publish.sh`
-resolves without calling ssh.
+**3.4 DONE 18 Sep — the two that measure or resolve the boundary.** `bench.sh`
+timed an `ssh <host> true` round trip; `publish.sh` read the Mac's address out
+of `ssh -G`.
+
+**`bench.sh` says there is no round trip rather than printing three small
+numbers.** Timing a local fork and exec would produce real figures, but they
+measure the shell, and a reader comparing them against the Mac's 0.30-0.44s
+would be comparing two quantities that share a heading. The second heading
+follows the transport too — "on this machine" rather than "on the Mac".
+
+**`publish.sh` resolves to `127.0.0.1` without asking ssh.** The endpoint, the
+relay and whatever reads the published URL are all here, and `ssh -G` for a host
+that is not in the conf would fail on a question with no reason to be asked.
+The relay itself is 4.1's.
+
+*Files:* `skill/bin/bench.sh`, `skill/bin/publish.sh`. *Verified:* a local
+`bench.sh` reaches `_dev` without touching ssh; suite 144 passed, 0 failed.
+
+**Stage 3 is complete, and running it turned up 3.5.** `bench.sh` stopped with
+`no booted device on  (platform: android)` — `lib.sh:302` interpolating an empty
+`$MAC_HOST`. Thirteen user-facing messages across nine files do the same.
+
+**3.5 Thirteen messages say "on " and nothing.** `lib.sh:302,461`,
+`drivers.sh:47,259,327,517`, `viewer.sh:45,62`, `build.sh:95`, `wall.sh:47`,
+`docs-refresh.sh:27`, `publish.sh:79`. One name in `lib.sh` — `$MAC_HOST` across
+ssh, "this machine" locally — and thirteen substitutions. *Files:*
+`skill/bin/lib.sh` and eight scripts. *Done when:* no local message names a host
+that does not exist, and the ssh wording is unchanged.
 
 **Stage 4 — the six that become unnecessary.** These are deletions from the
 local path, not new code. Each one stays fully wired for `MODE=ssh`.
