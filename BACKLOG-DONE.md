@@ -5222,7 +5222,7 @@ path needs text that is genuinely absent.
 
 ---
 
-## 69. `driver.sh swipe` posts `/swipe`; the driver's live route is `/swipeV2` — **DONE 17 Sep (route fixed in src/, fold settled on device); NOT YET SHIPPED**
+## 69. `driver.sh swipe` posts `/swipe`; the driver's live route is `/swipeV2` — **DONE; SHIPPED in v1.0.0; the variable isolated 18 Sep**
 
 Measured 16 Sep 2026 on the iPad Pro 11-inch (M4)
 `E8F5AC4E-C660-CA9A-F298-B4715B5D1E1E`, iOS 18.6, landscapeLeft, against a
@@ -5346,6 +5346,37 @@ build. That needs the iPad, which belongs to another session's rig.
 it inherits `/swipe`, which works on the iPhones it was written for. It still
 wants a re-run once this ships, because it now goes through `swipeV2`.
 
+**Isolated 18 Sep 2026 — it is not Flutter and it is not the gesture.** Run on
+the iPhone 16 Pro Max `6EA2EBFE-7483-4422-9E51-A345A74DADEA`, one driver build,
+one session, posting the same payload to both routes and comparing the hierarchy
+before and after:
+
+| surface | gesture | `/swipe` | `/swipeV2` |
+| --- | --- | --- | --- |
+| springboard | horizontal page | moved | moved |
+| Settings (UIKit) | vertical list | moved, 2 trials | moved, 2 trials |
+| the app's store picker (Flutter) | vertical list | moved, 2 trials | moved, 2 trials |
+
+The UIKit and Flutter rows alternated the order and relaunched to a fresh scroll
+position before each trial, because the first attempt ran `/swipe` then
+`/swipeV2` on an already-scrolled list and read the end of the list as an inert
+route.
+
+So on this device the two routes are indistinguishable, and the 16 Sep failure —
+iPad Pro 11-inch, **landscapeLeft**, Flutter two-column grid — is explained by
+neither the framework nor a vertical gesture. What is left is the iPad, its
+orientation, or that day's driver build. **Orientation is the candidate worth
+testing first**: rule 3 already says a landscape-locked iPad needs
+`driver.sh orient` before a resolved tap, because the resolver sends app-space
+coordinates and the driver rotates them. If `/swipe` v1 does not apply that
+rotation and `/swipeV2` does, a swipe would land off the view and answer 200 —
+which is exactly what fourteen consecutive inert swipes looked like. Testing it
+costs one iPad boot.
+
+**Shipped.** `skill/bin/driver.sh:385`, `:868` and `:960` post `swipeV2`, and the
+v1.0.0 release tarball carries them. The "NOT YET SHIPPED" in this item's title
+predated the package having a release at all.
+
 ---
 
 ## 84. An `_ssh` inside a loop reading from stdin eats the loop's input — **BUILT IN src/ 17 Sep, NOT YET SHIPPED**
@@ -5391,7 +5422,7 @@ one for each shape that must not be flagged.
 
 ---
 
-## 67. A wall label outlives its session — nothing clears it, and the next session will not replace it — **ALL FOUR PIECES SHIPPED; the `SessionEnd` hook is registered by `install.sh`; the label half is still open**
+## 67. A wall label outlives its session — nothing clears it, and the next session will not replace it — **DONE; ALL FOUR PIECES SHIPPED and the `SessionEnd` hook is registered by `install.sh`**
 
 The maintainer opened the wall on the morning of 16 Sep and found **four simulators
 named 13h ago, none working**, and the night before **two labels still up for
@@ -5552,9 +5583,13 @@ also run on the real Mac against scratch files, since the quoting is the risk:
 blank→WROTE, ours→KEPT, peer fresh→KEPT, peer 113060s old→WROTE, same peer with
 a live driver→KEPT.
 
-**Still open: piece 4 only** — what a label with no live session should look like
-on the page. With pieces 1–3 done, that is the case of a simulator nobody has
-touched since its session died, and it remains the judgement call it always was.
+**Nothing is open.** This paragraph used to say "still open: piece 4 only",
+which contradicted the piece-4 section thirty lines above it — that section
+records the decision and the build on the same day. Corrected 18 Sep after the
+stale claim was repeated into `BACKLOG.md`'s header and read back twice as work
+outstanding. The case it describes — a simulator nobody has touched since its
+session died — is real, but it is about the BOOT rather than the label, and it
+is item 88.
 
 **Gates.** None. Independent of 17 and 28, and touches `src/hooks/`,
 `src/bin/drivers.sh` and `src/SKILL.md` only.

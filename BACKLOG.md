@@ -13,10 +13,11 @@ skill change behind them.
 
 **70, 71 and 72 were built the same day and are in `BACKLOG-DONE.md`.** 70 was
 the item that cost those two days — `driver.sh watch`, built on 72's `rows` and
-71's detached-work rules, verified live on an iPhone the same afternoon. **69's
-route is fixed in `skill/` but 69 stays open**: its fold gained a measurement that
-withdraws its own "confirmed on the iPhone" claim, and the test that settles what
-the 15 Sep sweeps were worth has not been run.
+71's detached-work rules, verified live on an iPhone the same afternoon. **69 is done and
+shipped.** Its route fix is in `skill/bin/driver.sh` and in the v1.0.0 tarball,
+and the isolation its fold asked for was run on 18 Sep: `/swipe` and `/swipeV2`
+are indistinguishable on the iPhone across every cell tried, so neither Flutter
+nor a vertical gesture explains the 16 Sep failure.
 
 **74 is done and it came back with the opposite of what it claimed.** A device
 budget is not the fix: seven simulators idle with the wall up sit at load 6,
@@ -31,11 +32,14 @@ boots per 74, and a teardown scoped to what this session booted. **67's
 `skill/hooks/rig-down-on-end.sh`, and `install.sh` registers it rather than
 leaving the `settings.json` entry as the machine's step — that reversal is the
 whole point: the hook sat unregistered from 17 Sep, which is the failure it
-exists to prevent. What remains of 67 is the label half.
+exists to prevent. **67 is closed.** Piece 4 — what a label with no live session
+looks like — was decided and built on 17 Sep: `remote/wall.py:96` sets
+`HIDE_FROM_PREVIOUS_DAY` and `:136` applies it, so a name from an earlier
+calendar day is not shown and the tile falls back to the handset.
 
 **75, 77, 78, 79, 80 and 81 are done** and in `BACKLOG-DONE.md`. What remains is
-**82** (a hook in the sister skill, so not this package's to take), **69**'s
-outstanding measurement, **67**'s remaining label half, and **28**.
+**82** (a hook in the sister skill, so not this package's to take) and **28**.
+**67 and 69 are both closed** — see their entries in `BACKLOG-DONE.md`.
 
 **Where the toolkit now lives.** Item 17 moved it into its own git repo — the
 one this file is in — where `src/` became
