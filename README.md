@@ -181,6 +181,7 @@ side of the SSH boundary each runs on, and the rules a new one has to keep.
 | --- | --- |
 | `runners/flutter` | complete — every verb verified against a live app |
 | `runners/ios` | complete — every verb verified against a booted simulator |
+| `runners/ios-device` | complete — every answerable verb verified against a physical iPhone |
 | `runners/react-native` | stub; nothing in it has been run |
 | `runners/android` | stub; nothing in it has been run |
 

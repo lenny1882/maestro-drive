@@ -33,8 +33,9 @@ So the four modules asked for split across the two axes:
                     framework                        platform
   flutter           runners/flutter          worked   —
   react-native      runners/react-native     stub     —
-  ios               —                                 runners/ios      worked
-  android           —                                 runners/android  stub
+  ios               —                                 runners/ios         worked
+  ios-device        —                                 runners/ios-device  worked
+  android           —                                 runners/android     stub
 ```
 
 `runners/ios` and `runners/android` also answer the framework questions for a

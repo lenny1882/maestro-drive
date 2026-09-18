@@ -1892,6 +1892,27 @@ sh "$RS/android/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA 2>/dev/n
   && no "android refuses a simulator UDID" "it claimed it" \
   || ok "android refuses a simulator UDID"
 
+# ios and ios-device are exact complements: every device id belongs to one of
+# them and never to both, which is what lets a caller pick without knowing
+# which kind of device it holds.
+for _d in 6EA2EBFE-7483-4422-9E51-A345A74DADEA 00008020-000A396C3606002E; do
+  sh "$RS/ios/platform.sh" claim "$_d" 2>/dev/null; _a=$?
+  sh "$RS/ios-device/platform.sh" claim "$_d" 2>/dev/null; _b=$?
+  [ "$_a$_b" = "01" ] || [ "$_a$_b" = "10" ] \
+    && ok "exactly one of ios / ios-device claims $_d" \
+    || no "exactly one of ios / ios-device claims $_d" "ios=$_a ios-device=$_b"
+done
+
+# The verbs a phone genuinely cannot answer. They exit 2 and say why, because a
+# missing container is not a failure to read one — and the consequence, that
+# appcheck has no device form, is the thing a reader needs told.
+for _v in container prefs-read orientations; do
+  out=$(sh "$RS/ios-device/platform.sh" "$_v" x y 2>&1); rc=$?
+  { [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no readable app container'; } \
+    && ok "ios-device $_v exits 2 naming the reason" \
+    || no "ios-device $_v exits 2 naming the reason" "rc=$rc: $out"
+done
+
 # devices --booted is what --all now reads. Tab separated, one per line, so the
 # caller's `IFS=$'\t' read` takes the id and leaves the name alone however many
 # spaces are in it.
