@@ -1994,6 +1994,36 @@ out=$(FB --platform android 2>&1); rc=$?
   || no "an android build exits 2 saying why, rather than failing obscurely" "rc=$rc: $out"
 
 echo
+echo "the conf init.sh writes names its runner (item 87, 5.2)"
+# No --repo, so nothing is asked of a Mac and this runs offline. The point is
+# that the conf SAYS which modules it uses: a conf that does not mention them
+# inherits flutter and ios silently, which is a modular package set up
+# non-modularly.
+ICONF="$TMP/initproj"; mkdir -p "$ICONF"
+( cd "$ICONF" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --host mac-x --fqdn mac-x.local \
+    --app com.example.app --write >/dev/null 2>&1 )
+if [ -r "$ICONF/.maestro-mac.conf" ]; then
+  grep -q 'RUNNER:=' "$ICONF/.maestro-mac.conf" \
+    && ok "init writes RUNNER" || no "init writes RUNNER" "absent"
+  grep -q 'PLATFORM:=ios' "$ICONF/.maestro-mac.conf" \
+    && ok "init writes PLATFORM" || no "init writes PLATFORM" "absent"
+  # With no REPO there is nothing to ask, and the conf must not claim it found
+  # out. A default presented as a finding is how a wrong runner survives.
+  grep -q 'default rather than a finding' "$ICONF/.maestro-mac.conf" \
+    && ok "an undetected runner is written as a default, not as a finding" \
+    || no "an undetected runner is written as a default, not as a finding" \
+         "$(grep -A1 'RUNNER:=' "$ICONF/.maestro-mac.conf" | head -2)"
+else
+  no "init writes RUNNER" "no conf written"
+fi
+# The gitignore advice it prints in a git tree covers the PROFILE layering too:
+# .maestro-mac.conf.uat is where APP_PIN actually lives in a two-environment
+# project, and an entry that names only the base file leaves it exposed.
+grep -q 'maestro-mac\.conf\.\*' "$REPO/bin/init.sh" \
+  && ok "the gitignore advice covers the profile confs, where the credentials are" \
+  || no "the gitignore advice covers the profile confs, where the credentials are" "base file only"
+
+echo
 echo "build residue in the checkout, told apart from real changes"
 # A branch switch on 12 Aug stopped dead on two lock files the session's own
 # builds had regenerated. `git status --short` is a flat list, so they looked
