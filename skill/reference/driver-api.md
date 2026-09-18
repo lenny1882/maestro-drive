@@ -88,7 +88,7 @@ gives each body) and then exercised against the live driver:
 | `pressKey` | `{"key":"delete"}` | yes — removed one character |
 | `pressButton` | `{"button":"home"}` | shape only |
 | `swipeV2` | `{"appId":..,"startX":..,"startY":..,"endX":..,"endY":..,"duration":0.4,"appIds":[...]}` | **yes** — the live route, everywhere measured |
-| `swipe` | same payload | **200 either way** — works in some places, does nothing in others; see below |
+| `swipe` | same payload | **v1, and it does not rotate** — 200 either way; correct only while the app frame is portrait; see below |
 | `setOrientation` | `{"orientation":"portrait"}` | yes — device rotated |
 | `launchApp` / `terminateApp` | `{"bundleId":..}` / `{"appId":..}` | shape only |
 | `isScreenStatic` | GET | yes — `{"isScreenStatic":true}` |
@@ -100,7 +100,7 @@ gives each body) and then exercised against the live driver:
 All of it is in `bin/driver.sh`: `tap`, `text`, `key`, `button`, `erase`,
 `swipe`, `orient`, `launch`, `kill`, `static`, `keyboard`, `app`.
 
-### `swipe` is not the swipe route — `swipeV2` is
+### `swipe` is not the swipe route — `swipeV2` is, and the difference is rotation
 
 This table said `swipe` was the working route until 17 Sep 2026, and the
 correction cost a day. **`POST /swipe` answers HTTP 200 whether or not it moves
@@ -132,11 +132,29 @@ One `POST /swipe` moved it. `/swipeV2` moved the same list immediately
 afterwards. The 16 Sep note claiming `/swipe` was confirmed broken on an iPhone
 was second-hand and is withdrawn.
 
-That is worse than a route that never works: it works often enough to look
-correct and fails where it matters. The variable is **neither the device nor the
-framework** — Flutter on the iPhone scrolls, Flutter on the iPad does not — and
-it has not been isolated. Everything here posts `swipeV2` because that is the
-route Maestro itself uses and the only one measured to work in both places.
+**The variable is the orientation, and `/swipe` does not rotate.** Isolated
+18 Sep 2026 on iPad Pro 11-inch (M4), one driver, in **Settings** rather than the
+app so the framework is out of it. The same app-space payload to each route,
+relaunched to a fresh scroll position before every trial:
+
+| device orientation | app frame | `/swipe` | `/swipeV2` |
+| --- | --- | --- | --- |
+| `landscapeLeft` | 1210x834 | **no change, 2 trials** | moved, 2 trials |
+| `portrait` | 834x1210 | moved, 2 trials | moved, 2 trials |
+
+Rotate the device and `/swipe` starts working. Nothing else changed. In landscape
+the hierarchy shows the two spaces disagreeing outright — the app node reports
+`1210x834` while the status bar reports `24x1210` — and that is the same split
+rule 3 exists for. `/swipeV2` applies the rotation; `/swipe` sends the point
+through unturned, it lands off the view, and the 200 says only that the JSON
+parsed.
+
+So it is not the device and not the framework: Flutter on a **portrait** iPhone
+scrolls under either route, and UIKit on a **landscape** iPad scrolls under
+neither but `swipeV2`. Anything that posts a raw coordinate has to know which
+space it is in — the third instance of that, after the resolver and the raw-tap
+rule. Everything here posts `swipeV2`, which is both what Maestro itself uses and
+the only route that rotates.
 
 The route Maestro itself uses, read out of its own log for a `scrollUntilVisible`
 that worked (`~/.maestro/tests/<run>/xctest_runner_*.log`):
@@ -153,10 +171,11 @@ verb, the journey verb, and `_scrollto`, which inherited the dead route and
 reported `not found after N swipes down` with the list still on row one.
 
 **What this invalidates, and what it does not.** A sweep that ran through
-`scrollto` or a scroll journey **on the iPad** was read from a list that never
-moved, and concluded everything in it was reachable. **On the iPhone it was
-not**: `/swipe` scrolls there, so iPhone sweeps taken before 17 Sep 2026 stand.
-Check which device a reachability claim came from before re-running it
+`scrollto` or a scroll journey **against a landscape app frame** was read from a
+list that never moved, and concluded everything in it was reachable. **Against a
+portrait frame it was not**: `/swipe` rotates nothing and needs to rotate
+nothing there, so those sweeps stand. The test is the orientation the app was in,
+not which handset it was on — check that before re-running a reachability claim
 (BACKLOG item 69).
 
 **Nothing in that list hides the keyboard**, and the list is the whole of what
