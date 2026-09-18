@@ -89,7 +89,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep**
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep, nothing built yet**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -150,6 +150,176 @@ directory, an MCP server entry and a repo — so decide it deliberately rather
 than discovering it at the end.
 
 **Gated on:** nothing. Item 87 touches `_ssh` only as a caller.
+
+### The plan, in stages
+
+Each unit is one commit. Stage 1 decides the shape; Stages 2 and 3 are
+mechanical once it is right, and doing them first would mean doing them twice.
+Every stage keeps the SSH path working — there is no cut-over commit.
+
+**Stage 1 — the switch, and what a local project must set.** All four units are
+`bin/config.sh` and `bin/init.sh`. Nothing else knows the mode exists yet.
+
+**1.1 One setting names the transport.** `.maestro-mac.conf` gains `MODE`,
+defaulting to `ssh`, read in `bin/config.sh` next to `MAC_HOST` and exported
+with it. Nothing reads it yet. It is an explicit setting rather than "`MAC_HOST`
+is empty, so we must be local", because a conf with a misspelt `MAC_HOST` has to
+keep failing as a broken remote conf instead of silently becoming a local one.
+*Files:* `skill/bin/config.sh`. *Done when:* `MODE=local` survives `config.sh`
+and is exported; an unset `MODE` reads `ssh`; any other value is refused by
+name.
+
+**1.2 The required-settings check is per mode.** `config.sh:239` demands
+`MAC_HOST`, `MAC_FQDN` and `APP_ID` together. Local mode needs `APP_ID` alone —
+the other two have no answer on this machine. Two messages, not one with a
+conditional clause: the unconfigured-project message at `config.sh:243` is one
+of the more useful things this package prints, and it has to stay that good for
+both shapes rather than degrade into a list with `(unset)` against settings the
+user was never meant to fill. *Files:* `skill/bin/config.sh`. *Done when:* a
+`MODE=local` conf missing `APP_ID` names `APP_ID` and nothing else, and the
+`MODE=ssh` message is byte-identical to today's.
+
+**1.3 The permission warning has nothing to warn about locally.**
+`config.sh:284-353` matches `permissions.allow` against the real `ssh <host>`
+and `scp <host>` strings and suggests `Bash(ssh <prefix>*:*)`. With no ssh in
+the path there is nothing to cover, and `_perm_prefix` over an empty `MAC_HOST`
+would suggest `Bash(ssh *:*)` — a wider allow than the remote case asks for,
+produced for a session that needs none. *Files:* `skill/bin/config.sh`. *Done
+when:* a local session prints no permission notice and writes no `perm-warned`
+marker.
+
+**1.4 `bin/init.sh` can write a local conf.** `--detect` today lists `~/.ssh`
+aliases and probes each one. On a machine with its own simulator there are no
+aliases to list, and the honest answer is "the device is here" rather than "no
+Mac found". *Files:* `skill/bin/init.sh`. *Done when:* `init.sh --detect` on a
+machine with a booted simulator and no ssh alias offers local mode and writes a
+conf `config.sh` accepts.
+
+**Stage 2 — `_ssh` runs the script instead of sending it.** The 84 call sites do
+not change in any unit of this stage. That is the whole bet; if a call site has
+to change, the bet was wrong and the shape goes back to Stage 1.
+
+**2.1 `_ssh` gains a local branch.** `bin/lib.sh:141-160`. In local mode it runs
+the same script through `sh -c` with the same `$REMOTE_ENV` prefix, and
+`_pick_host` (`lib.sh:92`) returns immediately without consulting the cache or
+calling `_probe_host` (`lib.sh:89`). `$SSH_OPTS` and `$TMO`'s retry-and-re-pick
+path at `lib.sh:155` are dead locally — a local `sh -c` does not stop answering
+mid-command. *Files:* `skill/bin/lib.sh`. *Done when:* `bin/device.sh list`
+against a local simulator returns the same rows the ssh path returns against the
+Mac, and `SSH_OPTS` is never expanded in a local run.
+
+**2.2 `$RDIR` is two jobs and only one of them collapses.** It is where the
+Mac-side code is staged — `lib.sh:15-16` builds `PLATFORM_SH` and
+`FRAMEWORK_SH` from it, `bin/install.sh` fills it — and it is scratch:
+`$RDIR/$N.png`, `$RDIR/flows`, `PORTS_MAP` at `lib.sh:291`. Locally the code is
+already in the checkout and the scratch is `$LDIR`. Collapsing `$RDIR` onto
+`$LDIR` wholesale points `PLATFORM_SH` at a temp directory nothing populates.
+Split the two names before wiring anything to them. *Files:*
+`skill/bin/config.sh`, `skill/bin/lib.sh`. *Done when:* the code path and the
+scratch path are separately named in `config.sh`, both resolve in `MODE=ssh` to
+exactly what `$RDIR` resolves to today, and locally the code path is the
+checkout.
+
+**2.3 `bin/install.sh` has nothing to push.** Once 2.2 lands, the helpers and
+the runner modules are already where a local verb looks for them. The unit is
+the skip and the message: a local `install.sh` should say the code is in place,
+not print an empty `ls -la`. Its `_ssh "mkdir -p '$RDIR'"` at `lib.sh:298` still
+has to make the scratch directory. *Files:* `skill/bin/install.sh`. *Done when:*
+a local `install.sh` copies nothing, creates the scratch directory, and exits 0
+with a line saying which checkout the modules are being read from.
+
+**Stage 3 — the sixteen raw calls, by shape.** Four shapes, not sixteen
+problems. Each unit does every call site of its shape, because a half-converted
+shape is the state that hides the next bug.
+
+**3.1 Push a file to the Mac → `_push`.** Eleven sites, all the same: `scp` or
+`ssh "cat > …"` moving one file from the checkout into `$RDIR`.
+`install.sh:14,31`, `drivers.sh:406`, `wall.sh:144,148`, `device.sh:50`,
+`driver.sh:197`, `viewer.sh:76`, `build.sh:115`, `mac.sh:25`, `img.sh:146`. One
+helper in `lib.sh` beside `_ssh`, `cp` locally, and after 2.2 most of them are
+already-in-place no-ops. *Files:* `skill/bin/lib.sh` and the eight scripts.
+*Done when:* no `scp` or `cat >` remains outside `lib.sh`, and the ssh path
+still passes its existing tests unchanged.
+
+**3.2 Pull a file back → `_pull`, and the base64 round-trips go.**
+`shot.sh:37-38`, `flow.sh:103` and `img.sh:148-149` each base64 a PNG through
+the SSH channel and decode it on this side; `docs-refresh.sh:45` scps a tarball
+back. Locally the file is already on the filesystem and the encode/decode pair
+is pure cost. Note `img.sh` is a round trip in both directions and `shot.sh`
+folds its pull into the same `_ssh` as the screenshot — the pull cannot simply
+be split out of that string without adding a round trip to the remote path.
+*Files:* `skill/bin/lib.sh`, `shot.sh`, `flow.sh`, `img.sh`, `docs-refresh.sh`.
+*Done when:* a local screenshot produces a PNG with no base64 in the path, and a
+remote one still costs one round trip.
+
+**3.3 `bin/mcp.sh` execs ssh.** `mcp.sh:22` is `exec ssh …` — the MCP server
+process itself, not a command run through `_ssh`. It cannot use `_ssh` because
+it must replace the process and hold stdio open. *Files:* `skill/bin/mcp.sh`.
+*Done when:* a local MCP server starts without ssh and the registered entry in
+`.claude.json` needs no change to switch modes.
+
+**3.4 The two that measure or resolve the boundary.** `bench.sh:17` times an
+`ssh <host> true` round trip and `publish.sh:71` reads the Mac's address out of
+`ssh -G`. Locally the first has nothing to measure and the second is
+`127.0.0.1`. Both should say so rather than print a zero or an empty string.
+*Files:* `skill/bin/bench.sh`, `skill/bin/publish.sh`. *Done when:* local
+`bench.sh` reports that there is no round trip to measure, and `publish.sh`
+resolves without calling ssh.
+
+**Stage 4 — the six that become unnecessary.** These are deletions from the
+local path, not new code. Each one stays fully wired for `MODE=ssh`.
+
+**4.1 The relay.** `remote/relay.py` exists because the Dart VM Service binds
+the Mac's loopback and the sandbox can only reach its LAN address. Locally the
+loopback is this machine's. `bin/publish.sh`, `bin/driver.sh:197` and
+`bin/viewer.sh:76` all stage and start it. *Files:* `skill/bin/publish.sh`,
+`driver.sh`, `viewer.sh`. *Done when:* a local `publish.sh` returns a
+`127.0.0.1` URL with no relay process started.
+
+**4.2 `$grpc_proxy` on every curl.** It is the sandbox's egress proxy, needed to
+reach another machine's LAN address. Locally it must not be set, or the request
+leaves for a proxy that will refuse it. *Files:* the curl call sites under
+`skill/bin`. *Done when:* no local request carries a proxy variable.
+
+**4.3 The wall.** `wall.py:807` binds `0.0.0.0` and `wall.sh:35-36` builds
+`http://$MAC_FQDN:$WALLPORT/` unless `WALL_URL` is set. `WALL_URL` may already
+be the whole answer, and the bind may be fine as it is. Check before writing
+anything — this unit may turn out to be a test and a comment. *Files:*
+`skill/bin/wall.sh`. *Done when:* a local wall is reachable at a URL the skill
+prints, and whatever `MAC_FQDN` did for it is either replaced or shown not to
+have been needed.
+
+**4.4 `MACIP` and `MAC_FQDN` leave the local path.** `lib.sh:184-188` asks the
+Mac for its `en0` address. Locally every URL the sandbox builds is
+`127.0.0.1`. This is last in the stage because 4.1 and 4.3 are its only real
+callers. *Files:* `skill/bin/lib.sh`. *Done when:* no local code path reads
+`MACIP` or `MAC_FQDN`.
+
+**Stage 5 — proof, docs, and the name.**
+
+**5.1 The suite runs both modes.** `test/run-tests.sh` redirects `HOME` and
+`CLAUDE_DIR` into a temp directory and installs the package there, so it already
+runs without a Mac. It needs a local-mode pass over the conf shapes from 1.2 and
+the no-op paths from 2.3 and 3.1. *Files:* `skill/test/run-tests.sh`. *Done
+when:* the suite covers both modes and still needs no Mac.
+
+**5.2 One live run, end to end, on a machine with its own simulator.** The
+lesson item 87 paid for twice: a contract verified only on empty and error paths
+is not verified. `rig up`, a flow, a screenshot, `net.sh`, `prefs.sh`. *Done
+when:* each has run locally and the result is recorded here, verb by verb.
+
+**5.3 The docs stop describing a Mac across a network as the only shape.**
+`SKILL.md`, `README.md`, `reference/setup.md`. `setup.md` is entirely SSH and
+network setup — locally none of its seven parts apply, which is a section
+saying so rather than a rewrite. *Files:* `skill/SKILL.md`, `README.md`,
+`skill/reference/setup.md`. *Done when:* a local reader is not sent through
+`ssh-copy-id`.
+
+**5.4 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
+describes one of two shapes once this lands. A rename is the repo, the installed
+skill directory, the MCP server entry and every path in every doc. Decide it
+here; do not discover it at the end.
+
 
 ## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **OPEN, raised 18 Sep**
 
