@@ -37,9 +37,11 @@ looks like — was decided and built on 17 Sep: `remote/wall.py:96` sets
 `HIDE_FROM_PREVIOUS_DAY` and `:136` applies it, so a name from an earlier
 calendar day is not shown and the tile falls back to the handset.
 
-**75, 77, 78, 79, 80 and 81 are done** and in `BACKLOG-DONE.md`. What remains is
-**82** (a hook in the sister skill, so not this package's to take) and **28**.
-**67 and 69 are both closed** — see their entries in `BACKLOG-DONE.md`.
+**75, 77, 78, 79, 80 and 81 are done** and in `BACKLOG-DONE.md`, and **67 and 69
+are closed** — see their entries there. **28 is done for everything this
+repository controls**; the four deletions it listed are in the pre-repo working
+directory and are not this package's to make. What remains of the earlier run is
+**82**, a hook in the sister skill and so not this package's to take either.
 
 **Where the toolkit now lives.** Item 17 moved it into its own git repo — the
 one this file is in — where `src/` became
@@ -69,11 +71,11 @@ It is in `BACKLOG-DONE.md`.
 **87 was raised on 18 Sep**, the first item about what this package is *for*
 rather than how it works.
 
-**Next item number: 88.** Items 1–87 are allocated; new items start from 88.
+**Next item number: 90.** Items 1–89 are allocated; new items start from 90.
 
 ---
 
-## 28. Machine and client data left in this directory, and two files that should go — **OPEN and unblocked, raised 19 Aug**
+## 28. Machine and client data left in this directory, and two files that should go — **DONE 18 Sep for everything this repo controls; the four deletions are not this repo's to make**
 
 The 12 Aug sweep read all 573 files and found no credentials. Client and machine
 data was in eight places; four were removed or redacted and four remain by
@@ -109,11 +111,49 @@ since it is the pre-skill rules document and is wrong in two places its banner
 does not name. `build/` and `ship.sh` join that list — superseded by the repo,
 source of truth for nothing, and still here.
 
-**Fix.** 17 is taken, so this is unblocked. Delete the duplicate top-level
-`docs/`; delete `RULES-STALE-pre-skill.md` with `README.md`; delete `build/` and
-`ship.sh`; and ask about the rest rather than redacting them — the two the maintainer kept
+**Fix, as it was written.** Delete the duplicate top-level `docs/`; delete
+`RULES-STALE-pre-skill.md` with `README.md`; delete `build/` and `ship.sh`; and
+ask about the rest rather than redacting them — the two the maintainer kept
 deliberately, and the identifiers inside `skill/`, which are the ones a remote
 would actually publish.
+
+**The four deletions are out of scope and this item should never have carried
+them.** Every one of them — the top-level `docs/`, `RULES-STALE-pre-skill.md`,
+`build/` and `ship.sh` — lives in `~/claude-sandbox/maestro-remote-mac/`, the
+pre-repo working directory. Nothing in this repository references them, nothing
+ships them, and no change here can remove them: a session working in this repo
+can only write to its own working directory. They were listed when this item was
+written on 19 Aug, before item 17 moved the toolkit into a repo of its own, and
+at that point this directory and that one were the same place. They are not any
+more. Deleting that folder is housekeeping on a machine, not work on this
+package, and the item does not wait on it.
+
+**Everything this repo does control is done, 18 Sep.**
+
+- **The identifiers in `skill/` are gone.** A sweep of every tracked file found
+  what the 17 Sep pass had missed: `mac-home`/`mac-office` in eight fixture
+  strings in `skill/test/run-tests.sh`, four comments in `skill/bin/config.sh`
+  and one line of `skill/setup/wizard.sh`'s printed prose; `192.168.4.x` and
+  `10.0.52.x`, the Mac's real addresses on two networks, in `test/run-tests.sh`;
+  and the client repo name in this file. Renamed to `mac-a`/`mac-b` and
+  `192.168.1.x`/`10.0.0.x`, which is what the rest of the repo already used.
+- **The pass had been applied inconsistently inside single files**, which is why
+  a count was never a safe stopping point: `skill/bin/config.sh:90` already read
+  `mac-a mac-b` while `:269` and `:309` still read `mac-home`, and
+  `test/run-tests.sh` carried the sanitised `192.168.1.10` forty lines from the
+  real `192.168.4.250`.
+- **The decision this item asked for was overtaken.** It assumed nothing had
+  left the machine and that a remote was the moment to decide. The repo was
+  already public and pushed. So the choice was not "redact before pushing" but
+  "rewrite what is already there", and the rewrite was run: all 31 commits
+  across `main`, `release/v1.x` and the `v1.0.0` tag, verified to leave the tip
+  tree byte-identical, with the five values at zero afterwards where they had
+  been 28 and 87 and 20 and 20 blobs before. The `v1.0.0` release asset was
+  rebuilt from the rewritten tag and checked by download.
+- **What a rewrite cannot reach, and nothing here can.** GitHub still serves the
+  pre-rewrite commits by SHA, content intact, until it garbage-collects the
+  repository — confirmed by fetching `skill/bin/config.sh` at the old commit
+  over plain HTTPS. That is a support request, not a change to this package.
 
 ---
 
