@@ -342,9 +342,17 @@ fi
 # covers everything, the project's .claude/settings.local.json covers this one.
 # The check matches the actual command, so a narrow Bash(ssh mac-a:*) passes
 # for MAC_HOST=mac-a and a wide Bash(ssh mac-*:*) passes for all of them.
+# Not in local transport. Measured before writing the guard, by removing it:
+# the block is already silent there. It builds its command list from MAC_HOST's
+# aliases, an empty list has nothing uncovered, and nothing is printed — so the
+# guard buys one python3 subprocess per local session, not a behaviour change.
+# It is here to say that in the file. A reader should not have to derive "local
+# sessions never warn" from an empty split inside a heredoc'd python program,
+# and the day MAC_HOST gains a local default is the day the derivation stops
+# holding without anyone touching this block.
 _PERM_WARNED="${LDIR:-${TMPDIR:-/tmp}}/perm-warned"
 
-if [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
+if [ "$TRANSPORT" != local ] && [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
   # First line is the wildcard to suggest; the rest are the uncovered commands.
   _perm_out=$(
     MAC_HOST="$MAC_HOST" PROJECT_DIR="$PROJECT_DIR" python3 - <<'PY' 2>/dev/null
