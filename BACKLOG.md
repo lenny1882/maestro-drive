@@ -1,8 +1,20 @@
 # maestro-remote-mac — backlog
 
-One item remains — 87 — and it is not gated. **17 is done** — the package has a git
-repo, a version, a manifest, an installer and an update path. That releases
-**28**, which waited on it and is now the only decision left in this file.
+**Four items are open: 87, 90, 93 and 94**, and none of them is gated on
+another. **17 is done** — the package has a git repo, a version, a manifest, an
+installer and an update path. That releases **28**, which waited on it.
+
+**87 is mostly built.** The seam exists, `runners/flutter`, `runners/ios` and
+`runners/ios-device` are complete with every verb verified against real devices,
+and `RUNNER` and `PLATFORM` change what nine scripts say. What is left of it is
+blocked on hardware that is not on that Mac — there is no Android SDK and no
+React Native checkout — so `runners/android` and `runners/react-native` are
+stubs that say so rather than code nobody has run.
+
+**90, 93 and 94 came out of building it.** 90 is the wall not showing a physical
+device, 93 is the sister skill carrying its own Flutter answers and disagreeing
+with this package's from the same conf file, and 94 is running against a
+simulator on this machine with no SSH at all.
 
 **70–82 were raised on 17 Sep** by an audit of the fourteen simulator-driving
 sessions of 15 and 16 Sep (PROJ-1812/1811 reproduction and fix verification).
@@ -76,8 +88,13 @@ change, on a test that was only correct when it was not shortly after midnight.
 It is in `BACKLOG-DONE.md`.
 
 **87 was raised on 18 Sep**, the first item about what this package is *for*
-rather than how it works. With 85 done it is the only item left open in this
-file.
+rather than how it works, and most of it was built the same day. Its own entry
+carries the stage-by-stage state and the seven bugs that only running it found.
+
+**91 and 92 are done and were not planned.** Both came out of 87: a live driver
+had never protected a peer's wall label, and an audit of the SSH boundary for
+the same family of mistake found two more. They are recorded here rather than in
+`BACKLOG-DONE.md` because they are this branch's, and move when it lands.
 
 **Next item number: 95.** Items 1–94 are allocated; new items start from 95.
 
@@ -921,7 +938,7 @@ acted on.
 
 ---
 
-## 87. Flutter and iOS are wired in, not plugged in — **OPEN, raised 18 Sep; seam designed 18 Sep, nothing wired to it yet**
+## 87. Flutter and iOS are wired in, not plugged in — **OPEN, raised 18 Sep; the seam is built, three modules are complete and verified, and what remains is blocked on hardware**
 
 The driving half of this skill does not care what built the app. Maestro taps a
 coordinate, reads a hierarchy, runs a journey and takes a screenshot the same way
