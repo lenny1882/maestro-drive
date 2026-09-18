@@ -256,6 +256,67 @@ bad_ssh=$(grep -nE '(^|[^-[:alnum:]_])ssh ' "$W" \
   && ok "wizard: every ssh passes -n so it cannot eat the answers" \
   || no "wizard: every ssh passes -n so it cannot eat the answers" "$(printf '%s' "$bad_ssh" | head -3)"
 
+# --- every probe at a raw address carries the ProxyCommand -------------------
+# A Host block carries the ProxyCommand; a raw user@address has no block and so
+# picked up nothing. Inside a Claude session that address is unroutable, ssh
+# says "Network is unreachable", and phase B reported it as Remote Login being
+# off and offered to write the block unverified — the two-of-three this item
+# exists to prevent, arrived at by believing a probe that never ran. Measured
+# 18 Sep 2026 against the live Mac: raw address 255, same address with the
+# ProxyCommand 0. Phase A's ssh-copy-id and its BatchMode proof are the same
+# shape, and are why a fresh machine cannot be set up from inside a session.
+bare_probe=$(python3 - "$W" <<'PROBE'
+import re, sys
+src = open(sys.argv[1]).read()
+# Logical lines: a trailing backslash continues the command.
+src = re.sub(r"\\\n\s*", " ", src)
+bad = []
+for line in src.splitlines():
+    t = line.strip()
+    if t.startswith("#"):
+        continue
+    if not re.search(r"(^|[^-\w])(ssh|ssh-copy-id|scp)\s", t):
+        continue
+    # Only the ones naming a raw user@address. An alias target resolves its own
+    # block, and "${C_SSH[@]}" is whichever c_target chose.
+    if not re.search(r'"\$\w*(user|USER)\w*@\$\w+"', t):
+        continue
+    if "ProxyCommand" not in t:
+        bad.append(t[:90])
+print("\n".join(bad))
+PROBE
+)
+[ -z "$bare_probe" ] \
+  && ok "wizard: every probe at a raw address carries the ProxyCommand" \
+  || no "wizard: every probe at a raw address carries the ProxyCommand" "$bare_probe"
+
+# One string, not two. The block writer and the probes must agree exactly, and
+# the way they stop agreeing is a hand-copy that one of them edits.
+[ "$(grep -c 'proxyport=3128' "$W")" = 1 ] \
+  && ok "wizard: the ProxyCommand is written out once, so it cannot drift" \
+  || no "wizard: the ProxyCommand is written out once, so it cannot drift" \
+        "$(grep -c 'proxyport=3128' "$W") copies"
+
+# The functional half of the same point: what ssh resolves out of a block this
+# wizard wrote, and what it resolves from the -o the probes pass, are the same
+# command. %% is the trap — ssh expands % in both places, so a string that is
+# right in one and wrong in the other fails only against a real Mac.
+PXTMP="$TMP/proxy"; mkdir -p "$PXTMP"
+( eval "$(sed -n '/^PROXY_CMD=/,/^)$/p;/^ssh_block_append() {/,/^}/p' "$W")"
+  dry() { return 1; }
+  SSH_CONFIG="$PXTMP/cfg"; : > "$SSH_CONFIG"
+  ssh_block_append probe-alias 10.9.9.9 probeuser "$PXTMP/key"
+  ssh -G -F "$SSH_CONFIG" probe-alias 2>/dev/null | grep -i '^proxycommand ' > "$PXTMP/from-block"
+  ssh -G -o ProxyCommand="$PROXY_CMD" -o Hostname=10.9.9.9 probe-alias 2>/dev/null \
+    | grep -i '^proxycommand ' > "$PXTMP/from-opt" )
+if [ -s "$PXTMP/from-block" ] && cmp -s "$PXTMP/from-block" "$PXTMP/from-opt"; then
+  ok "wizard: the block's ProxyCommand and the probe's resolve to the same command"
+else
+  no "wizard: the block's ProxyCommand and the probe's resolve to the same command" \
+     "block: $(cat "$PXTMP/from-block" 2>/dev/null | head -c 100)
+opt:   $(cat "$PXTMP/from-opt" 2>/dev/null | head -c 100)"
+fi
+
 # --- the write path, for real ------------------------------------------------
 # Everything above runs --dry-run, so until 18 Sep 2026 the wizard had never
 # written anything, even to a copy. Running it for real found three defects in

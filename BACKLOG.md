@@ -64,7 +64,12 @@ cards — and 64, 65 and 66 were done on 15 Sep. All four are in
 `BACKLOG-DONE.md` with the rest of the history of all 68 earlier items.
 
 **85 was raised on 17 Sep** and is the first item about setting the skill up
-rather than running it.
+rather than running it. All three of its phases have now been run live against
+the real Mac; the live run found that every probe in the wizard named a raw
+address and so carried no `ProxyCommand`, which inside a session made phase B
+offer to write a block it had never verified. What is left is the in-place write
+to this machine's own three files and phase C's install-and-cycle, and both need
+a password this session does not have — see the item.
 
 **86 was raised and fixed on 18 Sep** — the suite went red with no code
 change, on a test that was only correct when it was not shortly after midnight.
@@ -77,7 +82,7 @@ rather than how it works.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; WRITE PATH TESTED and PHASE A RUN LIVE 18 Sep; phases B and C still unexercised**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; A, B and C ALL RUN LIVE 18 Sep; what is left needs a password this session does not have**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -532,16 +537,69 @@ it, and all three files are back where they started — `ssh_config` and
 `/etc/hosts` byte-identical, `allowedDomains` identical in value (jq rewrites the
 file, so the bytes move and the values must not).
 
-**Still unexercised: phases B and C.** B needs something to write, and this
-machine has nothing — see above. C cannot be reached on its own: it is offered
-only inside `if phase_b; then … if confirm "Run phase C"`, so a successful B has
-to happen first. C also cycles the Mac's Wi-Fi on purpose, taking down every SSH
-session, the wall and any running driver with it, and polls up to 40 times for
-recovery — so it wants a moment when nothing else on the Mac matters.
+**B and C were both run live on 18 Sep, and B was broken in a way only a live
+run could show.** Every probe in this file named a raw `$user@$address`. A raw
+address has no `Host` block, so it picked up no `ProxyCommand` — and inside a
+Claude session that address is unroutable, so ssh answers `Network is
+unreachable`. Phase B read that as the Mac not answering and offered "Write the
+configuration anyway?", which writes the block **unverified**. That is this
+item's own two-of-three, reached by believing a probe that never ran. Measured
+against the live Mac: raw address exit 255, the same address with the
+ProxyCommand exit 0.
 
-**Coverage: 80 package cases, up from 37 when this started.** Seven of them are
+The fix is one string named once. `PROXY_CMD` now holds the `ProxyCommand` that
+was previously written only into the heredoc in `ssh_block_append`, and phase B's
+probe, phase A's `ssh-copy-id`, phase A's `BatchMode` proof and `c_target`'s
+pre-block fallback all pass it with `-o`. `%%` is doubled in both places, because
+ssh expands `%` in an `-o` value exactly as it does in the config file — which is
+why the generated block stays byte-identical to the three hand-written ones,
+checked both ways. **Phase A could never have run from inside a session either**;
+that it passed on 18 Sep at 13:18 says that run was in an ordinary terminal,
+where `$grpc_proxy` is unset and the same string falls through to a direct `nc`.
+
+**Phase B's round trip, run against copies of this machine's real three files and
+against the real Mac.** `--remove mac-home` took out the `Host` block, the
+`allowedDomains` entry and the `/etc/hosts` line; the wizard then put all three
+back. The probe reported `ok 192.168.4.250 answers and the key works` — the
+branch that had never once run — and the `/etc/hosts` step found `mac-home
+answers right now` and listed it first. `ssh -G` resolves all three aliases
+identically before and after, and the rebuilt block reaches the Mac. The three
+textual differences are the hand-written file's, not the wizard's: the block
+moves to the end of the file, its indent becomes tabs, and one `/etc/hosts` tab
+becomes a space.
+
+**Phase C, run live as far as a password allows.** Discovery off the live
+interface matched the Mac's own table exactly — `en0`, `Tachikoma:Redux`,
+`255.255.252.0`, `192.168.4.1`, DNS `192.168.4.1 1.1.1.1 8.8.8.8`. It took the
+`starting from the script already on the Mac` branch, reported `profile replaced`
+rather than inserted, staged both files to the Mac, printed the five `sudo`
+commands and stopped clean on `Done? n` with `nothing on the Mac has changed`.
+The staged plist is byte-identical to the installed one, and the staged script is
+the same 8209 bytes with the `Tachikoma:Redux` arm carrying the same profile
+line — the splice moves a replaced arm to the end of the `case`, which is
+harmless because the arms are distinct literals and none shadows another. The
+staging files were deleted afterwards, so the Mac is as it was found.
+
+**What is left, and why this session cannot do it.** Two things, both needing a
+password.
+
+- **The in-place write to this machine's own three files.** `~/.ssh/config`,
+  `~/.claude/settings.json` and `/etc/hosts` are all read-only inside the
+  sandbox, and `sudo` there is not setuid, so the live run has to be a person in
+  an ordinary terminal: `./skill/setup/wizard.sh`. It is the same code the round
+  trip above exercised, with a different path in three variables and a real
+  `sudo`.
+- **Phase C's install and cycle.** `sudo` on the Mac has no passwordless path, so
+  the five commands are typed there; then `c_cycle_and_verify` drops Wi-Fi and
+  polls up to 40 times, taking every SSH session, the wall and any running driver
+  with it. It wants a moment when nothing else on the Mac matters.
+
+**Coverage: 83 package cases, up from 37 when this started.** Seven of them are
 the fresh-machine path, which had none, and they were checked against the bug
 they exist for — reintroducing the unassigned `local` turns six of the seven red.
+Three are the ProxyCommand: every probe at a raw address carries it, it is
+written out once so it cannot drift, and what ssh resolves from a generated block
+equals what it resolves from the `-o` a probe passes.
 
 **Why 3, 4 and 5 belong in one tool: they must all three be right or none is.**
 `setup.md:159-161` already says it — *"Add a new address when the Mac joins a new
