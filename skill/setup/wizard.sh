@@ -2,6 +2,7 @@
 # Setup wizard for maestro-remote-mac — the SSH and network side.
 #
 #   ./wizard.sh            run it
+#   ./wizard.sh --list     the networks configured, and which files know them
 #   ./wizard.sh --status   what is already in place, change nothing
 #   ./wizard.sh --edit     change what phase A recorded — username, name, key
 #   ./wizard.sh --hosts    rewrite the /etc/hosts block only, to reorder it
@@ -64,16 +65,22 @@ sh -c 'if [ -n "$grpc_proxy" ]; then A=$(printf "%%s" "$grpc_proxy" | sed -e "s|
 PROXY
 )
 
-STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""; EDIT_ONLY=0
+STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""; EDIT_ONLY=0; LIST_ONLY=0; REMOVE_ASKED=0
 # A while loop rather than `for a in "$@"`, because --remove takes a value.
 while [ $# -gt 0 ]; do
   case "$1" in
+    --list)     LIST_ONLY=1; shift ;;
     --status)   STATUS_ONLY=1; shift ;;
     --edit)     EDIT_ONLY=1; shift ;;
     --hosts)    HOSTS_ONLY=1; shift ;;
     --dry-run)  DRY=1; shift ;;
-    --remove)   REMOVE="${2:-}"
-                [ -n "$REMOVE" ] || { echo "--remove needs an alias" >&2; exit 2; }
+    # A bare --remove asks. A value that starts with a dash is the next flag,
+    # not an alias, so it is left for the loop rather than swallowed — otherwise
+    # `--remove --dry-run` removes a network called --dry-run, or tries to.
+    --remove)   case "${2:-}" in
+                  ""|-*) REMOVE=""; REMOVE_ASKED=1; shift; continue ;;
+                esac
+                REMOVE="$2"
                 shift 2 ;;
     --remove=*) REMOVE="${1#--remove=}"
                 [ -n "$REMOVE" ] || { echo "--remove needs an alias" >&2; exit 2; }
@@ -1601,6 +1608,61 @@ PY
   rm -f "$tmp"
 }
 
+# --- listing what is configured ----------------------------------------------
+# Three files have to agree, so a list that shows only the aliases would hide
+# the failure this whole item is about. Each row says which of the three knows
+# the network, and a row that is not three of three is marked rather than left
+# for the reader to spot.
+
+in_domains() { # in_domains <value>
+  [ -r "$SETTINGS" ] || return 1
+  jq -e --arg d "$1" '(.sandbox.network.allowedDomains // []) | index($d)' \
+     "$SETTINGS" >/dev/null 2>&1
+}
+
+in_hosts() { # in_hosts <addr>
+  [ -r "$HOSTS_FILE" ] || return 1
+  awk -v a="$1" '$1 == a { found = 1 } END { exit !found }' "$HOSTS_FILE"
+}
+
+network_rows() { # alias<TAB>addr<TAB>user<TAB>ssh<TAB>dom<TAB>hosts
+  local a addr user
+  for a in $(configured_aliases || true); do
+    addr=$(ssh_block_hostname "$a")
+    user=$(host_field "$a" User)
+    printf '%s\t%s\t%s\tyes\t%s\t%s\n' "$a" "${addr:--}" "${user:--}" \
+      "$( [ -n "$addr" ] && in_domains "$addr" && echo yes || echo NO )" \
+      "$( [ -n "$addr" ] && in_hosts "$addr" && echo yes || echo NO )"
+  done
+}
+
+list_networks() {
+  local rows partial=0
+  rows=$(network_rows)
+  if [ -z "$rows" ]; then
+    warn "no networks configured — run this with no arguments to add one."
+    return 1
+  fi
+  printf '\n    %-16s %-16s %-12s %-5s %-5s %s\n' \
+    alias address as block allow hosts >&2
+  printf '%s\n' "$rows" | while IFS=$'\t' read -r a addr user sshf dom hos; do
+    printf '    %-16s %-16s %-12s %-5s %-5s %s\n' "$a" "$addr" "$user" "$sshf" "$dom" "$hos" >&2
+  done
+  say ""
+  # The sentence setup.md has said all along: all three or none, because two out
+  # of three produces a failure that looks like something else.
+  printf '%s\n' "$rows" | grep -q 'NO' && partial=1
+  if [ "$partial" = 1 ]; then
+    warn "a NO means that file does not know the address."
+    warn "allow missing: the sandbox proxy refuses it and the Mac reads as off."
+    warn "hosts missing: curl on the .local name will not resolve."
+    say "  Re-running this wizard for that alias writes whichever is missing."
+  else
+    ok "every network is in all three files."
+  fi
+  return 0
+}
+
 # --- main -------------------------------------------------------------------
 
 say "== maestro-remote-mac setup wizard"
@@ -1610,6 +1672,22 @@ command -v jq >/dev/null 2>&1 || {
   say "  jq is needed and is missing — install it and re-run."
   exit 1
 }
+
+if [ "$LIST_ONLY" = 1 ]; then
+  step "Networks"
+  list_networks
+  exit $?
+fi
+
+# A bare --remove: show what there is and take a pick. Typing an alias from
+# memory is how the wrong one goes, and the list is the same one --list prints.
+if [ "$REMOVE_ASKED" = 1 ] && [ -z "$REMOVE" ]; then
+  step "Remove a network"
+  list_networks || exit 1
+  REMOVE=$(ask "which to remove")
+  REMOVE=$(printf '%s' "$REMOVE" | tr -d '[:space:]')
+  [ -n "$REMOVE" ] || { warn "nothing given — nothing removed."; exit 1; }
+fi
 
 if [ -n "$REMOVE" ]; then
   remove_network "$REMOVE"

@@ -757,6 +757,78 @@ case " $up_dom " in
   *) no "re-run: the address it replaced leaves allowedDomains" "new address missing: $up_dom" ;;
 esac
 
+# --- listing, and removing without naming ------------------------------------
+# A list of aliases alone would hide the failure this item is about, so each row
+# says which of the three files knows the network. Two of three is the state
+# that produces a failure looking like something else, and it is invisible until
+# something asks.
+LS="$TMP/list"; mkdir -p "$LS/lib" "$LS/bin"
+ssh_stub "$LS/bin"; printf '#!/bin/sh\nexit 1\n' > "$LS/bin/sudo"; chmod +x "$LS/bin/sudo"
+: > "$LS/key"
+ls_reset() { # <allowedDomains json array> <hosts body>
+  { printf 'Host mac-one\n\tHostname 10.0.0.1\n\tUser someuser\n\tIdentityFile %s\n\n' "$LS/key"
+    printf 'Host mac-two\n\tHostname 10.0.0.2\n\tUser someuser\n\tIdentityFile %s\n' "$LS/key"
+  } > "$LS/ssh_config"
+  printf '{"sandbox":{"network":{"allowedDomains":%s}}}\n' "$1" > "$LS/settings.json"
+  printf '%b' "$2" > "$LS/hosts"
+  date +%F > "$LS/lib/phase-a-done"
+}
+ls_wiz() { local answers="$1"; shift
+  printf '%b' "$answers" | PATH="$LS/bin:$PATH" SSH_CONFIG="$LS/ssh_config" \
+    SETTINGS="$LS/settings.json" HOSTS_FILE="$LS/hosts" LIB_DIR="$LS/lib" \
+    timeout 60 "$W" "$@" 2>&1
+}
+
+ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n'
+l=$(ls_wiz '' --list) || true
+printf '%s' "$l" | grep -qE '^ *mac-one +10\.0\.0\.1 +someuser +yes +yes +yes' \
+  && ok "list: a network in all three files reads yes three times" \
+  || no "list: a network in all three files reads yes three times" "$l"
+printf '%s' "$l" | grep -q "every network is in all three files" \
+  && ok "list: it says so when nothing is missing" \
+  || no "list: it says so when nothing is missing" "$l"
+
+# The state this item exists to catch: the Host block is there and one of the
+# other two is not, which fails as something that names neither.
+ls_reset '["10.0.0.1"]' '10.0.0.1 the-mac.local\n'
+l=$(ls_wiz '' --list) || true
+printf '%s' "$l" | grep -qE '^ *mac-two +10\.0\.0\.2 +someuser +yes +NO +NO' \
+  && ok "list: a network missing from the other two files is marked NO" \
+  || no "list: a network missing from the other two files is marked NO" "$l"
+printf '%s' "$l" | grep -q "the sandbox proxy refuses it" \
+  && printf '%s' "$l" | grep -q "will not resolve" \
+  && ok "list: it says what each missing file costs, not just that it is missing" \
+  || no "list: it says what each missing file costs, not just that it is missing" "$l"
+
+# --remove with nothing after it. Typing an alias from memory is how the wrong
+# one goes, so the list it prints is the same one --list prints.
+ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n'
+l=$(ls_wiz 'mac-two\ny\n\ny\ny\n' --remove) || true
+printf '%s' "$l" | grep -q "mac-one" \
+  && grep -q '^Host mac-one$' "$LS/ssh_config" \
+  && ok "remove: a bare --remove lists what there is and removes the pick" \
+  || no "remove: a bare --remove lists what there is and removes the pick" \
+        "$(printf '%s' "$l" | head -12)"
+grep -q '^Host mac-two$' "$LS/ssh_config" \
+  && no "remove: the picked network is the one that goes" "mac-two is still there" \
+  || ok "remove: the picked network is the one that goes"
+
+# An empty answer must not be read as a choice.
+ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n'
+l=$(ls_wiz '\n' --remove) || true
+grep -q '^Host mac-two$' "$LS/ssh_config" \
+  && printf '%s' "$l" | grep -q "nothing removed" \
+  && ok "remove: an empty pick removes nothing and says so" \
+  || no "remove: an empty pick removes nothing and says so" "$(printf '%s' "$l" | tail -4)"
+
+# `--remove --dry-run` must not try to remove a network called --dry-run.
+ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n'
+l=$(ls_wiz 'mac-two\nn\n' --remove --dry-run) || true
+printf '%s' "$l" | grep -q "nothing is written" \
+  && ok "remove: a flag after a bare --remove is a flag, not an alias" \
+  || no "remove: a flag after a bare --remove is a flag, not an alias" \
+        "$(printf '%s' "$l" | head -8)"
+
 # --- phase A as an editor ----------------------------------------------------
 # What phase A records goes stale. The Mac's account was renamed on 18 Sep and
 # the wizard had no way to say so: the username is read back out of a Host
