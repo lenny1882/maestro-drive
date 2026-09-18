@@ -47,7 +47,8 @@ else sh '$PLATFORM_SH' container '$d' '$APP_ID' 2>&1 | tail -1
 fi
 echo; echo '== is that the code under test? =='
 printf '%s' '$AC' | base64 -d > '$RDIR/appcheck.sh' 2>/dev/null
-. '$RDIR/appcheck.sh' && appcheck \"\$C\" '$REPO' '${BUILD_MARKER:-}'
+# Run with sh, do NOT source — same reason as gitstate.sh above.
+sh '$RDIR/appcheck.sh' --run \"\$C\" '$REPO' '${BUILD_MARKER:-}'
 echo; echo '== supported orientations =='
 if [ -n \"\$C\" ]; then
   sh '$PLATFORM_SH' orientations \"\$C\" 2>&1
