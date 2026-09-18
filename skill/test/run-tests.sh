@@ -2003,14 +2003,14 @@ if command -v git >/dev/null 2>&1; then
   git -C "$GR" commit -qm yarn >/dev/null 2>&1; echo three > "$GR/yarn.lock"
   rngs(){ RESIDUE_GLOBS='yarn.lock
 */yarn.lock' sh -c '. '"$REPO"'/remote/gitstate.sh; gitstate "$1"' _ "$1" 2>&1; }
-  out=$(rngs "$GR" | tr '\n' ' ' | tr -s ' ')
-  case "$out" in
+  rgo=$(rngs "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$rgo" in
     *"residue yarn.lock"*) ok "an overridden residue list is the one that is used" ;;
-    *) no "an overridden residue list is the one that is used" "got: $out" ;;
+    *) no "an overridden residue list is the one that is used" "got: $rgo" ;;
   esac
-  case "$out" in
+  case "$rgo" in
     *"changed"*"pubspec.lock"*) ok "a path the override does not name is a change again" ;;
-    *) no "a path the override does not name is a change again" "got: $out" ;;
+    *) no "a path the override does not name is a change again" "got: $rgo" ;;
   esac
 
   # The entry point preflight actually uses. It sourced this file and called the
@@ -2018,14 +2018,31 @@ if command -v git >/dev/null 2>&1; then
   # expansion neither splits nor globs, so `*/Podfile.lock` matched only a file
   # of that literal name. Nothing here can run zsh, so the test is that the
   # executable entry point exists and behaves, and that preflight uses it.
-  out=$(sh "$REPO/remote/gitstate.sh" --run "$GR" | tr '\n' ' ' | tr -s ' ')
-  case "$out" in
+  rno=$(sh "$REPO/remote/gitstate.sh" --run "$GR" | tr '\n' ' ' | tr -s ' ')
+  case "$rno" in
     *"residue"*"Podfile.lock"*) ok "sh gitstate.sh --run classifies a nested residue path" ;;
-    *) no "sh gitstate.sh --run classifies a nested residue path" "got: $out" ;;
+    *) no "sh gitstate.sh --run classifies a nested residue path" "got: $rno" ;;
   esac
   grep -q "\. '\$RDIR/gitstate.sh'" "$REPO/bin/preflight.sh" \
     && no "preflight runs gitstate.sh rather than sourcing it into zsh" "it still sources it" \
     || ok "preflight runs gitstate.sh rather than sourcing it into zsh"
+
+  # Call site 2. The two frameworks must give OPPOSITE advice from the same empty
+  # result — no flutter run costs only the inside-the-app reads, no Metro may
+  # cost the app starting at all — which is the whole reason the text belongs to
+  # the module. A module that copied Flutter's wording would pass a "says
+  # something" test and fail a reader.
+  dso=$(sh "$REPO/runners/flutter/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'Driving still works'; } \
+    && ok "flutter devsession says driving is unaffected" \
+    || no "flutter devsession says driving is unaffected" "rc=$rc: $dso"
+  dso=$(sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'may *not start'; } \
+    && ok "react-native devsession says the app may not start at all" \
+    || no "react-native devsession says the app may not start at all" "rc=$rc: $dso"
+  grep -q 'DEVSESSION_PGREP' "$REPO/bin/preflight.sh" \
+    && no "preflight asks the module rather than pgrepping for itself" "it still has its own pattern" \
+    || ok "preflight asks the module rather than pgrepping for itself"
 
   # And the flutter runner's answer is the list gitstate defaults to, so wiring
   # the two together cannot change what this project sees.
@@ -2035,8 +2052,6 @@ if command -v git >/dev/null 2>&1; then
     && ok "the flutter runner's residue list matches gitstate's default exactly" \
     || no "the flutter runner's residue list matches gitstate's default exactly" \
           "runner: $(echo "$a" | tr '\n' ' ') / default: $(echo "$b" | tr '\n' ' ')"
-  case x in x)
-  esac
   case "$out" in
     *"untracked 1 file"*) ok "untracked files are counted and excused" ;;
     *) no "untracked files are counted and excused" "got: $out" ;;
