@@ -2044,6 +2044,28 @@ if command -v git >/dev/null 2>&1; then
     && no "preflight asks the module rather than pgrepping for itself" "it still has its own pattern" \
     || ok "preflight asks the module rather than pgrepping for itself"
 
+  # Call site 3 (publish.sh). traffic-arm prints TWO words — what it found and
+  # what it left — because "already on" and "was off, now on" are different
+  # facts: in the second, nothing before that moment was recorded, and a short
+  # list afterwards is not a quiet app.
+  ta=$(sh "$REPO/runners/flutter/framework.sh" traffic-arm http://127.0.0.1:1/x iso 2>&1); rc=$?
+  [ "$(printf '%s' "$ta" | wc -w | tr -d ' ')" = 2 ] \
+    && ok "traffic-arm prints the state it found and the state it left" \
+    || no "traffic-arm prints the state it found and the state it left" "got: $ta"
+  { [ "$rc" = 1 ] && [ "$ta" = "unknown unknown" ]; } \
+    && ok "an unreachable endpoint is unknown rather than off" \
+    || no "an unreachable endpoint is unknown rather than off" "rc=$rc: $ta"
+
+  # And the two failures publish.sh must keep apart. React Native has a debug
+  # endpoint that is not written yet; a plain Xcode app has none at all. Both
+  # exit 2, and neither is "the relay is broken".
+  sh "$REPO/runners/react-native/framework.sh" inspect dev cache >/dev/null 2>&1
+  [ $? = 2 ] && ok "a framework with no written inspect exits 2, not 1" \
+              || no "a framework with no written inspect exits 2, not 1" "wrong status"
+  grep -q '_profiling' "$REPO/bin/publish.sh" \
+    && no "publish.sh arms capture through the module" "it still has _profiling" \
+    || ok "publish.sh arms capture through the module"
+
   # And the flutter runner's answer is the list gitstate defaults to, so wiring
   # the two together cannot change what this project sees.
   a=$(sh "$REPO/runners/flutter/framework.sh" residue | sort)

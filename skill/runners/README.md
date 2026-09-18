@@ -76,9 +76,9 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
 | `devsession` | Mac | is a hot-reload session live? print the processes, exit 0; exit 1 with the consequence when not | `pgrep -fl flutter_tools` in `bin/preflight.sh` |
 | `inspect <device> <cache>` | Mac | print `<base-uri> <session-id>` for the app's live debug endpoint, or exit 1 with the reason | `remote/vmservice.sh` |
-| `traffic-arm <base> <session>` | sandbox | turn HTTP capture on; print `on`, `off` or `unknown` | `ext.dart.io.httpEnableTimelineLogging` in `bin/publish.sh` |
-| `traffic-list <base> <session>` | sandbox | one request per line: id, method, status, uri | `bin/net.sh` + `remote/net.py list` |
-| `traffic-one <base> <session> <id>` | sandbox | one request in full: headers, both bodies | `bin/net.sh` + `remote/net.py one` |
+| `traffic-arm <base> <session>` | either | turn HTTP capture on; print `<was> <now>`, each `on`, `off` or `unknown` | `ext.dart.io.httpEnableTimelineLogging` in `bin/publish.sh` |
+| `traffic-list <base> <session>` | either | one request per line: id, method, status, uri | `bin/net.sh` + `remote/net.py list` |
+| `traffic-one <base> <session> <id>` | either | one request in full: headers, both bodies | `bin/net.sh` + `remote/net.py one` |
 | `prefs-prefix` | either | the key prefix the framework's preferences API writes, or nothing | the `flutter` default in `bin/prefs.sh` |
 
 **Exit 2 means "this framework does not have that".** It is not a failure. A

@@ -17,6 +17,23 @@ set -u
 VERB=${1:-}; [ $# -gt 0 ] && shift
 : "${RDIR:=/tmp/maestro-mac}"
 
+# curl through the sandbox proxy when there is one, direct when there is not.
+# That is the whole difference between reading the LAN-published relay from here
+# and reading the Mac's own loopback over SSH, and it is why one verb serves
+# both sides rather than two.
+_curl() {
+  if [ -n "${grpc_proxy:-}" ]; then curl -s -x "$grpc_proxy" "$@"; else curl -s "$@"; fi
+}
+
+# A VM Service flag read, reduced to on|off|unknown.
+_vmget() {
+  case "$(_curl --max-time 8 "$1" 2>/dev/null)" in
+    *'"enabled":true'*)  echo on ;;
+    *'"enabled":false'*) echo off ;;
+    *)                   echo unknown ;;
+  esac
+}
+
 case "$VERB" in
 
 claim)
@@ -149,32 +166,32 @@ inspect)
 
 traffic-arm)
   # dart:io HTTP profiling is OFF by default and lives on the isolate, so it has
-  # to be re-armed after anything that replaces the isolate. bin/publish.sh
-  # holds the live copy of this (_profiling / _profiling_on).
+  # to be re-armed after anything that replaces the isolate: a restart, a hot
+  # restart, clearState. Prints what it found and what it left, because "already
+  # on" and "was off, now on" are different facts — in the second, nothing before
+  # this moment was recorded and a short list is not a quiet app.
   _base=${1:?traffic-arm <base> <session>}; _iso=${2:?session}
-  _r=$(curl -s -x "${grpc_proxy:-}" --max-time 8 \
-        "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso" 2>/dev/null)
-  case "$_r" in
-    *'"enabled":true'*) echo on; exit 0 ;;
-    *'"enabled":false'*)
-      curl -s -x "${grpc_proxy:-}" --max-time 8 \
-        "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso&enabled=true" >/dev/null 2>&1
-      echo on; exit 0 ;;
-    *) echo unknown; exit 1 ;;
+  _was=$(_vmget "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso")
+  case "$_was" in
+    on)  echo "on on"; exit 0 ;;
+    off) _vmget "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso&enabled=true" >/dev/null
+         echo "off $(_vmget "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso")"
+         exit 0 ;;
+    *)   echo "unknown unknown"; exit 1 ;;
   esac
   ;;
 
 traffic-list)
   _base=${1:?traffic-list <base> <session>}; _iso=${2:?session}
   _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net.json
-  curl -s -x "${grpc_proxy:-}" "$_base/ext.dart.io.getHttpProfile?isolateId=$_iso" > "$_out" || exit 1
+  _curl "$_base/ext.dart.io.getHttpProfile?isolateId=$_iso" > "$_out" || exit 1
   python3 "$RDIR/net.py" list "$_out"
   ;;
 
 traffic-one)
   _base=${1:?traffic-one <base> <session> <id>}; _iso=${2:?session}; _id=${3:?id}
   _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net1.json
-  curl -s -x "${grpc_proxy:-}" "$_base/ext.dart.io.getHttpProfileRequest?isolateId=$_iso&id=$_id" > "$_out" || exit 1
+  _curl "$_base/ext.dart.io.getHttpProfileRequest?isolateId=$_iso&id=$_id" > "$_out" || exit 1
   python3 "$RDIR/net.py" one "$_out"
   ;;
 
