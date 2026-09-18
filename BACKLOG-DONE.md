@@ -5834,3 +5834,52 @@ package, and the item does not wait on it.
   pre-rewrite commits by SHA, content intact, until it garbage-collects the
   repository — confirmed by fetching `skill/bin/config.sh` at the old commit
   over plain HTTPS. That is a support request, not a change to this package.
+
+---
+
+## 89. `wall.sh label` swallows every flag it does not know, including `--help` — **DONE 18 Sep 2026**
+
+`bin/wall.sh:77` ends the label parser with `*) name="${name:+$name }$1"`, so any
+argument that is not a udid and not `--group` becomes label text. `wall.sh label
+--help` therefore sets the label to `--help` rather than printing the usage line
+that sits eleven lines below it. A mistyped `--groupp brandco` sets the label to
+`--groupp brandco`. Neither says anything; both exit 0 and print the label they
+just wrote as though it were what was asked for.
+
+**Reported 18 Sep by the sister project's session**, which ran `wall.sh label
+--help` to check the syntax and has no write access to this package's `bin/`.
+
+**The cost is not the wrong text, it is whose device it lands on.** With no udid
+the label goes to whatever `_dev` resolves to, which with one driver up is
+whichever device that is — and on a Mac two sessions are sharing that can be a
+peer's. It happened on the same call: the label on iPhone 16 Pro `C61983AE` read
+`HBD20-1813 filter fix, 1927-95378` from a session that had been killed about an
+hour earlier, and `--help` overwrote it. That label was the only remaining record
+of what the dead session had been doing. Item 67's whole subject is that a label
+is evidence of who is driving what; this erases it by accident, from a command
+whose intent was to read the usage.
+
+**Fix.** A `-h|--help)` case that prints the usage line and exits 0, before the
+catch-all. Then refuse rather than absorb any remaining `--*`: an unknown flag is
+a typo, and the one thing it must not do is silently become the thing being
+written to a shared machine. A label that genuinely starts with a dash can use
+`--` to end flag parsing, which is the convention everything else uses anyway.
+
+**Check the same shape elsewhere while in there.** `--group` with no value takes
+`${2:-}` and then `shift 2` on a single remaining argument. `bin/drivers.sh` and
+`bin/notes.sh` both parse optional positionals the same way and are worth reading
+for the same catch-all.
+
+**Gates.** None. `bin/wall.sh` only, and no other item touches it.
+
+**Fixed the same day.** `-h|--help` prints the usage and exits 0; `--group` with
+nothing after it is refused rather than taking the empty string; any other `-*`
+is refused with the usage and the `--` escape printed beside it; and a label that
+genuinely starts with a dash still works, after `--`. Every refusal happens
+before `_dev` is consulted, so none of them can reach a device — which was the
+whole cost.
+
+Six cases in the skill's own suite, including one that asserts `label --help`
+never tries to connect at all. The other two files item 89 flagged for the same
+shape, `bin/drivers.sh` and `bin/notes.sh`, were left alone: neither has a
+catch-all that turns an argument into something written to a shared machine.
