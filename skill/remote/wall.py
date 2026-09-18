@@ -332,6 +332,7 @@ class Stream:
 class Wall:
     def __init__(self):
         self.streams = {}                       # udid -> Stream
+        self.restarting = set()                 # udid -> a hand restart is mid-flight
         self.lock = threading.Lock()
 
     def scan_forever(self):
@@ -346,7 +347,11 @@ class Wall:
         booted = dict(booted_devices())
         with self.lock:
             known = set(self.streams)
-        for udid in known - set(booted):
+            # A device being restarted by hand is absent from self.streams for a
+            # moment. Without this the scan in between sees a booted device with
+            # no stream and starts a SECOND capture for it.
+            busy = set(self.restarting)
+        for udid in known - set(booted) - busy:
             with self.lock:
                 s = self.streams.pop(udid, None)
             if s:
@@ -356,6 +361,8 @@ class Wall:
         # device — leaves a Stream that will never produce another frame. Drop
         # it so the loop below starts a fresh one.
         for udid in list(booted):
+            if udid in busy:
+                continue
             with self.lock:
                 s = self.streams.get(udid)
             if s and s.url and (s.proc is None or s.proc.poll() is not None):
@@ -365,6 +372,8 @@ class Wall:
                     self.streams.pop(udid, None)
 
         for udid, name in booted.items():
+            if udid in busy:
+                continue
             with self.lock:
                 existing = self.streams.get(udid)
             # A stream that failed to start is retried on the next scan; one
@@ -407,6 +416,42 @@ class Wall:
         out.sort(key=lambda r: (r["group"] == "", r["group"], r["device"]))
         return out
 
+    def restart(self, udid):
+        """Tear one device's capture down and bring it straight back.
+
+        A simulator-server can stay alive and stop producing frames. scan() only
+        replaces one whose PROCESS has gone, so this state survives every scan
+        and that tile never paints again. Measured 18 Sep 2026: the wedged
+        capture had used 0.81s of CPU in 26m28s elapsed, beside 14.15s on a
+        working one on the same Mac at the same time.
+
+        Reloading the page does not fix it — the browser reconnects to the same
+        dead upstream — and reloading the page is itself the thing to avoid on a
+        wall showing several devices, because every other tile drops its MJPEG
+        connection and has to be re-established. So this restarts one process and
+        touches nothing else: the other tiles belong to other sessions.
+        """
+        booted = dict(booted_devices())
+        if udid not in booted:
+            return False, "not booted"
+        with self.lock:
+            if udid in self.restarting:
+                return False, "a restart is already running for that device"
+            self.restarting.add(udid)
+            old = self.streams.pop(udid, None)
+        try:
+            if old:
+                old.kill()
+            s = Stream(udid, booted[udid])
+            ok = s.start()
+            with self.lock:
+                self.streams[udid] = s
+            log(udid, "reloaded by hand" if ok else "reload failed: %s" % s.error)
+            return ok, s.error
+        finally:
+            with self.lock:
+                self.restarting.discard(udid)
+
     def get(self, udid):
         with self.lock:
             return self.streams.get(udid)
@@ -430,51 +475,82 @@ PAGE = """<!doctype html>
          font:14px/1.4 -apple-system, system-ui, sans-serif; }
   h1 { font-size:15px; font-weight:600; margin:0 0 14px; }
   h1 span { color:var(--mut); font-weight:400; }
-  .group { margin:0 0 22px; }
+  /* The WALL flows, not just the cards inside a group. A labelled device and an
+     unlabelled one land in different sections, and a section is block-level — so
+     two cards that would have sat side by side were stacked one section each,
+     with most of both rows empty. min-width:0 lets a wide group shrink so its
+     own .row wraps rather than overflowing the page. */
+  #wall { display:flex; flex-wrap:wrap; gap:0 22px; align-items:flex-start; }
+  .group { flex:0 1 auto; min-width:0; max-width:100%; margin:0 0 22px; }
   .group > h2 { font-size:12px; font-weight:600; text-transform:uppercase;
                 letter-spacing:.06em; color:var(--mut); margin:0 0 10px;
                 padding-bottom:6px; border-bottom:1px solid var(--line); }
+  /* An ungrouped section still gets a heading box, just an invisible one, so its
+     card starts level with the grouped ones beside it rather than 42px higher.
+     visibility rather than display, because the box has to keep occupying its
+     space; and it is only emitted when something else on the page IS named, so a
+     wall nobody has labelled is not pushed down by a row of nothing. */
+  /* The non-breaking space is load-bearing: an EMPTY block generates no line
+     box, so a blank heading kept only its padding, border and margin — 17px of
+     the 34px a real one takes — and the cards were still 17px out. */
+  .group > h2.blank { visibility:hidden; }
+  .group > h2.blank::before { content:"\00a0"; }
   .row { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
-  /* The tile takes its width from the picture inside it. The old rule capped
-     the card at 340px and sized the image from its height alone, so nothing
-     capped the image's WIDTH and it ran straight out of the card: at 70vh in a
-     1080px-tall window a portrait iPad is 528px wide and a landscape one
-     1082px. A phone is 349px, so it overflowed by 9px and nobody saw it for a
-     day. Backlog 68. */
-  .sim { background:var(--card); border:1px solid var(--line); border-radius:10px;
-         padding:10px; }
-  /* Only a tile with no picture needs a width of its own — with one, the
-     picture supplies it, and a floor would leave dead card beside a narrow
-     phone on a small screen. */
-  .sim:not(:has(img)) { min-width:260px; }
-  /* Capped in BOTH directions with no width or height set, so the browser keeps
-     the aspect ratio and scales to whichever limit binds first — a portrait
-     iPad is height-bound, a landscape one width-bound. The width cap is
-     viewport-relative rather than a constant so one landscape iPad cannot take
-     a whole row: at 46vw two still sit side by side.
+  /* A card is a FIXED size for its class, so the row flows the same whatever is
+     booted and whichever way up it is. The card used to shrink-wrap its picture,
+     which meant its width changed with the device and with its orientation — a
+     landscape iPad 1082px, a portrait one 528px, a phone 349px — so a tile
+     arriving, leaving or rotating reflowed every other tile on the row. Backlog
+     68 fixed the overflow that came out of the old rule; this fixes the reflow.
 
-     The height cap is --tile-h, which tick() sets from how many devices are on
-     the page. At a fixed 70vh a phone is 756px tall in a 1080px window, three
-     tiles overflow the row, the third wraps and most of the first row is left
-     empty. Shrinking the cap as tiles arrive keeps them on one line. */
-  .sim img { display:block; width:auto; height:auto;
-             max-height:var(--tile-h, 70vh); max-width:46vw;
-             border-radius:4px; background:#000; }
-  /* Text must not widen the tile. A shrink-to-fit card is as wide as its widest
-     child, so a long label would stretch the card past its picture and an
-     ellipsis would never trigger. width:0 keeps these out of that calculation;
-     min-width:100% then fills whatever width the image settled on. */
-  .sim h3, .sim .sub, .sim .who, .sim .err { width:0; min-width:100%; }
+     The picture sits in a fixed box and is contained inside it, so an iPad that
+     rotates letterboxes within its own card instead of resizing it. An error
+     sits in that same box, so a dead tile is exactly the shape of a live one and
+     the row does not move when a stream drops. */
+  /* max-width as well as width: the width is what makes every card of a class
+     identical, and the max-width is what stops a viewport narrower than the card
+     being overflowed by it. Measured at 420px: a 432px tablet card ran past the
+     edge and took its reload button with it, which the old shrink-to-fit card
+     could never do. The media box keeps its height, so a squeezed card
+     letterboxes rather than changing shape. */
+  .sim { background:var(--card); border:1px solid var(--line); border-radius:10px;
+         padding:10px; width:var(--w); max-width:100%; }
+  .sim.phone  { --w:264px; --mh:572px; }
+  .sim.tablet { --w:432px; --mh:324px; }
+  .sim .media { width:100%; height:var(--mh); border-radius:4px; background:#000;
+                display:flex; align-items:center; justify-content:center;
+                overflow:hidden; }
+  /* 100% in BOTH directions with object-fit doing the fitting, not max-* with
+     auto sizes: `max-width:100%; width:auto` only ever scales a picture DOWN, so
+     a capture smaller than the box sat centred in dead card rather than filling
+     it — measured on the wall at 1500x1000, one tile's frame painted 242x525
+     inside a 264x572 box while the other filled it exactly. */
+  .sim .media img { display:block; width:100%; height:100%; object-fit:contain; }
+  /* The reload button sits on the title line rather than under the picture, so
+     it is in the same place on a live tile and on a dead one — a dead tile is
+     the only kind anyone wants it on. */
+  .sim .hd { display:flex; align-items:baseline; gap:8px; }
+  .sim .hd h3 { flex:1; min-width:0; }
+  .sim button { font:inherit; font-size:11px; color:var(--mut); cursor:pointer;
+                background:none; border:1px solid var(--line); border-radius:5px;
+                padding:1px 7px; display:inline-flex; align-items:center; gap:4px; }
+  .sim button svg { display:block; }
+  /* The icon turns while the restart is in flight. Stream.start() waits up to
+     45s for stream_ready, so without this the only feedback for most of a
+     minute is a disabled button. */
+  .sim button.busy svg { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .sim button:hover:not(:disabled) { color:var(--fg); }
+  .sim button:disabled { opacity:.5; cursor:default; }
   .sim h3 { font-size:13px; font-weight:600; margin:0 0 2px;
             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .sim .sub { color:var(--mut); font-size:11px; margin:0; }
-  .sim .who { color:var(--mut); font-size:11px; margin:0; opacity:.75; }
+  .sim .sub { color:var(--mut); font-size:11px; margin:0;
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sim .who { color:var(--mut); font-size:11px; margin:0; opacity:.75;
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sim .sub:last-of-type, .sim .who { margin-bottom:8px; }
   .sim.stale h3 { color:var(--mut); font-weight:400; }
-  /* A tile with no picture has nothing to take its width from, so it falls back
-     to the card's min-width and a long error wraps inside it — an error tile and
-     a live one are then the same shape, not two different widths. */
-  .sim .err { color:#c33; font-size:12px; }
+  .sim .err { color:#c33; font-size:12px; padding:0 10px; text-align:center; }
   .empty { color:var(--mut); }
 </style>
 </head>
@@ -495,10 +571,30 @@ function ago(sec) {
 
 function tile(d) {
   const el = document.createElement('div');
-  el.className = 'sim' + (d.stale ? ' stale' : '');
+  // Which fixed size this card takes. The model is the only thing that says, and
+  // it is on every row already; anything that is not an iPad is phone-shaped.
+  el.className = 'sim ' + (/ipad/i.test(d.device) ? 'tablet' : 'phone')
+                 + (d.stale ? ' stale' : '');
+  const hd = document.createElement('div');
+  hd.className = 'hd';
   const h = document.createElement('h3');
   h.textContent = d.name || d.device;
-  el.appendChild(h);
+  hd.appendChild(h);
+  const btn = document.createElement('button');
+  // The circular-arrow refresh glyph, drawn rather than pulled from a font: the
+  // wall is served off the Mac with no route to the internet from the machine
+  // reading it, so an icon font or a CDN sprite would render as a blank box.
+  btn.innerHTML = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">'
+    + '<path d="M13.65 8a5.65 5.65 0 1 1-1.66-4" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.7" stroke-linecap="round"/>'
+    + '<path d="M12.15 0.9v3.4h-3.4" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const label = document.createElement('span');
+  label.textContent = 'reload';
+  btn.appendChild(label);
+  btn.title = 'Restart this device\u2019s capture. The other tiles keep streaming.';
+  hd.appendChild(btn);
+  el.appendChild(hd);
   const sub = document.createElement('p');
   sub.className = 'sub';
   // The model and the short udid always show: a label says what is being
@@ -514,17 +610,50 @@ function tile(d) {
     who.textContent = [d.by, ago(d.age)].filter(Boolean).join(' \u00b7 ');
     el.appendChild(who);
   }
+  const media = document.createElement('div');
+  media.className = 'media';
+  el.appendChild(media);
+  paint(media, d);
+  btn.onclick = () => reload(d, media, btn);
+  return el;
+}
+
+function paint(media, d) {
+  media.replaceChildren();
   if (d.live) {
     const img = document.createElement('img');
     img.src = 'device/' + d.udid + '/stream.mjpeg?t=' + Date.now();
-    el.appendChild(img);
+    media.appendChild(img);
   } else {
     const p = document.createElement('p');
     p.className = 'err';
     p.textContent = d.error || 'starting\u2026';
-    el.appendChild(p);
+    media.appendChild(p);
   }
-  return el;
+}
+
+async function reload(d, media, btn) {
+  const label = btn.querySelector('span');
+  btn.disabled = true;
+  btn.classList.add('busy');
+  label.textContent = 'reloading';
+  // Drop this tile's <img> BEFORE asking for the restart. The browser is still
+  // reading the upstream we are about to kill, and it will not open a second
+  // connection to a URL it already has one to — so a new src on a live <img>
+  // would sit there doing nothing. Only this tile's connection goes; the rest
+  // of the wall is untouched, which is the whole point of not reloading.
+  media.replaceChildren();
+  let r;
+  try {
+    r = await (await fetch('device/' + d.udid + '/reload', { method: 'POST' })).json();
+  } catch (e) {
+    r = { ok: false, error: String(e) };
+  }
+  paint(media, { udid: d.udid, live: !!r.ok, error: r.error });
+  shown = '';          // let the next tick rebuild from the server's own view
+  btn.disabled = false;
+  btn.classList.remove('busy');
+  label.textContent = 'reload';
 }
 
 async function tick() {
@@ -533,12 +662,6 @@ async function tick() {
   const key = devices.map(d =>
     [d.udid, d.live, d.error || '', d.name, d.group, d.by, d.stale].join(',')).join('|');
   count.textContent = devices.length ? '\u00b7 ' + devices.length : '';
-  // How tall a tile may be, from how many there are. Two fit a row at full
-  // height; beyond that the cap comes down so they stay on one line instead of
-  // wrapping and leaving the first row half empty. Set on the container so one
-  // value drives every tile and the CSS stays a single rule.
-  wall.style.setProperty('--tile-h',
-    devices.length <= 2 ? '70vh' : devices.length <= 4 ? '46vh' : '34vh');
   if (key === shown) return;   // never rebuild a live <img> for nothing
   shown = key;
   if (!devices.length) { wall.innerHTML = '<p class="empty">No simulator is booted.</p>'; return; }
@@ -550,14 +673,17 @@ async function tick() {
     if (!bucket) groups.push(bucket = { name: g, devices: [] });
     bucket.devices.push(d);
   }
+  const anyNamed = groups.some(g => g.name);
   for (const g of groups) {
     const sec = document.createElement('section');
     sec.className = 'group';
     // An ungrouped run gets no heading rather than an "Ungrouped" one, so a
-    // machine nobody has labelled looks exactly as it did before.
-    if (g.name) {
+    // machine nobody has labelled looks exactly as it did before. When another
+    // group on the page IS named, it gets an invisible one instead, so the cards
+    // line up across the row.
+    if (g.name || anyNamed) {
       const h = document.createElement('h2');
-      h.textContent = g.name;
+      if (g.name) h.textContent = g.name; else h.className = 'blank';
       sec.appendChild(h);
     }
     const row = document.createElement('div');
@@ -594,6 +720,20 @@ class Handler(BaseHTTPRequestHandler):
             if not UDID_RE.match(parts[1]):
                 return self._bytes(b"bad device id", "text/plain", 400)
             return self._stream(parts[1])
+        self._bytes(b"not found", "text/plain", 404)
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        parts = path.strip("/").split("/")
+        if len(parts) == 3 and parts[0] == "device" and parts[2] == "reload":
+            if not UDID_RE.match(parts[1]):
+                return self._bytes(b"bad device id", "text/plain", 400)
+            # Stream.start() waits up to 45s for stream_ready, so this request is
+            # held until the answer is real. ThreadingHTTPServer means the other
+            # tiles keep streaming while it does.
+            ok, err = WALL.restart(parts[1])
+            body = json.dumps({"ok": bool(ok), "error": err}).encode("utf-8")
+            return self._bytes(body, "application/json")
         self._bytes(b"not found", "text/plain", 404)
 
     def _bytes(self, body, ctype, code=200):
