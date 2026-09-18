@@ -761,7 +761,13 @@ write_etc_hosts() {
   step "/etc/hosts"
   resolve_from_existing
   if [ -z "${MAC_NAME:-}" ]; then
-    warn "no .local name known, so there is nothing to map — skipping"
+    # The .local name is read back from settings.json's allowedDomains, so
+    # declining the settings.json step costs this one too. Saying "nothing to
+    # map" describes the cause and reads as though there were nothing to do.
+    warn "no .local name known, so $HOSTS_FILE cannot be written."
+    warn "It is read back from $SETTINGS; the earlier step was declined or that"
+    warn "file carries no .local name. Re-run and accept it, or add the line by"
+    warn "hand — without it the Mac's name will not resolve from this machine."
     return 0
   fi
 
@@ -771,10 +777,15 @@ write_etc_hosts() {
   # disk yet — a dry run describes the block rather than writing it, and on a
   # fresh machine that block is the only one there is. Without this the last
   # step of a first run reports nothing to do.
+  # configured_aliases prints one per LINE, so the membership test has to be
+  # newline-delimited too. Matching `*" $B_ALIAS "*` against a newline-separated
+  # list never matches anything but the first entry, and the alias just written
+  # was appended a second time — the /etc/hosts step then offered the same
+  # network twice as "which do you use most". Measured 18 Sep 2026.
   if [ -n "${B_ALIAS:-}" ]; then
-    case " $aliases " in
-      *" $B_ALIAS "*) ;;
-      *) aliases="$aliases $B_ALIAS" ;;
+    case $'\n'"$aliases"$'\n' in
+      *$'\n'"$B_ALIAS"$'\n'*) ;;
+      *) aliases="$aliases"$'\n'"$B_ALIAS" ;;
     esac
   fi
   aliases=$(printf '%s\n' $aliases)
@@ -871,9 +882,24 @@ PY
     rm -f "$tmp"; return 0
   fi
   if confirm "Apply that?" n; then
-    sudo cp -p "$HOSTS_FILE" "$HOSTS_FILE.bak-$(date '+%Y%m%d-%H%M%S')"
-    sudo cp "$tmp" "$HOSTS_FILE"
-    ok "written"
+    # Both sudo calls are checked. This function is called as
+    # `write_etc_hosts || warn`, and a function invoked with `||` runs with
+    # `set -e` suspended for its whole body — so a failing sudo does not abort
+    # here, and an unconditional `ok "written"` reported a write that had not
+    # happened. Measured 18 Sep 2026 against a sandbox whose sudo is not setuid:
+    # two "sudo: must be owned by uid 0" lines, then `ok written`, with the file
+    # untouched. /etc/hosts is the third leg of the all-three-or-none this whole
+    # script is about, so a false success here is the exact failure it exists to
+    # prevent.
+    if sudo cp -p "$HOSTS_FILE" "$HOSTS_FILE.bak-$(date '+%Y%m%d-%H%M%S')" &&
+       sudo cp "$tmp" "$HOSTS_FILE"; then
+      ok "written"
+    else
+      warn "sudo did not run, so $HOSTS_FILE is UNCHANGED. The ssh config and"
+      warn "settings.json were written, so this machine is now two of three:"
+      warn "$MAC_NAME will not resolve until this file is written by hand."
+      rm -f "$tmp"; return 1
+    fi
   else
     warn "left unchanged — curl on $MAC_NAME will not resolve"
   fi
