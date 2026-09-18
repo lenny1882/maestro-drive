@@ -899,11 +899,12 @@ Left open by that: the physical-device path polls a GUI-session build for up to
 Each unit is one commit. `runners/README.md` has the contract and the shape of
 every call site's change; this is the order and the stopping condition.
 
-**Stage 1 — wire the call sites that need no new answers.** Every verb these
-need is written and works. This is substitution, and it is what makes a second
-framework possible at all.
+**Stage 1 — wire the call sites that need no new answers. DONE 18 Sep**, five
+commits, 1.1 to 1.5. Every call site now asks a module, and `RUNNER` changes
+what five scripts say. Verified live against the Mac at each step; the three
+bugs it turned up are in the unit notes below.
 
-**1.1 Residue comes from the framework.** `bin/preflight.sh` passes
+**1.1 DONE.** 1.1 Residue comes from the framework.** `bin/preflight.sh` passes
 `RESIDUE_GLOBS=$(framework.sh residue)` into the remote call before it sources
 `gitstate.sh`. `gitstate.sh` keeps its current default, because it is also
 sourced standalone and by the tests, but nothing in the live path uses it any
@@ -911,14 +912,14 @@ more. *Files:* `bin/preflight.sh`. *Done when:* preflight against a checkout
 whose runner answers `yarn.lock` reports `yarn.lock` as residue and
 `pubspec.lock` as a change.
 
-**1.2 The dev-session probe comes from the framework.** The three
+**1.2 DONE.** 1.2 The dev-session probe comes from the framework.** The three
 `DEVSESSION_*` variables are filled from `framework.sh devsession` rather than
 defaulted in the script. It runs on the Mac, so it folds into preflight's one
 SSH call rather than adding another. *Files:* `bin/preflight.sh`. *Done when:*
 `RUNNER=react-native` makes preflight say Metro rather than `flutter run`, and
 say the app may not start at all rather than that driving is unaffected.
 
-**1.3 `publish.sh` finds its endpoint through the framework.** The
+**1.3 DONE.** 1.3 `publish.sh` finds its endpoint through the framework.** The
 `vmservice.sh` call becomes `framework.sh inspect`; `_profiling` and
 `_profiling_on` become `framework.sh traffic-arm`. The relay, the state file and
 the per-device suffix stay — `relay.py` does not care what is behind the port.
@@ -926,7 +927,7 @@ the per-device suffix stay — `relay.py` does not care what is behind the port.
 makes `publish.sh` say that framework has no debug endpoint, rather than that
 the relay failed.
 
-**1.4 `net.sh` reads traffic through the framework.** The two `ext.dart.io`
+**1.4 DONE.** 1.4 `net.sh` reads traffic through the framework.** The two `ext.dart.io`
 URLs and the `net.py` calls become `traffic-list` and `traffic-one`. Keep the
 fast-path/SSH-fallback choice and keep `_explain_empty`: "the app made no
 calls" and "capture was never armed" look identical and must not be conflated.
@@ -939,7 +940,7 @@ handles the local side and `runner.sh rpath` the remote one. A verb invoked on
 the wrong side fails as a network error, which reads as a broken relay rather
 than as a wiring mistake.
 
-**1.5 `prefs.sh` uses both modules.** The container lookup and the plist read
+**1.5 DONE.** 1.5 `prefs.sh` uses both modules.** The container lookup and the plist read
 become `platform.sh data-container` / `prefs-read` / `prefs-flush`; the default
 filter becomes `framework.sh prefs-prefix`. The only call site that needs both.
 *Files:* `bin/prefs.sh`. *Done when:* the default filter comes from the runner
