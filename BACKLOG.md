@@ -1,6 +1,6 @@
 # maestro-remote-mac — backlog
 
-Three items remain, and none is gated. **17 is done** — the package has a git
+One item remains — 87 — and it is not gated. **17 is done** — the package has a git
 repo, a version, a manifest, an installer and an update path. That releases
 **28**, which waited on it and is now the only decision left in this file.
 
@@ -63,27 +63,27 @@ Everything built on 17 Sep is in `skill/` and comes with it.
 cards — and 64, 65 and 66 were done on 15 Sep. All four are in
 `BACKLOG-DONE.md` with the rest of the history of all 68 earlier items.
 
-**85 was raised on 17 Sep** and is the first item about setting the skill up
-rather than running it. All three phases have been run live against the real
-Mac, and moving the Mac to a fourth network to exercise B and C found six
-faults in an afternoon — five in the wizard, one of them the anti-wizard's.
-Every one of them showed as the same sentence, a connection closed during the
-banner exchange, which named none of them. What is left is phase B's verified
-add on a network that carries station-to-station traffic, and phase C's `sudo`
-install and Wi-Fi cycle — see the item.
+**85 is done, on 18 Sep.** It was the first item about setting the skill up
+rather than running it, and exercising it cost an afternoon and found eight
+faults — seven in the wizard, one of them a wrong conclusion drawn in its own
+comments. Nearly every one showed as the same sentence, a connection closed
+during the banner exchange, which named none of them. Phases A, B and C have
+now run live end to end against the real Mac, including the `sudo` install and
+the Wi-Fi cycle, and the `--remove` round trip ran on the real three files.
 
 **86 was raised and fixed on 18 Sep** — the suite went red with no code
 change, on a test that was only correct when it was not shortly after midnight.
 It is in `BACKLOG-DONE.md`.
 
 **87 was raised on 18 Sep**, the first item about what this package is *for*
-rather than how it works.
+rather than how it works. With 85 done it is the only item left open in this
+file.
 
 **Next item number: 90.** Items 1–89 are allocated; new items start from 90.
 
 ---
 
-## 85. SSH and network setup is seven manual steps across three files that must all agree — **BUILT 17 Sep; A, B and C RUN LIVE 18 Sep, which found six faults; B's verified add still wants a network that carries it**
+## 85. SSH and network setup is seven manual steps across three files that must all agree — **DONE 18 Sep 2026; A, B and C all run live end to end, and the eight faults that took**
 
 `reference/setup.md` describes the whole SSH and network side and a person does
 it by hand. It is correct and it still gets done wrong, because it spans three
@@ -628,16 +628,51 @@ files, printed the five `sudo` commands and stopped clean on `Done? n`. The
 staged plist is byte-identical to the installed one and the staged script is the
 same 8209 bytes carrying the same profile line.
 
-**What is left.** Phase B's *verified* add — the probe passing and the block
-being written on the strength of it — has still not happened on a network being
-configured for the first time. The two attempts at it were defeated by the proxy
-ordering and then by client isolation on the only spare SSID, which cannot be
-turned off. It wants a network that carries station-to-station traffic. Phase C
-still needs its `sudo` install on the Mac and the Wi-Fi cycle, which drops every
-SSH session, the wall and any running driver, so it wants a moment when nothing
-else on the Mac matters.
+**All of it ran, on the third attempt, once the Mac was back on a network that
+carries station-to-station traffic.** Phase B's *verified* add — the probe
+passing and the block written on the strength of it — happened at last; the two
+earlier attempts were defeated by the proxy ordering and then by client
+isolation on the only spare SSID, which cannot be turned off.
 
-**Coverage: 135 package cases, up from 37 when this started.** Seven are the
+**Phase C then found a seventh fault, and `bash -n` caught it before anything
+reached the Mac.** The Mac's `Tachikoma:Redux` arm had been commented out by
+hand, and the splice reported `profile replaced` and produced a script that
+would not parse. The pattern was not anchored: `[ \t]*"SSID")` matches *inside*
+a commented arm, starting after the `#` because what follows it is whitespace,
+and the lazy run to the next `;;` then skips every commented one and stops at a
+live arm's. So it deleted the live `The Sharp Project Tenants` arm and glued the
+orphaned `#` onto `    "SenseGuest")`, commenting out its pattern and orphaning
+its `echo`. `^` and `re.M` in both `splice_profile` and `drop_profile`: anchored,
+a commented arm is not an arm, so the SSID reads as absent, a live arm is added,
+and the comment is left where it is — it is a record of a choice, and the file
+then says what it does.
+
+**And an eighth, which was a wrong conclusion rather than a bug.** *"sudo there
+has no passwordless path"* was true, and the thing built on it was not: sudo
+needs a **terminal** to ask for a password on, not a passwordless rule, and
+`ssh -tt` gives it one — which `ssh-copy-id` in phase A had been relying on since
+the day phase A was written. Phase C now offers to run its five commands itself.
+It still prints them, still lets you decline to the old "run these, then say
+Done", and a failed install says how to check what got part-way and asks before
+carrying on rather than cycling Wi-Fi over a half-installed daemon. `-tt` and
+deliberately not `-n`, exempted from item 84's rule the way `ssh-copy-id` is, and
+a case caps the exemption at exactly one call.
+
+**The install and the cycle then ran end to end.** `network-change.sh.bak`
+records the file the install replaced, the new script is on the Mac and parses,
+the plist was reinstalled and bootstrapped, and `/tmp/netchange.log` shows the
+Wi-Fi going down at 16:32:08 and 16:32:25 and the daemon firing on reassociation
+at 16:32:29. The WatchPaths trigger fires, the Mac comes back, and it holds the
+static address. One caveat on what that proves: the daemon logged `already
+static … — no change`, so the recovery and the trigger are exercised and
+*applying* a new address is not — this Mac already held the address the profile
+names.
+
+**The round trip ran on the real files too.** `--remove mac-home` took it out of
+all three, and the add put it back; `--list` now reports all three networks in
+all three files.
+
+**Coverage: 143 package cases, up from 37 when this started.** Seven are the
 fresh-machine path, which had none. The rest of today's are the diagnosis and
 the way back: each arm checked for the action it should name and the ones it
 should not, the retry, the editor, the list, and the count of questions the
