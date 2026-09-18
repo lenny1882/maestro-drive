@@ -160,6 +160,34 @@ driver-scan)
   exit 0
   ;;
 
+uninstall)
+  # Removing the app removes its data with it, which is the whole point:
+  # `driver.sh clearstate` wants a first-launch app, not a logged-out one. There
+  # is no "clear the data and keep the app" on a simulator.
+  #
+  # Absent is not a failure — the caller asked for the app to be gone.
+  xcrun simctl uninstall "${1:?uninstall <id> <app-id>}" "${2:?app-id}" 2>/dev/null
+  exit 0
+  ;;
+
+locked)
+  # Exit 0 when the device is locked, 1 when it is not, 2 when the question does
+  # not apply. A SIMULATOR is never locked in the sense that matters, and
+  # devicectl returns nothing for a simulator udid — so this self-gates and a
+  # caller need not know which kind of device it has.
+  #
+  # Worth asking before blaming the driver: XCUITest cannot attach to a locked
+  # springboard and it surfaces as a relay or connection failure rather than as a
+  # lock. Measured 10 Sep 2026 — unlocked, the driver starts 3/3; on the PIN
+  # screen it fails every time.
+  case "$(xcrun devicectl device info lockState --device "${1:?locked <id>}" 2>/dev/null |
+          grep -i passcodeRequired)" in
+    *[Tt]rue*)  exit 0 ;;
+    *[Ff]alse*) exit 1 ;;
+  esac
+  exit 2
+  ;;
+
 last-used)
   # "<id>|<yyyymmdd>|<human>" for every booted device, plus today's date, in one
   # call. `rig reap` needs it to tell a leftover from somebody's live work.

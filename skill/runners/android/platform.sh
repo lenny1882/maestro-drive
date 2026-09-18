@@ -162,6 +162,20 @@ driver-up|driver-down|driver-scan)
   exit 2
   ;;
 
+uninstall)
+  # DOCUMENTED, NOT MEASURED. `adb uninstall` removes the package and its data.
+  "$ADB" -s "${1:?uninstall <id> <app-id>}" uninstall "${2:?app-id}" >/dev/null 2>&1
+  exit 0
+  ;;
+
+locked)
+  # DOCUMENTED, NOT MEASURED. mDeviceProvisioned / mShowingLockscreen come out of
+  # `dumpsys window`; which key is authoritative varies by Android version, which
+  # is exactly the kind of thing that has to be measured rather than trusted.
+  echo "runners/android locked: not measured — dumpsys window keys vary by version" >&2
+  exit 2
+  ;;
+
 last-used)
   # UNANSWERED. The iOS answer walks CoreSimulator's per-app data containers for
   # an mtime. An emulator's userdata is a qcow2 image whose mtime moves whenever

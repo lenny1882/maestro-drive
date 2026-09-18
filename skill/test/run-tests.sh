@@ -1373,12 +1373,17 @@ out=$(drv script "$TMP/fail.journey" 2>&1); rc=$?
 
 echo
 echo "a dead device driver names the real cause, not the relay (item 46)"
-# _devdrv_hint probes lockState and the Mac's device driver log on a status
-# failure. Extract just that function and drive it with a fake _ssh that answers
-# both probes, so no Mac is needed. DEV is set because the function names it.
+# _devdrv_hint asks the platform whether the device is locked, and reads the
+# Mac's device driver log, on a status failure. Extract just that function and
+# drive it with a fake _ssh, so no Mac is needed.
+#
+# The lock probe answers by EXIT STATUS now, not by printing: 0 locked, 1 not,
+# 2 the question does not apply — which is what a simulator udid gets, and is
+# how the check self-gates. PLATFORM_SH is what lib.sh would have set.
 DRVLOG='Testing started\nThe connection was invalidated\n** TEST EXECUTE FAILED **\n'
 if ( DEV=devudid
-     _ssh(){ case "$*" in *lockState*) echo "  passcodeRequired: false" ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 1 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
      printf '%s' "$out" | grep -q 'devdrv.log' &&
@@ -1390,7 +1395,8 @@ else
   no "an unlocked device with a dead driver surfaces ~/devdrv.log and item 46" "hint missing or wrong"
 fi
 if ( DEV=devudid
-     _ssh(){ case "$*" in *lockState*) echo "  passcodeRequired: true" ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 0 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
      printf '%s' "$out" | grep -q 'LOCKED' &&
@@ -1399,7 +1405,11 @@ if ( DEV=devudid
 else
   no "a locked phone is named first — unlock it — ahead of the relay/log noise" "lock hint missing"
 fi
-if ( DEV=simudid; _ssh(){ return 0; }
+# A simulator: the lock question does not apply, so the verb exits 2 and the
+# hint must stay silent. `return 0` here would mean "locked" and is the bug this
+# guards.
+if ( DEV=simudid; PLATFORM_SH=/x/platform.sh
+     _ssh(){ case "$*" in *locked*) return 2 ;; *) return 0 ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1); [ -z "$out" ] ); then
   ok "no lock and no device log means no extra output (a simulator run is unaffected)"
@@ -2223,9 +2233,13 @@ cat > "$DDIR/lib.sh" <<LIBSH
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
 DEVICE_MAP=$DDIR/devmap
+PLATFORM_SH=/x/platform.sh
 _driver_bind(){ return 0; }
 _rebind(){ return 1; }
-_ssh(){ echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
+# The lock probe answers by status; 1 is "not locked", which is what this case
+# is about — the failure is the face-up crash in the log, not a locked screen.
+_ssh(){ case "\$*" in *locked*) return 1 ;; esac
+        echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
 LIBSH
 printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) printf 500;; *) printf "{}";; esac\n' > "$DSTUB/curl"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$DSTUB/scp"

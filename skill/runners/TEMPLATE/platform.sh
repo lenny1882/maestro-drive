@@ -132,6 +132,27 @@ driver-scan)
   exit 2
   ;;
 
+# --- uninstall <id> <app-id> -------------------------------------------------
+# Remove the app, and its data with it. The caller wants a first-launch app, so
+# "clear the data and keep the app" is not the same request and is not this.
+#
+# An app that is already absent is NOT a failure: the caller asked for it to be
+# gone and it is gone.
+uninstall)
+  exit 2
+  ;;
+
+# --- locked <id> -------------------------------------------------------------
+# Exit 0 when the device is locked, 1 when it is not, 2 when the question does
+# not apply to this kind of device.
+#
+# Ask this before blaming a driver. A locked screen is the cheapest, commonest
+# and most actionable cause of a driver that will not attach, and it surfaces as
+# a relay or connection failure rather than as a lock.
+locked)
+  exit 2
+  ;;
+
 # --- last-used ---------------------------------------------------------------
 # "<id>|<yyyymmdd>|<human>|<today-yyyymmdd>" for every booted device, one per
 # line, in ONE call. `drivers.sh rig reap` needs it to tell a leftover from
