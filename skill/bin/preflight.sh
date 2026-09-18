@@ -22,16 +22,9 @@ GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
 # a build regenerates — a React Native checkout rewrites yarn.lock, a Gradle one
 # rewrites neither of the files gitstate.sh knows about.
 #
-# The residue list now comes from the framework runner, on the Mac, inside the
-# same SSH call (BACKLOG item 87, runners/README.md call site 1). The dev-session
-# probe is call site 2 and is still defaulted below.
+# Both now come from the framework runner, on the Mac, inside the same SSH call
+# (BACKLOG item 87, runners/README.md call sites 1 and 2).
 FW=$("$(dirname "$0")/runner.sh" rpath framework) || exit 1
-
-: "${DEVSESSION_HEADING:=flutter run active?}"
-: "${DEVSESSION_PGREP:=flutter_tools}"
-: "${DEVSESSION_NONE:=none — nothing started the app with flutter run, so there is no VM
-       service: bin/net.sh and bin/publish.sh will come back empty.
-       Driving still works. Ask the user before starting one.}"
 
 _ssh "
 # The framework's residue list, if it has one. Only an exit 0 overrides
@@ -69,14 +62,18 @@ if [ -n \"\$C\" ]; then
 else
   echo 'app not installed — cannot read'
 fi
-echo; echo '== $DEVSESSION_HEADING =='
-# pgrep's status is lost through the pipe, so test the output rather than \$?.
-f=\$(pgrep -fl '$DEVSESSION_PGREP' 2>/dev/null | head -2)
-if [ -n \"\$f\" ]; then printf '%s\\n' \"\$f\"
-else cat <<'DEVSESSION_NONE_EOF'
-$DEVSESSION_NONE
-DEVSESSION_NONE_EOF
-fi
+echo; echo '== dev session =='
+# The framework's question and the framework's answer, both. It prints the
+# processes when one is live and what is lost when none is, and those are not the
+# same sentence per framework: with no flutter run, driving is unaffected and
+# only the inside-the-app reads go. With no Metro, a debug React Native build has
+# no bundle to load and may not start at all. Opposite advice from the same empty
+# result, which is why the text belongs to the module and not to this script.
+#
+# The heading is generic because the module's own output names what it looked
+# for. An exit 2 — a framework with no dev session at all — is an answer, not a
+# failure, so the status is not allowed to stop the rest of the report.
+RDIR='$RDIR' sh '$FW' devsession 2>&1 || true
 echo; echo '== vm service =='
 bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice' 2>&1 | tail -1
 "
