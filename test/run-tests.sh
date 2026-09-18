@@ -353,12 +353,28 @@ fi
 bad_ssh=$(grep -nE '(^|[^-[:alnum:]_])ssh ' "$W" \
           | grep -v 'ssh-copy-id' \
           | grep -vE '^[0-9]+:[[:space:]]*#' \
-          | grep -vE '(say|warn|would|ok|no) "' \
+          | grep -vE '(say|warn|would|ok|no|confirm) "' \
           | grep -v 'ssh said' \
+          | grep -v 'ssh -tt ' \
           | grep -v 'ssh -n ' || true)
 [ -z "$bad_ssh" ] \
   && ok "wizard: every ssh passes -n so it cannot eat the answers" \
   || no "wizard: every ssh passes -n so it cannot eat the answers" "$(printf '%s' "$bad_ssh" | head -3)"
+
+# -tt is the deliberate opposite and has to stay rare. Phase C's install is the
+# only thing that wants a terminal on the Mac — sudo has to ask for a password
+# and the reply has to get back — so it is exempt above, and the exemption is
+# worth exactly one call. A second one would be a second way to eat the answers.
+tt_count=$(grep -cE '(^|[^-[:alnum:]_])ssh -tt ' "$W")
+[ "$tt_count" = 1 ] \
+  && ok "wizard: exactly one ssh asks for a terminal, and it is the install" \
+  || no "wizard: exactly one ssh asks for a terminal, and it is the install" \
+        "$tt_count of them: $(grep -nE '(^|[^-[:alnum:]_])ssh -tt ' "$W" | head -3)"
+
+grep -qE 'ssh -tt "\$alias" "set -e; \$install_cmds"' "$W" \
+  && ok "wizard: the install runs under set -e, so a failed step stops the rest" \
+  || no "wizard: the install runs under set -e, so a failed step stops the rest" \
+        "$(grep -nE 'ssh -tt ' "$W" | head -2)"
 
 # --- every probe at a raw address carries the ProxyCommand -------------------
 # A Host block carries the ProxyCommand; a raw user@address has no block and so
