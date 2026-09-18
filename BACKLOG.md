@@ -408,16 +408,45 @@ once all land; the two driver stubs needed `_push` defined the same way they
 needed `RHELP`, which is the modelled-lib.sh lesson landing twice; suite 144
 passed, 0 failed.
 
-**3.2 Pull a file back → `_pull`, and the base64 round-trips go.**
-`shot.sh:37-38`, `flow.sh:103` and `img.sh:148-149` each base64 a PNG through
-the SSH channel and decode it on this side; `docs-refresh.sh:45` scps a tarball
-back. Locally the file is already on the filesystem and the encode/decode pair
-is pure cost. Note `img.sh` is a round trip in both directions and `shot.sh`
-folds its pull into the same `_ssh` as the screenshot — the pull cannot simply
-be split out of that string without adding a round trip to the remote path.
+**3.2 DONE 18 Sep — pull a file back → `_pull`, and the base64 round-trips go.**
+`_pull` sits beside `_push`: source on the device machine, destination here, one
+`scp` across ssh and a `cp` locally.
+
+**`$RDIR` does NOT collapse onto `$LDIR`, and this unit is where that was
+settled.** The item and this plan both said the two scratch directories become
+one locally. They must not. `$RDIR` is shared, machine-wide state — `PORTS_MAP`,
+the driver labels `drivers.sh` reclaims between sessions, the rig record — and
+`$LDIR` is `$TMPDIR`, which is per session. Collapsing them makes the ports map
+and every peer label invisible to the next session, which is the failure
+`drivers.map` already taught this package once. So both stay, the local `_pull`
+is a genuine `cp` between two real paths, and nothing can truncate itself.
+
+**`shot.sh` branches, and the branch is the unit rather than a wart in it.**
+Across ssh the fetch is folded into the same `_ssh` as the screenshot, because
+the alternative is a second connection for a file already in hand. Locally that
+encode and decode is pure cost, so the screenshot verb runs alone and `_pull`
+moves the file.
+
+**`flow.sh` cost nothing to convert.** Its fetch was already a raw `ssh` of its
+own — a second connection either way — so `scp` is neutral across ssh and drops
+the encode locally.
+
+**`img.sh`'s `mac` backend is refused locally instead of converted.** It means
+"send it to the machine that has `sips`". Locally that machine is this one, and
+it has not got `sips` or the `auto` chain would have chosen it two branches
+earlier — so the honest answer is to say no image tool is installed, not to fail
+inside a `sips` that is not there.
+
+**Still on base64, and not this unit's:** `preflight.sh:16-17` encodes
+`appcheck.sh` and `gitstate.sh` into the command string to avoid a push. Locally
+that is an encode and a decode of a checkout file into the scratch directory —
+correct, and wasted.
+
 *Files:* `skill/bin/lib.sh`, `shot.sh`, `flow.sh`, `img.sh`, `docs-refresh.sh`.
-*Done when:* a local screenshot produces a PNG with no base64 in the path, and a
-remote one still costs one round trip.
+*Verified:* a local `_pull` between two scratch paths copies; the same path is a
+no-op leaving the file intact; a missing source fails with `cp`'s own message
+and exit 1; `IMG_BACKEND=mac` on this machine now names the missing tool;
+suite 144 passed, 0 failed.
 
 **3.3 `bin/mcp.sh` execs ssh.** `mcp.sh:22` is `exec ssh …` — the MCP server
 process itself, not a command run through `_ssh`. It cannot use `_ssh` because

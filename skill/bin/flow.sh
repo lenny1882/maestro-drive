@@ -100,7 +100,9 @@ exit \$_rc"
 rc=$?
 
 if [ -n "$SHOT" ]; then
-  ssh "${SSH_OPTS[@]}" "$MAC_HOST" "base64 < '$RDIR/$SHOT.png'" | base64 -d > "$LDIR/$SHOT.png"
+  # Already a second connection before this change — a raw ssh of its own — so
+  # scp costs nothing extra across ssh and saves the encode locally.
+  _pull "$RDIR/$SHOT.png" "$LDIR/$SHOT.png" || exit 1
   echo "local: $LDIR/$SHOT.png"
 fi
 
