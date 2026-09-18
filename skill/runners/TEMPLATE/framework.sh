@@ -59,8 +59,19 @@ describe)
   exit 2
   ;;
 
-# --- variants <repo> ---------------------------------------------------------
+# --- variants <repo> [--platform <p>] ----------------------------------------
 # One buildable variant name per line, or nothing when the project has none.
+#
+# --platform is OPTIONAL and a module that does not distinguish ignores it.
+# Flutter's flavours span both platforms — one `--flavor uat` builds the iOS and
+# the Android app — so it answers the same list either way. React Native's do
+# not: iOS schemes live in ios/*.xcodeproj and Android product flavours in
+# android/app/build.gradle, and they need not share names, so it has two lists
+# and needs telling which.
+#
+# An optional argument rather than a second verb, because the caller always
+# knows its platform already — bin/build.sh has PLATFORM in hand — so passing it
+# is free, and a framework that does not care is not made to care.
 # A variant is only real if every half of it exists — the scheme AND the
 # entrypoint, the product flavour AND its source set. Requiring all of them is
 # what discards templates and sibling targets without knowing about either.
@@ -70,8 +81,11 @@ variants)
   exit 0
   ;;
 
-# --- variant-for-appid <repo> <app-id> ---------------------------------------
-# Which variants produce that bundle or application id, one per line. Zero lines
+# --- variant-for-appid <repo> <app-id> [--platform <p>] ----------------------
+# Which variants produce that bundle or application id, one per line. Takes the
+# same optional --platform as `variants`, and for the same reason: an app id is
+# itself per-platform — a bundle id on iOS, an applicationId on Android — so a
+# framework that keeps them apart needs telling which one it was handed. Zero lines
 # or several both mean undecided, and the caller refuses — it does not pick.
 #
 # Work it out from the build configuration rather than from a name that happens

@@ -42,6 +42,21 @@ devices)
 # Boot or shut down, and WAIT for it to settle before returning. Returning early
 # is what makes the next caller start a driver during a boot storm, and a driver
 # begun then is the one that dies.
+#
+# `boot` PRINTS THE ID IT BOOTED as its last line, and the caller uses that from
+# then on rather than the one it passed in.
+#
+# On iOS the two are the same and it echoes its argument. On Android they are
+# not: an emulator has an AVD NAME while it is off and a SERIAL — emulator-5554,
+# assigned by the port it lands on — once it is up, so `boot my-pixel` can only
+# be answered with `emulator-5554`. Returning it costs a platform where they
+# match nothing, and a second `resolve` verb would cost every caller a call it
+# does not need.
+#
+# The consequence for `devices` is worth stating: on a platform like that, the
+# id column means "the id you use to act on this device IN ITS CURRENT STATE",
+# so a shut-down emulator lists under its AVD name and a running one under its
+# serial. That is inherent to the platform rather than a wrinkle in the contract.
 boot|shutdown)
   exit 2
   ;;

@@ -62,6 +62,12 @@ boot)
   # Wait the boot out. Returning early is what makes the next caller start a
   # driver mid-boot, and a driver begun then is the one that dies.
   xcrun simctl bootstatus "$_id" -b
+  # The id it booted, last line (item 87, 4.1). A simulator keeps one UDID
+  # whether it is up or not, so this echoes its argument — the verb returns it
+  # for the platforms where it changes, which is Android: an AVD name becomes
+  # emulator-NNNN once the emulator takes a port, and `boot my-pixel` can only
+  # be answered with the serial.
+  echo "$_id"
   ;;
 
 shutdown)
