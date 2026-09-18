@@ -16,6 +16,18 @@ d=$(_dev) || exit 1
 AC=$(base64 < "$(dirname "$0")/../remote/appcheck.sh" | tr -d '\n')
 GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
 
+# "Is a dev session live, and what is lost when it is not" is the framework's
+# question, not this script's: React Native looks for Metro, a plain Xcode app
+# has no such thing at all and loses nothing by it. These four are what
+# `runners/<name>/framework.sh devsession` will supply (BACKLOG item 87,
+# runners/README.md call site 2); until that is wired they hold the Flutter
+# answers this script has always printed, and nothing sets them from outside.
+: "${DEVSESSION_HEADING:=flutter run active?}"
+: "${DEVSESSION_PGREP:=flutter_tools}"
+: "${DEVSESSION_NONE:=none — nothing started the app with flutter run, so there is no VM
+       service: bin/net.sh and bin/publish.sh will come back empty.
+       Driving still works. Ask the user before starting one.}"
+
 _ssh "
 echo '== branch / working tree =='
 printf '%s' '$GS' | base64 -d > '$RDIR/gitstate.sh' 2>/dev/null
@@ -42,13 +54,13 @@ if [ -n \"\$C\" ]; then
 else
   echo 'app not installed — cannot read'
 fi
-echo; echo '== flutter run active? =='
+echo; echo '== $DEVSESSION_HEADING =='
 # pgrep's status is lost through the pipe, so test the output rather than \$?.
-f=\$(pgrep -fl flutter_tools 2>/dev/null | head -2)
+f=\$(pgrep -fl '$DEVSESSION_PGREP' 2>/dev/null | head -2)
 if [ -n \"\$f\" ]; then printf '%s\\n' \"\$f\"
-else echo 'none — nothing started the app with flutter run, so there is no VM'
-     echo '       service: bin/net.sh and bin/publish.sh will come back empty.'
-     echo '       Driving still works. Ask the user before starting one.'
+else cat <<'DEVSESSION_NONE_EOF'
+$DEVSESSION_NONE
+DEVSESSION_NONE_EOF
 fi
 echo; echo '== vm service =='
 bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice' 2>&1 | tail -1
