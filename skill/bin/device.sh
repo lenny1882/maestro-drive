@@ -38,11 +38,21 @@ case "${1:-list}" in
   up)
     udid=${2:?usage: device.sh up <udid> [port]}
     port=${3:-$DEVICE_PORT_BASE}
-    _ssh "mkdir -p '$RDIR'" >/dev/null
-    scp "${SSH_OPTS[@]}" "$HERE/../remote/deviceup.sh" "$HERE/../remote/iproxy.py" \
-        "$MAC_HOST:$RDIR/" >/dev/null || { echo "device: could not copy the remote helpers" >&2; exit 1; }
+    # A phone is runners/ios-device's whatever PLATFORM says, because that is
+    # what this script is for. The module carries deviceup.sh and iproxy.py and
+    # bin/install.sh pushes all three together (BACKLOG item 87, 5.4).
+    PL="$RDIR/runners/ios-device/platform.sh"
+    "$HERE/runner.sh" platform claim "$udid" 2>/dev/null ||
+      PLATFORM=ios-device "$HERE/runner.sh" platform claim "$udid" >/dev/null 2>&1 || {
+        echo "device: $udid is not a physical device udid — a simulator is bin/drivers.sh up" >&2
+        exit 2; }
+    _ssh "mkdir -p '$RDIR/runners/ios-device'" >/dev/null
+    scp "${SSH_OPTS[@]}" "$HERE/../runners/ios-device/platform.sh" \
+        "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
+        "$MAC_HOST:$RDIR/runners/ios-device/" >/dev/null ||
+      { echo "device: could not copy the ios-device module" >&2; exit 1; }
     # The driver cold-starts in tens of seconds; the default timeout is too short.
-    out=$(TMO=${TMO:-180} _ssh "bash '$RDIR/deviceup.sh' '$udid' '$port'"); rc=$?
+    out=$(TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"); rc=$?
     printf '%s\n' "$out"
     [ "$rc" -eq 0 ] || { echo "device: bring-up failed — not registered." >&2; exit "$rc"; }
     _register "$udid" "$port"
@@ -51,8 +61,7 @@ case "${1:-list}" in
     ;;
   down)
     udid=${2:?usage: device.sh down <udid>}
-    _ssh "pkill -f 'xcodebuild test-without-building.*$udid' 2>/dev/null
-          pkill -f 'iproxy.py $udid' 2>/dev/null
+    _ssh "sh '$RDIR/runners/ios-device/platform.sh' driver-down '$udid'
           echo 'stopped driver and forwarder for $udid'"
     _unregister "$udid"
     echo "unregistered $udid"

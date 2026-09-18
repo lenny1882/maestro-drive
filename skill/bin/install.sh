@@ -22,7 +22,11 @@ RUNNERS=$(cd "$(dirname "$0")/../runners" && pwd)
 for d in "$RUNNERS"/*/; do
   n=$(basename "$d")
   _ssh "mkdir -p '$RDIR/runners/$n'" >/dev/null
-  for f in "$d"*.sh; do
+  # .sh AND .py. A module's helpers are not all shell — runners/flutter carries
+  # net.py and runners/ios-device carries iproxy.py, and a module missing one of
+  # them fails on the Mac with "No such file or directory" from a path that
+  # looks right. Found 18 Sep when the device forwarder would not bind.
+  for f in "$d"*.sh "$d"*.py; do
     [ -r "$f" ] || continue
     ssh "${SSH_OPTS[@]}" "$MAC_HOST" "cat > '$RDIR/runners/$n/$(basename "$f")'" < "$f" || exit 1
   done
