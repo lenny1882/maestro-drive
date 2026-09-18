@@ -8,6 +8,15 @@
 
 mkdir -p "$LDIR"
 
+# Where the runner modules are, on each side (BACKLOG item 87). Plain paths
+# rather than a call to bin/runner.sh: runner.sh sources THIS file, and every
+# _dev would otherwise pay for a subprocess to learn something config.sh already
+# knows. runner.sh validates them and lists the alternatives; these do not.
+PLATFORM_SH="$RDIR/runners/${PLATFORM:-ios}/platform.sh"
+FRAMEWORK_SH="$RDIR/runners/${RUNNER:-flutter}/framework.sh"
+PLATFORM_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${PLATFORM:-ios}/platform.sh"
+FRAMEWORK_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${RUNNER:-flutter}/framework.sh"
+
 # No ControlMaster: it fails inside the sandbox with "muxclient socket():
 # Operation not permitted", and each Bash call is its own namespace so the
 # socket could not outlive the call anyway (reference/connection.md). SSH connect measures
@@ -179,21 +188,22 @@ _macip() {
   printf '%s' "$MACIP"
 }
 
-# Resolve the simulator UDID once per shell and cache it for the session.
+# Resolve the device id once per shell and cache it for the session.
 _dev() {
   if [ -z "$DEV" ]; then
-    # Say so when the choice was arbitrary. The driver is per-device, so
-    # driving the wrong simulator looks like the app misbehaving.
-    local booted
-    booted=$(_ssh 'xcrun simctl list devices booted | grep -E "\([0-9A-F-]{36}\)"')
-    DEV=$(printf '%s' "$booted" | grep -oE "\(([0-9A-F-]{36})\)" | head -1 | tr -d "()")
-    if [ "$(printf '%s\n' "$booted" | grep -c .)" -gt 1 ]; then
-      echo "note: $(printf '%s\n' "$booted" | grep -c .) simulators are booted and DEV is not set — using:" >&2
-      printf '%s\n' "$booted" | sed 's/^ */  /' >&2
+    # Say so when the choice was arbitrary. The driver is per-device, so driving
+    # the wrong one looks like the app misbehaving.
+    local booted n
+    booted=$(_ssh "sh '$PLATFORM_SH' devices --booted")
+    DEV=$(printf '%s\n' "$booted" | head -1 | cut -f1)
+    n=$(printf '%s\n' "$booted" | grep -c .)
+    if [ "$n" -gt 1 ]; then
+      echo "note: $n devices are booted and DEV is not set — using:" >&2
+      printf '%s\n' "$booted" | awk -F'\t' '{printf "  %s  %s\n", $1, $3}' >&2
       echo "  pin one with DEV=<udid> in .maestro-mac.conf" >&2
     fi
   fi
-  [ -n "$DEV" ] || { echo "no booted simulator on $MAC_HOST" >&2; return 1; }
+  [ -n "$DEV" ] || { echo "no booted device on $MAC_HOST (platform: ${PLATFORM:-ios})" >&2; return 1; }
   printf '%s' "$DEV"
 }
 
@@ -243,15 +253,12 @@ _driver_owned() {  # _driver_owned <udid> -- prints "<port> <epoch>", or nothing
 }
 
 _driver_scan() {
-  # lsof ORs its selectors unless -a is given, so without it this reports
-  # sockets belonging to every other process as well.
-  _ssh '
-for p in $(pgrep -f "maestro-driver-iosUITests-Runner" 2>/dev/null); do
-  u=$(ps -o command= -p "$p" 2>/dev/null | sed -nE "s|.*/Devices/([0-9A-F-]{36})/.*|\1|p")
-  pt=$(lsof -nP -a -p "$p" -iTCP -sTCP:LISTEN 2>/dev/null |
-       sed -nE "s|.*TCP 127\.0\.0\.1:([0-9]+) \(LISTEN\).*|\1|p" | head -1)
-  [ -n "$u" ] && [ -n "$pt" ] && echo "$u $pt $p"
-done' > "$DRIVER_MAP.tmp" 2>/dev/null
+  # The platform's map, read from the live processes on the Mac. What that means
+  # differs entirely: an XCUITest runner's command line carries the simulator
+  # UDID and lsof gives the port it bound, whereas an Android driver is an
+  # instrumented APK and the mapping is adb's. Same three columns either way —
+  # "<device> <port> <pid>", one per line.
+  _ssh "sh '$PLATFORM_SH' driver-scan" > "$DRIVER_MAP.tmp" 2>/dev/null
   mv -f "$DRIVER_MAP.tmp" "$DRIVER_MAP" 2>/dev/null
   cat "$DRIVER_MAP" 2>/dev/null
 }
