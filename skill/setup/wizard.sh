@@ -327,7 +327,7 @@ phase_a() {
           say "  -> Remote Login, \"Allow access for\" has to include this account." ;;
         *)
           [ -n "$cperr" ] && say "  ssh said: $(printf '%s' "$cperr" | grep -v '^$' | tail -1)"
-          if probe_diagnosis "$cperr" "$addr"; then suspect=1; else suspect=0; fi ;;
+          if probe_diagnosis "$cperr" "$addr" "$mac_user"; then suspect=1; else suspect=0; fi ;;
       esac
       say ""
       say "  Nothing has been written yet, on this machine or on the Mac."
@@ -404,8 +404,25 @@ phase_a_followup() {
 # Exit status is about the ADDRESS, not about success: 0 means the address is
 # worth re-typing on a retry, 1 means it is not. A refusal comes from the Mac
 # itself, so the address reached it and re-asking for it is noise.
-probe_diagnosis() { # probe_diagnosis <stderr> <addr> -> 0 if the address is suspect
-  local err="$1" addr="$2"
+# Turning Remote Login on, named in one place because three of the arms below
+# need it and the reason they need it differs. It is the cheapest thing to check
+# and the one a person cannot guess, so no arm that could be it stays silent.
+remote_login_help() { # remote_login_help <user>
+  say "    System Settings -> General -> Sharing -> Remote Login, on."
+  say ""
+  say "  \"Allow access for\" has to include this account — that is a separate"
+  say "  switch under the same setting, and All users is the simple answer."
+  say ""
+  say "  The same from a terminal on the Mac:"
+  say ""
+  say "    sudo systemsetup -getremotelogin          # Remote Login: On"
+  say "    sudo systemsetup -setremotelogin on"
+  say "    dseditgroup -o checkmember -m $1 com.apple.access_ssh"
+  say "    sudo dseditgroup -o edit -a $1 -t user com.apple.access_ssh"
+}
+
+probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address is suspect
+  local err="$1" addr="$2" user="${3:-}"
   case "$err" in
     *"Permission denied"*|*"Too many authentication failures"*)
       warn "$addr answered, but would not take the key."
@@ -416,17 +433,25 @@ probe_diagnosis() { # probe_diagnosis <stderr> <addr> -> 0 if the address is sus
     *"Connection refused"*|*"connection refused"*)
       warn "$addr refused the connection on port 22 — that is Remote Login off."
       say ""
-      say "  The Mac answered, so the address is right. Turn Remote Login on:"
+      say "  The Mac answered, so the address is right. Turn it on:"
       say ""
-      say "    System Settings -> General -> Sharing -> Remote Login"
+      remote_login_help "$user"
+      return 1 ;;
+    *"kex_exchange_identification"*|*"Connection closed by remote host"*|*"closed by remote host"*)
+      # Something is listening on 22 and hangs up mid-handshake, so this is not
+      # a wrong address and not a dead network. On macOS the usual cause is
+      # Remote Login being on but not for this account: an account outside
+      # com.apple.access_ssh is dropped during the banner exchange rather than
+      # being told no, which is why it does not arrive as Permission denied.
+      warn "$addr answered on port 22 and then closed the connection."
       say ""
-      say "  or in a terminal on the Mac:"
+      say "  Something is listening, so the address and the network are right."
+      say "  On a Mac that is Remote Login on but not for this account:"
       say ""
-      say "    sudo systemsetup -setremotelogin on"
-      say "    sudo systemsetup -getremotelogin      # Remote Login: On"
+      remote_login_help "$user"
       say ""
-      say "  Check the account is allowed: under Remote Login, \"Allow access for\""
-      say "  is either all users or a list this one has to be in."
+      say "  It is also what you get for a few seconds right after turning Remote"
+      say "  Login on, so if you just did, try again."
       return 1 ;;
     *"Network is unreachable"*|*"No route to host"*)
       warn "this machine has no route to $addr at all."
@@ -446,9 +471,19 @@ probe_diagnosis() { # probe_diagnosis <stderr> <addr> -> 0 if the address is sus
       say "    ssh-keygen -R $addr"
       return 0 ;;
     *)
+      # Unrecognised, which must not become a confident wrong diagnosis. It also
+      # must not become silence: Remote Login is the cheapest thing to check and
+      # the one a person cannot guess, so it is offered here too, as the first
+      # thing to rule out rather than as a verdict.
       warn "$addr did not answer, and ssh did not say why in words this knows."
-      say "  The line above is ssh's own. Refused is Remote Login off; timed out is"
-      say "  the wrong address or the wrong network."
+      say "  The line above is ssh's own. Start with Remote Login, which is the"
+      say "  cheapest to check and the most common:"
+      say ""
+      remote_login_help "$user"
+      say ""
+      say "  If that is already on, the other causes are the wrong address for"
+      say "  this network — ipconfig getifaddr en0 on the Mac — or a firewall"
+      say "  between the two machines."
       return 0 ;;
   esac
 }
@@ -477,7 +512,7 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     fi
     say ""
     [ -n "$err" ] && say "  ssh said: $(printf '%s' "$err" | grep -v '^$' | tail -1)"
-    if probe_diagnosis "$err" "$addr"; then suspect=1; else suspect=0; fi
+    if probe_diagnosis "$err" "$addr" "$user"; then suspect=1; else suspect=0; fi
     say ""
     say "  Nothing has been written yet, so there is nothing to undo."
     if confirm "Try again?" y; then
