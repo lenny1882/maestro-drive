@@ -19,3 +19,17 @@ __pycache__/
 # Where bin/notes.sh promote parks a project's tooling findings until someone
 # folds them into reference/. Work in progress, not payload.
 skill/reference/staging/
+
+# This repo drives an app too, so it has a conf of its own — and the conf is the
+# one file the package tells every project to keep out of version control,
+# because it is where a credential goes (bin/config.sh, "project values"). It
+# holds none today, which is exactly why this belongs here now: bin/secrets.sh
+# only checks the file is gitignored once a project value exists, so the first
+# APP_PIN written into it would arrive in an untracked, unignored file that a
+# `git add -A` sweeps straight in.
+#
+# The second line is the PROFILE layering: PROFILE=uat reads
+# .maestro-mac.conf.uat, and per-environment confs are where APP_PIN, APP_STORE
+# and APP_USER actually live.
+.maestro-mac.conf
+.maestro-mac.conf.*

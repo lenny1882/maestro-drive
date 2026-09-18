@@ -16,42 +16,66 @@ d=$(_dev) || exit 1
 AC=$(base64 < "$(dirname "$0")/../remote/appcheck.sh" | tr -d '\n')
 GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
 
+# "Is a dev session live, and what is lost when it is not" is the framework's
+# question, not this script's: React Native looks for Metro, a plain Xcode app
+# has no such thing at all and loses nothing by it. Same for which tracked paths
+# a build regenerates — a React Native checkout rewrites yarn.lock, a Gradle one
+# rewrites neither of the files gitstate.sh knows about.
+#
+# Both now come from the framework runner, on the Mac, inside the same SSH call
+# (BACKLOG item 87, runners/README.md call sites 1 and 2).
+FW=$("$(dirname "$0")/runner.sh" rpath framework) || exit 1
+
 _ssh "
+# The framework's residue list, if it has one. Only an exit 0 overrides
+# gitstate.sh's own default: a module that exits 2 has no opinion, and taking
+# its empty output as 'nothing is residue' would quietly reclassify every lock
+# file as somebody's work — which is the flat list this check exists to undo.
+if _RG=\$(RDIR='$RDIR' sh '$FW' residue 2>/dev/null); then
+  RESIDUE_GLOBS=\$_RG; export RESIDUE_GLOBS
+fi
 echo '== branch / working tree =='
 printf '%s' '$GS' | base64 -d > '$RDIR/gitstate.sh' 2>/dev/null
-. '$RDIR/gitstate.sh' && gitstate '$REPO' 
+# Run with sh, do NOT source: this shell is zsh, which neither word-splits an
+# unquoted expansion nor globs an unquoted case pattern, and gitstate.sh needs
+# both to tell a lock file from somebody's work. gitstate.sh says so at length.
+sh '$RDIR/gitstate.sh' --run '$REPO'
 echo; echo '== app installed on $d? =='
-C=\$(xcrun simctl get_app_container '$d' '$APP_ID' 2>/dev/null)
-if [ -n \"\$C\" ]; then echo \"\$C\"
-else xcrun simctl get_app_container '$d' '$APP_ID' 2>&1 | tail -1
+# What the platform can say about the installed app, and only what it CAN say.
+# A simulator answers all four keys; a phone answers version and build and has
+# neither a timestamp nor a readable bundle (item 87, F40).
+sh '$PLATFORM_SH' installed-info '$d' '$APP_ID' > '$RDIR/appinfo' 2>/dev/null
+C=\$(sed -n 's/^container=//p' '$RDIR/appinfo' | tail -1)
+if [ -s '$RDIR/appinfo' ]; then sed 's/^/  /' '$RDIR/appinfo'
+else echo '  not installed, or the platform cannot see it'
 fi
 echo; echo '== is that the code under test? =='
 printf '%s' '$AC' | base64 -d > '$RDIR/appcheck.sh' 2>/dev/null
-. '$RDIR/appcheck.sh' && appcheck \"\$C\" '$REPO' '${BUILD_MARKER:-}'
+# Run with sh, do NOT source — same reason as gitstate.sh above.
+# The fourth argument is what a build from this checkout WOULD produce, which is
+# the only thing a device can be compared against.
+BV=\$(RDIR='$RDIR' sh '$FW' version '$REPO' 2>/dev/null) || BV=
+sh '$RDIR/appcheck.sh' --run '$RDIR/appinfo' '$REPO' '${BUILD_MARKER:-}' \"\$BV\"
 echo; echo '== supported orientations =='
 if [ -n \"\$C\" ]; then
-  _plist=\"\$C/Info.plist\"
-  if [ -f \"\$_plist\" ]; then
-    _ipad=\$(defaults read \"\$_plist\" 'UISupportedInterfaceOrientations~ipad' 2>/dev/null | grep -v '[()]' | sed 's/^[[:space:]]*//' | tr -d '\",' | paste -sd ' ' -)
-    _iphone=\$(defaults read \"\$_plist\" 'UISupportedInterfaceOrientations' 2>/dev/null | grep -v '[()]' | sed 's/^[[:space:]]*//' | tr -d '\",' | paste -sd ' ' -)
-    [ -n \"\$_ipad\" ] && echo \"iPad:   \$_ipad\" || echo 'iPad:   not specified'
-    [ -n \"\$_iphone\" ] && echo \"iPhone: \$_iphone\" || echo 'iPhone: not specified'
-  else
-    echo 'Info.plist not found in app container'
-  fi
+  sh '$PLATFORM_SH' orientations \"\$C\" 2>&1
 else
   echo 'app not installed — cannot read'
 fi
-echo; echo '== flutter run active? =='
-# pgrep's status is lost through the pipe, so test the output rather than \$?.
-f=\$(pgrep -fl flutter_tools 2>/dev/null | head -2)
-if [ -n \"\$f\" ]; then printf '%s\\n' \"\$f\"
-else echo 'none — nothing started the app with flutter run, so there is no VM'
-     echo '       service: bin/net.sh and bin/publish.sh will come back empty.'
-     echo '       Driving still works. Ask the user before starting one.'
-fi
-echo; echo '== vm service =='
-bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice' 2>&1 | tail -1
+echo; echo '== dev session =='
+# The framework's question and the framework's answer, both. It prints the
+# processes when one is live and what is lost when none is, and those are not the
+# same sentence per framework: with no flutter run, driving is unaffected and
+# only the inside-the-app reads go. With no Metro, a debug React Native build has
+# no bundle to load and may not start at all. Opposite advice from the same empty
+# result, which is why the text belongs to the module and not to this script.
+#
+# The heading is generic because the module's own output names what it looked
+# for. An exit 2 — a framework with no dev session at all — is an answer, not a
+# failure, so the status is not allowed to stop the rest of the report.
+RDIR='$RDIR' sh '$FW' devsession 2>&1 || true
+echo; echo '== debug endpoint =='
+RDIR='$RDIR' sh '$FW' inspect '$d' '$RDIR/vmservice' 2>&1 | tail -1
 "
 # The project's executable prior work, counted locally — journeys and flows live
 # here, not on the Mac. Put in front of the one call everybody makes so a covered

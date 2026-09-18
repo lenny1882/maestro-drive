@@ -2,9 +2,25 @@
 # Runs ON THE MAC. Discovers how this Flutter project is built, and optionally
 # builds it for the simulator and installs it.
 #
+# This is the flutter framework runner's own file — framework.sh beside it is
+# the only thing that should call it. It lived in remote/ until 18 Sep, which is
+# where it was before the seam existed (BACKLOG item 87, 5.4).
+#
 #   build.sh --repo <dir> --detect
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] [--target <file>]
-#            [--install <udid>] [--release]
+#            [--install <udid>] [--release] [--build-only]
+#
+# Building and installing are two different jobs and this does both. Which one
+# it is doing is now said out loud: a successful build prints
+#
+#   artifact <path>
+#
+# as a line of its own, whether or not an install follows, and `--build-only`
+# stops there. That line is the framework runner's `build` verb (BACKLOG item
+# 87, runners/README.md) — installing an artefact is the PLATFORM's job, and
+# `xcrun simctl install` sitting at the bottom of a Flutter build script is why
+# Flutter-on-Android cannot work today. Nothing about the existing calls
+# changes: without --build-only this builds and installs exactly as it did.
 #
 # Nothing here is specific to one app. Three things cost session B about four
 # and a half minutes on 11 Aug 2026, and each of them presents as a different
@@ -21,11 +37,19 @@
 # testable from Linux without a Mac.
 set -u
 
-REPO=; DETECT=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=
+REPO=; DETECT=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0; LIST=
 while [ $# -gt 0 ]; do
   case $1 in
     --repo)    REPO=$2; shift 2 ;;
     --detect)  DETECT=1; shift ;;
+    # Report-only modes, so framework.sh's `variants` and `variant-for-appid`
+    # ask this file rather than reproducing the rule. Two copies of "what counts
+    # as a flavour" is one copy too many: the pair test below is subtle, and a
+    # second implementation drifting from it would refuse the right build or
+    # accept the wrong one.
+    --list-variants)  LIST=variants; shift ;;
+    --variant-for)    LIST=forappid; shift ;;
+    --build-only) BUILDONLY=1; shift ;;
     --flavor)  FLAVOR=$2; shift 2 ;;
     --target)  TARGET=$2; shift 2 ;;
     --app-id)  APPID=$2; shift 2 ;;
@@ -140,6 +164,13 @@ _has_profile() {
   return 1
 }
 
+# --- report-only modes, before anything that needs an SDK --------------------
+# These read the repo and print. No flutter, no cocoapods, no build.
+case "$LIST" in
+  variants) _flavours; exit 0 ;;
+  forappid) _flavour_for_appid; exit 0 ;;
+esac
+
 # --- report -----------------------------------------------------------------
 FL=$(_flutter) || { echo "build: no Flutter SDK found." >&2
   echo "  looked for a pinned SDK first ($REPO/.fvm/flutter), then PATH, then the" >&2
@@ -225,7 +256,12 @@ if [ -n "$DEVICE" ]; then
     # the fresh output — caught live 11 Sep.
     echo "  app='$REPO/build/ios/iphoneos/Runner.app'"
     echo '  if [ -d "$app" ]; then'
-    echo "    xcrun devicectl device install app --device '$DEVICE' \"\$app\"; rc=\$?"
+    # Announced before the install, so --build-only and the full run report the
+    # artefact the same way and this side never has to guess the path back.
+    echo '    echo "MMARTIFACT $app"'
+    if [ "$BUILDONLY" = 0 ]; then
+      echo "    xcrun devicectl device install app --device '$DEVICE' \"\$app\"; rc=\$?"
+    fi
     echo '  else echo "flutter reported success but $app is missing" >&2; rc=1; fi'
     echo 'fi'
     echo 'echo "MMDONE rc=$rc"'
@@ -239,7 +275,11 @@ if [ -n "$DEVICE" ]; then
     echo "  Terminal Automation permission may be needed once, from the Mac's screen." >&2
     exit 1; }
 
-  echo "building $APPID for device $DEVICE in the GUI session (profile mode)"
+  if [ "$BUILDONLY" = 1 ]; then
+    echo "building $APPID for device $DEVICE in the GUI session (profile mode), install left to the caller"
+  else
+    echo "building $APPID for device $DEVICE in the GUI session (profile mode)"
+  fi
   waited=0; limit=${DEVICE_BUILD_TIMEOUT:-1200}
   while [ "$waited" -lt "$limit" ]; do
     grep -q '^MMDONE rc=' "$log" 2>/dev/null && break
@@ -249,6 +289,14 @@ if [ -n "$DEVICE" ]; then
   drc=$(sed -n 's/^MMDONE rc=\([0-9][0-9]*\).*/\1/p' "$log" | tail -1)
   [ -n "$drc" ] || { echo "build: the GUI-session build did not finish within ${limit}s" >&2; exit 1; }
   [ "$drc" = 0 ] || { echo "build: device build/install failed (rc=$drc)" >&2; exit "$drc"; }
+
+  DART=$(sed -n 's/^MMARTIFACT //p' "$log" | tail -1)
+  [ -n "$DART" ] && echo "artifact   $DART"
+
+  # --build-only stops here: there is no install to confirm, and claiming one
+  # would be worse than saying nothing. The bundle-id check below is a statement
+  # about what devicectl put on the phone, not about what was built.
+  [ "$BUILDONLY" = 1 ] && exit 0
 
   # Same standard as the simulator path, but check the id that was actually
   # installed, not just that APPID is present somewhere — a grep of the installed
@@ -291,6 +339,14 @@ echo "== $FL $*"
 
 APP=$(_built_app) || { echo "build: nothing under build/ios/iphonesimulator" >&2; exit 1; }
 echo "built      $APP"
+echo "artifact   $APP"
+
+# Everything above this line is the framework's work; everything below it is the
+# platform's, and `_install_sim` is where the seam runs. runners/ios/platform.sh
+# `install` is the same five lines against the same two commands — it is written
+# out there rather than called from here because nothing is wired yet (BACKLOG
+# item 87, runners/README.md call site 3).
+[ "$BUILDONLY" = 1 ] && exit 0
 
 # A failed install must not pass as success. The old loop ended each iteration on
 # an `|| echo …`, so the echo was the last command and a build that installed
@@ -298,14 +354,18 @@ echo "built      $APP"
 # 40). Track failures and exit non-zero, and confirm the bundle is actually
 # resident afterwards, because "install returned 0" and "the app is there" are not
 # the same claim.
+_install_sim() {  # _install_sim <udid> <app> [app-id]
+  if ! xcrun simctl install "$1" "$2"; then
+    echo "install failed: $1" >&2; return 1
+  fi
+  if [ -n "${3:-}" ] && ! xcrun simctl get_app_container "$1" "$3" >/dev/null 2>&1; then
+    echo "install reported success but $3 is not on $1 afterwards" >&2; return 1
+  fi
+  echo "installed  $1"
+}
+
 rc=0
 for u in $INSTALL; do
-  if ! xcrun simctl install "$u" "$APP"; then
-    echo "install failed: $u" >&2; rc=1; continue
-  fi
-  if [ -n "$APPID" ] && ! xcrun simctl get_app_container "$u" "$APPID" >/dev/null 2>&1; then
-    echo "install reported success but $APPID is not on $u afterwards" >&2; rc=1; continue
-  fi
-  echo "installed  $u"
+  _install_sim "$u" "$APP" "$APPID" || rc=1
 done
 exit $rc

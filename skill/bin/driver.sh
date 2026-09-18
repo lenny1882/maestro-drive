@@ -122,19 +122,19 @@ _rebind() {
 # device driver run and only a recent one is this session's, so its presence is a
 # self-gating device signal — a simulator run adds nothing.
 _devdrv_hint() {
-  local t lock
+  local t
   # A locked phone is the cheapest, commonest and most actionable cause: XCUITest
   # cannot attach to a locked springboard, and it surfaces as this same relay /
   # connection failure rather than as a lock. Measured 10 Sep 2026 — unlocked, the
   # driver starts 3/3; on the PIN screen it fails every time. So check it first.
-  # devicectl returns nothing for a simulator udid, so this self-gates.
-  lock=$(_ssh "xcrun devicectl device info lockState --device '$DEV' 2>/dev/null | grep -i passcodeRequired" 2>/dev/null)
-  case "$lock" in
-    *[Tt]rue*)
-      echo "  the phone is LOCKED (passcodeRequired: true) — unlock it and retry." >&2
-      echo "  XCUITest cannot attach to a locked screen; it fails as a relay/connection" >&2
-      echo "  error, not as a lock (item 46)." >&2 ;;
-  esac
+  # The verb self-gates: exit 2 means the question does not apply to this kind of
+  # device, which is what a simulator udid gets, so nothing here needs to know
+  # which kind it has.
+  if _ssh "sh '$PLATFORM_SH' locked '$DEV'" >/dev/null 2>&1; then
+    echo "  the device is LOCKED — unlock it and retry." >&2
+    echo "  XCUITest cannot attach to a locked screen; it fails as a relay/connection" >&2
+    echo "  error, not as a lock (item 46)." >&2
+  fi
   t=$(_ssh 'f=$HOME/devdrv.log; [ -f "$f" ] || exit 0
 now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
 [ $((now - m)) -lt 600 ] && tail -6 "$f"' 2>/dev/null)
@@ -889,7 +889,7 @@ _journey() {  # _journey <file> <depth>
                   if ! _resolve "${a[1]}" >/dev/null 2>&1; then
                     _journey "$(dirname "$file")/${a[2]}" "$((depth + 1))" || rc=$?
                   fi ;;
-      clearstate) _ssh "xcrun simctl uninstall '$(_dev)' '$APP_ID' 2>/dev/null; echo cleared" || rc=$? ;;
+      clearstate) _ssh "sh '$PLATFORM_SH' uninstall '$(_dev)' '$APP_ID'; echo cleared" || rc=$? ;;
       *)          echo "journey: $file:$n unknown command '${a[0]}'" >&2; return 1 ;;
     esac
     if [ "$rc" -ne 0 ]; then
@@ -955,7 +955,7 @@ case "${1:-start}" in
             fi ;;
   clear)    _clear "${2:?usage: $0 clear <pattern> [index]}" "${3:-}" ;;
   scrollto) _scrollto "${2:?usage: $0 scrollto <pattern> [up|down|left|right] [max-swipes]}" "${3:-down}" "${4:-20}" ;;
-  clearstate) _ssh "xcrun simctl uninstall '$(_dev)' '$APP_ID' 2>/dev/null; echo cleared" ;;
+  clearstate) _ssh "sh '$PLATFORM_SH' uninstall '$(_dev)' '$APP_ID'; echo cleared" ;;
   swipe)    [ $# -ge 5 ] || { echo "usage: $0 swipe <x1> <y1> <x2> <y2> [duration]" >&2; exit 2; }
             _post swipeV2 "{\"appId\":\"$APP_ID\",\"startX\":$2,\"startY\":$3,\"endX\":$4,\"endY\":$5,\"duration\":${6:-0.4},$_appids}"; echo ;;
   orient)   # camelCase on the wire; PORTRAIT / LANDSCAPE_LEFT are rejected
