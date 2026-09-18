@@ -138,6 +138,34 @@ its proxy routing, the `/etc/hosts` entry, the sandbox network allowlist, the
 `reference/setup.md` has the whole sequence with the failure each missing piece
 produces.
 
+**And check which runner the project uses.** Driving is the same whatever built
+the app — a tap is a tap — but *building it, installing it and reading inside
+it* are not, and those answers come from two plug-in modules rather than from
+these scripts (`runners/README.md` is the contract):
+
+```sh
+$SKILL/bin/runner.sh which     # the two modules in use, and what else exists
+$SKILL/bin/runner.sh detect    # ask each framework to claim the checkout
+```
+
+```
+: "${RUNNER:=flutter}"     # framework: how it is built, how you see inside it
+: "${PLATFORM:=ios}"       # platform:  how it is installed and driven
+```
+
+Two settings and not one, because they cross: Flutter-on-Android is a real
+combination, so `flutter` and `android` cannot be alternatives to each other.
+Both default to what this package has always done, so a conf that does not
+mention them behaves exactly as before.
+
+**Everything Flutter or iOS in the rest of this file is one runner's answer, not
+a fact about the package.** `flutter run`, the Dart VM Service, `pubspec.lock`
+as build residue, `lib/main_<flavour>.dart`, `simctl`, the XCUITest driver — all
+of them come from `runners/flutter` and `runners/ios`. Under a different runner
+the same commands give different answers, and **a module that does not have a
+verb says so rather than failing**: `bin/net.sh` under a framework with no
+traffic endpoint prints why and exits 2, which is not a broken relay.
+
 **3. Read the project's app notes if they exist** — `bin/notes.sh path`. They
 record what has already been measured about this app, which is the difference
 between driving it and rediscovering it.
@@ -310,16 +338,22 @@ the internet from here. Never treat it as a blocker; the pages are still mostly
 right, but check anything version-sensitive against `maestro <cmd> --help` on
 the Mac.
 
-**5. Ask before building or starting a debug session.** Preflight also says
-whether a `flutter run` is active. The app is expected to be on the simulator
+**5. Ask before building or starting a dev session.** Preflight's `== dev
+session ==` block says whether one is live, and **what is lost when it is not —
+which differs by framework**. The app is expected to be on the simulator
 already; `bin/build.sh` exists for when it is not, and **must not be run
 unprompted**.
 
-If there is none, driving is unaffected: taps, journeys and the hierarchy all
-work. The only thing missing is network visibility — the Dart VM Service exists
-only when the app was started by `flutter run`, so after a `launchApp` or
+Under Flutter, no `flutter run` costs only network visibility: the Dart VM
+Service exists only when the app was started that way, so after a `launchApp` or
 `driver.sh launch` both `bin/net.sh` and `bin/publish.sh` come back empty. That
-looks like a broken relay and is not one.
+looks like a broken relay and is not one. Taps, journeys and the hierarchy are
+all unaffected.
+
+**Do not carry that reassurance to another framework.** Under React Native a
+debug build loads its JS bundle from Metro, so no Metro may mean the app does
+not start at all — the opposite advice from an identical empty result. Read what
+preflight prints rather than remembering what Flutter does.
 
 **Do not start one unprompted.** It rebuilds and reinstalls, replacing whatever
 build is on the simulator — which may be the very thing under test — and takes
@@ -339,8 +373,9 @@ target     lib/main_dev.dart
 last build /Users/…/build/ios/iphonesimulator/Runner.app (2026-08-13 14:56)
 ```
 
-Three things it works out rather than being told, because each of them presents
-as a different problem than it is:
+That report is `runners/flutter/framework.sh describe`. Three things it works
+out rather than being told, because each of them presents as a different problem
+than it is — and each is Flutter's answer, not the package's:
 
 - **The SDK.** A repo that pins with fvm has no `flutter` on any `PATH`, not
   even the login shell's, and a bare `flutter` says "command not found" — which
@@ -361,8 +396,12 @@ as a different problem than it is:
   untouched, which nothing reports.
 
 Then `bin/build.sh` builds and installs onto `$DEV`, or `--all` for every
-booted simulator. Measured 13 Aug 2026: 36 s end to end for an incremental
-build, 22 s of it Xcode. `--no-install` builds without installing;
+booted simulator. Measured 18 Sep 2026: 25 s end to end for an incremental
+build and install, and **a no-op rebuild is still 21-22 s** — Xcode re-runs
+Flutter's script phase whatever the staleness of its outputs. So when the
+artefact already exists, `--install-only <path>` installs it in **3 s** instead
+of rebuilding; a build prints `artifact <path>` for exactly that purpose.
+`--no-install` builds without installing;
 `BUILD_FLAVOR` and `BUILD_TARGET` in the conf override the discovery for a
 project where it cannot be decided. It exits non-zero if a requested install
 does not land — and confirms the bundle is actually on the simulator afterwards
@@ -686,9 +725,10 @@ with this skill.
    nothing. A control showing the right string may have committed nothing; assert
    the committed value — an `expect` on what the form now reads, or a read-back —
    never the text visible in the field.
-7. **Read state from the app, not from pixels.** Network first (the Dart VM
-   Service in a debug build), then the hierarchy, then source, then screenshots
-   — and screenshots only for questions genuinely about appearance.
+7. **Read state from the app, not from pixels.** Network first — the
+   framework's traffic capture, which under Flutter is the Dart VM Service in a
+   debug build — then the hierarchy, then source, then screenshots, and
+   screenshots only for questions genuinely about appearance.
 8. **Never restart the app in response to a failure.** When a journey fails or
    the screen is in an unexpected state, read the hierarchy — it already carries
    the field values, placeholders and layout. Decide from what it shows: dismiss
@@ -795,8 +835,9 @@ fix it yourself.
 | `bin/build.sh` | build the app on the Mac and install it — **never unprompted**; `--detect` only reads |
 | `bin/wall.sh` | every booted simulator, live, on one page — start, stop, status, log, label |
 | `bin/viewer.sh` | find the live Maestro viewers and republish one; not for watching |
-| `bin/preflight.sh` | one SSH call: repo, is the installed app the code under test, driver, VM service |
-| `bin/publish.sh` | republish the Dart VM Service after an app restart |
+| `bin/preflight.sh` | one SSH call: repo, is the installed app the code under test, driver, dev session |
+| `bin/publish.sh` | republish the app's debug endpoint after a restart |
+| `bin/runner.sh` | which framework and platform modules are in use — `which`, `detect` |
 | `bin/net.sh` | what the app requested and what came back |
 | `bin/mac.sh` | run anything on the Mac with Java and Maestro on PATH |
 | `bin/flow.sh`, `bin/hier.sh`, `bin/shot.sh` | Maestro CLI paths, for a real flow or a Maestro artifact |
