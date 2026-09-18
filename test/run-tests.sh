@@ -193,7 +193,11 @@ FR="$TMP/fresh"; mkdir -p "$FR"
 : > "$FR/ssh_config"; echo '{}' > "$FR/settings.json"
 printf '127.0.0.1\tlocalhost\n10.0.0.5\tsomething-unrelated\n' > "$FR/hosts"
 mkdir -p "$FR/lib"
-fresh_out=$(printf 'macuser\nsomemac\n\n10.1.1.5\ny\nmac-newplace\n\ny\nn\n\nn\n' | \
+# The `n` after the address answers "Try again?". A probe that fails now offers
+# the way back before it offers the unverified write, so every scripted run
+# gained one answer there — and a stream that is short by one feeds the next
+# answer into "the Mac's address" and probes a host called `n`.
+fresh_out=$(printf 'macuser\nsomemac\n\n10.1.1.5\ny\nmac-newplace\n\nn\ny\nn\n\nn\n' | \
   SSH_CONFIG="$FR/ssh_config" SETTINGS="$FR/settings.json" HOSTS_FILE="$FR/hosts" \
   LIB_DIR="$FR/lib" timeout 120 "$W" --dry-run 2>&1)
 fresh_rc=$?
@@ -317,6 +321,127 @@ else
 opt:   $(cat "$PXTMP/from-opt" 2>/dev/null | head -c 100)"
 fi
 
+# --- a probe that fails says what to do about it ------------------------------
+# Remote Login being off is the failure this hits most, and it is the one a
+# person cannot guess the fix for. Before 18 Sep the wizard printed all three
+# causes at once and offered only "write it anyway", so the two useful moves —
+# turn the setting on, then try again — were both absent. Each diagnosis is
+# checked for the action it should name and for the ones it should not: an
+# address declared wrong when the fault is a setting sends someone to change
+# the thing that was already right.
+DIAG="$TMP/diag"; mkdir -p "$DIAG"
+diag() { # diag <ssh stderr> -> output; exit status is "the address is suspect"
+  ( say() { printf '%s\n' "$*"; }; warn() { printf '%s\n' "$*"; }; ok() { :; }
+    MARKER=/dev/null
+    eval "$(sed -n '/^probe_diagnosis() {/,/^}/p' "$W")"
+    probe_diagnosis "$1" 10.9.9.9 )
+}
+
+refused="ssh: connect to host 10.9.9.9 port 22: Connection refused"
+d=$(diag "$refused")
+printf '%s' "$d" | grep -q "Remote Login" \
+  && printf '%s' "$d" | grep -q "System Settings" \
+  && printf '%s' "$d" | grep -q "setremotelogin" \
+  && ok "a refused probe names Remote Login, the settings path and the command" \
+  || no "a refused probe names Remote Login, the settings path and the command" "$d"
+
+# The Mac sent the refusal, so the address reached it. Saying otherwise is the
+# wrong repair, and the retry must not ask for the address again.
+if diag "$refused" >/dev/null; then
+  no "a refused probe does not cast doubt on the address" "it called the address suspect"
+else
+  ok "a refused probe does not cast doubt on the address"
+fi
+
+timedout="ssh: connect to host 10.9.9.9 port 22: Connection timed out"
+d=$(diag "$timedout")
+printf '%s' "$d" | grep -q "ipconfig getifaddr" \
+  && ok "a timed-out probe says how to read the address off the Mac" \
+  || no "a timed-out probe says how to read the address off the Mac" "$d"
+if diag "$timedout" >/dev/null; then
+  ok "a timed-out probe does cast doubt on the address"
+else
+  no "a timed-out probe does cast doubt on the address" "it did not"
+fi
+
+d=$(diag "ssh: connect to host 10.9.9.9 port 22: Network is unreachable")
+printf '%s' "$d" | grep -q "no route" \
+  && ok "an unreachable probe is a route, not a Mac that is switched off" \
+  || no "an unreachable probe is a route, not a Mac that is switched off" "$d"
+
+# Never a confident wrong answer. An error this does not recognise has to say so
+# rather than pick the nearest arm.
+d=$(diag "ssh: something nobody has seen before")
+printf '%s' "$d" | grep -q "did not say why" \
+  && ok "an unrecognised error says it is unrecognised" \
+  || no "an unrecognised error says it is unrecognised" "$d"
+
+# --- and offers the way back --------------------------------------------------
+# The fix happens on the Mac while the wizard waits, so the retry is the whole
+# point: every answer given so far is still in hand and a retry costs one key.
+PRB="$TMP/retry"; mkdir -p "$PRB/bin" "$PRB/lib"
+cat > "$PRB/bin/ssh" <<'STUB'
+#!/bin/sh
+n=$(cat "$STUB_COUNT" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$STUB_COUNT"
+if [ "$n" -le "${STUB_FAILS:-1}" ]; then
+  echo "ssh: connect to host 10.9.9.9 port 22: Connection refused" >&2
+  exit 255
+fi
+exit 0
+STUB
+chmod +x "$PRB/bin/ssh"
+printf '#!/bin/sh\nexit 1\n' > "$PRB/bin/sudo"; chmod +x "$PRB/bin/sudo"
+: > "$PRB/key"
+date +%F > "$PRB/lib/phase-a-done"
+
+retry_run() { # retry_run <how many probes fail> <answers>
+  printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
+    "$PRB/key" > "$PRB/ssh_config"
+  printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local"]}}}\n' > "$PRB/settings.json"
+  printf '127.0.0.1 localhost\n' > "$PRB/hosts"
+  : > "$PRB/count"
+  printf '%b' "$2" | STUB_COUNT="$PRB/count" STUB_FAILS="$1" PATH="$PRB/bin:$PATH" \
+    SSH_CONFIG="$PRB/ssh_config" SETTINGS="$PRB/settings.json" \
+    HOSTS_FILE="$PRB/hosts" LIB_DIR="$PRB/lib" timeout 120 "$W" 2>&1
+}
+
+# One refusal, then the person turns Remote Login on and says yes.
+r=$(retry_run 1 'y\nmac-probe\n10.9.9.9\ny\n\nn\nmac-probe\nn\n')
+printf '%s' "$r" | grep -q "Try again?" \
+  && ok "retry: a failed probe offers the way back" \
+  || no "retry: a failed probe offers the way back" "$(printf '%s' "$r" | tail -6)"
+
+printf '%s' "$r" | grep -q "ssh said: .*Connection refused" \
+  && ok "retry: ssh's own line is printed, not just the verdict" \
+  || no "retry: ssh's own line is printed, not just the verdict" "$(printf '%s' "$r" | tail -6)"
+
+printf '%s' "$r" | grep -q "answers and the key works" \
+  && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
+  && ok "retry: saying yes re-probes, and the block is written verified" \
+  || no "retry: saying yes re-probes, and the block is written verified" \
+        "$(printf '%s' "$r" | tail -6)"
+
+# Nothing is written before the probe passes, so declining both has to leave the
+# file exactly as it was — the whole argument for probing first.
+r=$(retry_run 99 'y\nmac-probe\n10.9.9.9\nn\nn\n')
+if grep -q "^Host mac-probe$" "$PRB/ssh_config"; then
+  no "retry: declining both writes nothing" "the block was written anyway"
+else
+  ok "retry: declining both writes nothing"
+fi
+printf '%s' "$r" | grep -q "Nothing has been written yet" \
+  && ok "retry: it says nothing has been written, so the way back is free" \
+  || no "retry: it says nothing has been written, so the way back is free" \
+        "$(printf '%s' "$r" | tail -6)"
+
+# The unverified write is still reachable, and still says what it is.
+r=$(retry_run 99 'y\nmac-probe\n10.9.9.9\nn\ny\n\nn\nmac-probe\nn\n')
+printf '%s' "$r" | grep -q "unverified" \
+  && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
+  && ok "retry: the unverified write is still offered, and named as unverified" \
+  || no "retry: the unverified write is still offered, and named as unverified" \
+        "$(printf '%s' "$r" | tail -6)"
+
 # --- the write path, for real ------------------------------------------------
 # Everything above runs --dry-run, so until 18 Sep 2026 the wizard had never
 # written anything, even to a copy. Running it for real found three defects in
@@ -333,7 +458,7 @@ date +%F > "$RW/lib/phase-a-done"
 rw_run() { # rw_run <sudo-exit> -> output; answers are fixed
   printf '#!/bin/sh\nexit %s\n' "$1" > "$RW/bin/sudo"
   chmod +x "$RW/bin/sudo"
-  printf 'y\nmac-test\n192.168.99.50\ny\ny\nn\ny\ny\ny\n' | \
+  printf 'y\nmac-test\n192.168.99.50\nn\ny\ny\nn\ny\ny\ny\n' | \
     PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
     HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1
 }
@@ -395,7 +520,7 @@ printf '%s' "$rw_ok" | grep -qE 'ok    written$' \
 printf '{}\n' > "$RW/settings.json"
 printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
   "$TMP/fake-key" > "$RW/ssh_config"
-rw_noname=$(printf 'y\nmac-test\n192.168.99.50\ny\nn\nn\nn\nn\n' | \
+rw_noname=$(printf 'y\nmac-test\n192.168.99.50\nn\ny\nn\nn\nn\nn\n' | \
   PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
   HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1)
 printf '%s' "$rw_noname" | grep -q "cannot be written" \
@@ -415,7 +540,7 @@ printf 'Host mac-test\n\tHostname 192.168.99.50\n\tUser testuser\n\tIdentityFile
 printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local","192.168.99.50"]}}}\n' > "$UP/settings.json"
 printf '127.0.0.1 localhost\n' > "$UP/hosts"
 date +%F > "$UP/lib/phase-a-done"
-printf 'y\nmac-test\n192.168.99.77\ny\ny\nn\ny\nn\n' | \
+printf 'y\nmac-test\n192.168.99.77\nn\ny\ny\nn\ny\nn\n' | \
   PATH="$UP/bin:$PATH" SSH_CONFIG="$UP/ssh_config" SETTINGS="$UP/settings.json" \
   HOSTS_FILE="$UP/hosts" LIB_DIR="$UP/lib" timeout 120 "$W" >/dev/null 2>&1
 
@@ -464,7 +589,10 @@ rm_domains() { python3 -c "import json,sys;print(' '.join(json.load(open(sys.arg
 rm_reset
 cp "$RM/ssh_config" "$RM/ssh_config.orig"; cp "$RM/hosts" "$RM/hosts.orig"
 orig_domains=$(rm_domains)
-rm_wiz 'y\nmac-gone\n10.0.0.99\ny\ny\nn\ny\ny\ny\n' >/dev/null
+# The `n` is "Try again?" — see the note on the write-path stream above. The
+# add half of the round trip is a scripted run like any other and gained the
+# same answer.
+rm_wiz 'y\nmac-gone\n10.0.0.99\nn\ny\ny\nn\ny\ny\ny\n' >/dev/null
 rm_wiz 'y\ny\n\ny\ny\n' --remove mac-gone >/dev/null
 
 diff -q "$RM/ssh_config.orig" "$RM/ssh_config" >/dev/null \

@@ -40,6 +40,13 @@ SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 # another.
 FALLBACK_KEY="$HOME/.ssh/mac_rc"
 
+# A floor under both retry loops. Interactively a person stops retrying when
+# they stop; a scripted run whose answers run out gets the default from every
+# prompt, and the default on "Try again?" is yes — so without this it spins,
+# and worse, an answer meant for a later question lands in "the Mac's address"
+# and it spins against a hostname like "n".
+PROBE_MAX_TRIES="${PROBE_MAX_TRIES:-8}"
+
 # The ProxyCommand, written into every Host block below and passed to every
 # probe made BEFORE a block exists. Those probes name a raw address, which has
 # no Host block and so picked up no ProxyCommand: inside a Claude session that
@@ -285,13 +292,52 @@ phase_a() {
     # Foreground, output not captured, no BatchMode. ssh reads the password from
     # /dev/tty, so the prompt reaches the terminal as long as none of those
     # three is broken.
-    if ! ssh-copy-id -o ProxyCommand="$PROXY_CMD" -i "$key.pub" "$mac_user@$addr"; then
+    #
+    # Looped for the same reason phase B is: the usual failure here is Remote
+    # Login being off, which takes ten seconds to fix on the Mac, and a wizard
+    # that exits at that point makes someone start the whole thing again. Every
+    # answer so far is still in hand, so a retry costs one keystroke.
+    local cperr suspect tries=0
+    while :; do
+      tries=$((tries + 1))
+      if [ "$tries" -gt "$PROBE_MAX_TRIES" ]; then
+        warn "gave up after $PROBE_MAX_TRIES attempts at $addr."
+        return 1
+      fi
+      if ssh-copy-id -o ProxyCommand="$PROXY_CMD" -i "$key.pub" "$mac_user@$addr"; then
+        break
+      fi
       say ""
-      warn "ssh-copy-id failed. Refused on port 22 means Remote Login is off"
-      warn "(System Settings -> General -> Sharing). Timed out means the wrong"
-      warn "address, or the Mac is on a different network."
-      return 1
-    fi
+      # ssh-copy-id keeps its stdin for the password, so its output cannot be
+      # captured without breaking the prompt. A BatchMode probe straight after
+      # fails the same way for the same reason, and that one can be read.
+      cperr=$(ssh -n -o BatchMode=yes -o ConnectTimeout=8 \
+                  -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
+                  "$mac_user@$addr" true 2>&1 || true)
+      case "$cperr" in
+        *"Permission denied"*|*"Too many authentication failures"*)
+          # Not the key. The key is the thing being copied, so a refusal here is
+          # about the login: the wrong password, or an account Remote Login is
+          # not letting in. probe_diagnosis reads this case as a missing key,
+          # which is true everywhere except inside phase A.
+          suspect=0
+          warn "$addr answered and refused the login."
+          say "  Either that was not the Mac's login password, or Remote Login is"
+          say "  not letting $mac_user in: System Settings -> General -> Sharing"
+          say "  -> Remote Login, \"Allow access for\" has to include this account." ;;
+        *)
+          [ -n "$cperr" ] && say "  ssh said: $(printf '%s' "$cperr" | grep -v '^$' | tail -1)"
+          if probe_diagnosis "$cperr" "$addr"; then suspect=1; else suspect=0; fi ;;
+      esac
+      say ""
+      say "  Nothing has been written yet, on this machine or on the Mac."
+      confirm "Try again?" y || return 1
+      if [ "$suspect" = 1 ]; then
+        addr=$(ask "the Mac's address right now" "$addr")
+        [ -n "$addr" ] || { warn "no address given"; return 1; }
+      fi
+      say ""
+    done
 
     say ""
     say "  Proving key authentication works. This uses BatchMode=yes, which is what"
@@ -340,6 +386,113 @@ phase_a_followup() {
     say "  None of the configured addresses is on a subnet this machine can see."
     say "  That is normal for a Mac on a different network, and is not a fault."
   fi
+}
+
+# --- why a probe failed, and what to do about it -----------------------------
+# Three causes need three different actions, and ssh says which in its own
+# words, so the text is chosen from the error rather than listing all three and
+# leaving the reader to work out which is theirs. Remote Login being off is the
+# one that happens most and the one a person cannot guess the fix for, so it
+# gets the exact path through System Settings and the command that does the same
+# thing.
+#
+# The raw line is printed whatever the verdict. A pattern that stops matching
+# some future ssh must degrade into "it did not say why in words this knows",
+# never into a confident wrong diagnosis — an address declared wrong when the
+# real fault is a setting sends someone to change the thing that was right.
+#
+# Exit status is about the ADDRESS, not about success: 0 means the address is
+# worth re-typing on a retry, 1 means it is not. A refusal comes from the Mac
+# itself, so the address reached it and re-asking for it is noise.
+probe_diagnosis() { # probe_diagnosis <stderr> <addr> -> 0 if the address is suspect
+  local err="$1" addr="$2"
+  case "$err" in
+    *"Permission denied"*|*"Too many authentication failures"*)
+      warn "$addr answered, but would not take the key."
+      say "  The key is not in authorized_keys on the Mac, which is phase A's job"
+      say "  and is not something this phase can fix. Clear the marker and re-run:"
+      say "    rm $MARKER"
+      return 1 ;;
+    *"Connection refused"*|*"connection refused"*)
+      warn "$addr refused the connection on port 22 — that is Remote Login off."
+      say ""
+      say "  The Mac answered, so the address is right. Turn Remote Login on:"
+      say ""
+      say "    System Settings -> General -> Sharing -> Remote Login"
+      say ""
+      say "  or in a terminal on the Mac:"
+      say ""
+      say "    sudo systemsetup -setremotelogin on"
+      say "    sudo systemsetup -getremotelogin      # Remote Login: On"
+      say ""
+      say "  Check the account is allowed: under Remote Login, \"Allow access for\""
+      say "  is either all users or a list this one has to be in."
+      return 1 ;;
+    *"Network is unreachable"*|*"No route to host"*)
+      warn "this machine has no route to $addr at all."
+      say "  In a terminal that means the address is on a network this machine is"
+      say "  not attached to. Inside a Claude session it means the sandbox proxy"
+      say "  cannot reach it, and the wizard belongs in an ordinary terminal."
+      return 0 ;;
+    *"timed out"*|*"Timed out"*|*"timeout"*)
+      warn "$addr did not answer before the timeout."
+      say "  Either that is not the Mac's address on this network, or the Mac is"
+      say "  not on this network. Read it off the Mac:"
+      say "    ipconfig getifaddr en0"
+      return 0 ;;
+    *"Host key verification failed"*)
+      warn "$addr answered with a host key that does not match the recorded one."
+      say "  Another machine holds that address now, or the Mac was rebuilt:"
+      say "    ssh-keygen -R $addr"
+      return 0 ;;
+    *)
+      warn "$addr did not answer, and ssh did not say why in words this knows."
+      say "  The line above is ssh's own. Refused is Remote Login off; timed out is"
+      say "  the wrong address or the wrong network."
+      return 0 ;;
+  esac
+}
+
+# The probe, its diagnosis and the way back. Written once because phase A and
+# phase B both make it and a person who has just turned Remote Login on wants
+# the same next step in either. Sets PROBE_ADDR to the address that finally
+# answered, which a retry may have changed.
+# 0 = the Mac answered. 1 = it did not and the caller should stop.
+probe_until_answered() { # probe_until_answered <user> <key> <addr>
+  local user="$1" key="$2" addr="$3" err suspect tries=0
+  while :; do
+    tries=$((tries + 1))
+    if [ "$tries" -gt "$PROBE_MAX_TRIES" ]; then
+      warn "gave up after $PROBE_MAX_TRIES attempts at $addr."
+      PROBE_ADDR="$addr"
+      return 1
+    fi
+    # -n, or a successful probe eats the rest of the answers — see mac_run.
+    if err=$(ssh -n -i "$key" -o BatchMode=yes -o ConnectTimeout=8 \
+                 -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
+                 "$user@$addr" true 2>&1); then
+      ok "$addr answers and the key works"
+      PROBE_ADDR="$addr"
+      return 0
+    fi
+    say ""
+    [ -n "$err" ] && say "  ssh said: $(printf '%s' "$err" | grep -v '^$' | tail -1)"
+    if probe_diagnosis "$err" "$addr"; then suspect=1; else suspect=0; fi
+    say ""
+    say "  Nothing has been written yet, so there is nothing to undo."
+    if confirm "Try again?" y; then
+      # Only when the address is what is in doubt. After a refusal the address
+      # is the one thing already proven, and asking for it again invites someone
+      # to change it while the real fault is still on the Mac.
+      if [ "$suspect" = 1 ]; then
+        addr=$(ask "the Mac's address on this network" "$addr")
+        [ -n "$addr" ] || { warn "no address given"; return 1; }
+      fi
+      continue
+    fi
+    PROBE_ADDR="$addr"
+    return 1
+  done
 }
 
 # --- phase B ----------------------------------------------------------------
@@ -484,15 +637,15 @@ phase_b() {
 
   say ""
   say "  Checking the Mac answers there before writing anything."
-  if ssh -n -i "$MAC_KEY" -o BatchMode=yes -o ConnectTimeout=8 \
-         -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
-         "$MAC_USER@$addr" true 2>/dev/null; then
-    ok "$addr answers and the key works"
+  if probe_until_answered "$MAC_USER" "$MAC_KEY" "$addr"; then
+    addr="$PROBE_ADDR"
   else
-    warn "$addr did not answer. Refused means Remote Login is off; timed out means"
-    warn "the wrong address, or the Mac is not on this network; unreachable means"
-    warn "this machine has no route there at all."
-    confirm "Write the configuration anyway?" n || return 1
+    # A block written against an address that never answered is the two-of-three
+    # this wizard exists to prevent, so it is offered last and defaults to no.
+    addr="$PROBE_ADDR"
+    say ""
+    confirm "Write the configuration anyway, unverified?" n || return 1
+    warn "writing $alias unverified — if the address is wrong, ssh $alias hangs."
   fi
 
   # ~/.ssh/config is the user's file. Two blocks with the same Host name are not
