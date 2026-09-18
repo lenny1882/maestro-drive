@@ -3,6 +3,7 @@
 #
 #   ./wizard.sh            run it
 #   ./wizard.sh --status   what is already in place, change nothing
+#   ./wizard.sh --edit     change what phase A recorded — username, name, key
 #   ./wizard.sh --hosts    rewrite the /etc/hosts block only, to reorder it
 #   ./wizard.sh --remove <alias>   take one network back out, all three files
 #   ./wizard.sh --dry-run  ask everything, read everything, write nothing
@@ -46,6 +47,9 @@ FALLBACK_KEY="$HOME/.ssh/mac_rc"
 # and worse, an answer meant for a later question lands in "the Mac's address"
 # and it spins against a hostname like "n".
 PROBE_MAX_TRIES="${PROBE_MAX_TRIES:-8}"
+# What the probe settled on, which a retry may have changed. Declared here
+# because set -u makes an unset out-param an abort rather than an empty value.
+PROBE_ADDR=""; PROBE_USER=""
 
 # The ProxyCommand, written into every Host block below and passed to every
 # probe made BEFORE a block exists. Those probes name a raw address, which has
@@ -60,11 +64,12 @@ sh -c 'if [ -n "$grpc_proxy" ]; then A=$(printf "%%s" "$grpc_proxy" | sed -e "s|
 PROXY
 )
 
-STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""
+STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""; EDIT_ONLY=0
 # A while loop rather than `for a in "$@"`, because --remove takes a value.
 while [ $# -gt 0 ]; do
   case "$1" in
     --status)   STATUS_ONLY=1; shift ;;
+    --edit)     EDIT_ONLY=1; shift ;;
     --hosts)    HOSTS_ONLY=1; shift ;;
     --dry-run)  DRY=1; shift ;;
     --remove)   REMOVE="${2:-}"
@@ -204,8 +209,11 @@ phase_a() {
   if [ -e "$MARKER" ]; then
     say "  Phase A ran on $(cat "$MARKER" 2>/dev/null || echo 'an earlier date')."
     if phase_a_status; then
-      say ""
-      say "  A key exists and a Host block names it, so phase A has nothing to do."
+      # Not "nothing to do": what phase A recorded can go stale, and until this
+      # was here the only way to correct a renamed account was three blocks by
+      # hand. A key change clears the marker, so the fresh path below runs in
+      # this same pass and copies the new key.
+      phase_a_edit || true
     else
       warn "the marker exists but no usable key was found — treating this as a fresh run"
       rm -f "$MARKER"
@@ -421,11 +429,18 @@ remote_login_help() { # remote_login_help <user>
   say "    sudo dseditgroup -o edit -a $1 -t user com.apple.access_ssh"
 }
 
+# Set alongside the return value: the exit status is about the address, this is
+# about the account. They are different questions and the two failures that mean
+# "the username is wrong" both say the address is fine.
+PROBE_USER_SUSPECT=0
+
 probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address is suspect
   local err="$1" addr="$2" user="${3:-}"
+  PROBE_USER_SUSPECT=0
   case "$err" in
     *"Permission denied"*|*"Too many authentication failures"*)
-      warn "$addr answered, but would not take the key."
+      PROBE_USER_SUSPECT=1
+      warn "$addr answered, but would not take the key for $user."
       say "  The key is not in authorized_keys on the Mac, which is phase A's job"
       say "  and is not something this phase can fix. Clear the marker and re-run:"
       say "    rm $MARKER"
@@ -443,15 +458,21 @@ probe_diagnosis() { # probe_diagnosis <stderr> <addr> <user> -> 0 if the address
       # Remote Login being on but not for this account: an account outside
       # com.apple.access_ssh is dropped during the banner exchange rather than
       # being told no, which is why it does not arrive as Permission denied.
+      PROBE_USER_SUSPECT=1
       warn "$addr answered on port 22 and then closed the connection."
       say ""
       say "  Something is listening, so the address and the network are right."
-      say "  On a Mac that is Remote Login on but not for this account:"
+      say "  It is connecting as $user. Three things close a connection here:"
+      say ""
+      say "  1. that account does not exist on the Mac — renamed or deleted. An"
+      say "     account macOS does not know is dropped at this point rather than"
+      say "     told no, so it never arrives as Permission denied."
+      say "  2. Remote Login is on but not for this account:"
       say ""
       remote_login_help "$user"
       say ""
-      say "  It is also what you get for a few seconds right after turning Remote"
-      say "  Login on, so if you just did, try again."
+      say "  3. Remote Login was turned on seconds ago and sshd is still starting,"
+      say "     in which case try again and nothing else."
       return 1 ;;
     *"Network is unreachable"*|*"No route to host"*)
       warn "this machine has no route to $addr at all."
@@ -499,15 +520,15 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     tries=$((tries + 1))
     if [ "$tries" -gt "$PROBE_MAX_TRIES" ]; then
       warn "gave up after $PROBE_MAX_TRIES attempts at $addr."
-      PROBE_ADDR="$addr"
+      PROBE_ADDR="$addr"; PROBE_USER="$user"
       return 1
     fi
     # -n, or a successful probe eats the rest of the answers — see mac_run.
     if err=$(ssh -n -i "$key" -o BatchMode=yes -o ConnectTimeout=8 \
                  -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
                  "$user@$addr" true 2>&1); then
-      ok "$addr answers and the key works"
-      PROBE_ADDR="$addr"
+      ok "$addr answers and the key works as $user"
+      PROBE_ADDR="$addr"; PROBE_USER="$user"
       return 0
     fi
     say ""
@@ -515,6 +536,15 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     if probe_diagnosis "$err" "$addr" "$user"; then suspect=1; else suspect=0; fi
     say ""
     say "  Nothing has been written yet, so there is nothing to undo."
+    # Offered where a wrong account is what the error means. The new name is
+    # used for the retry and written nowhere until a probe with it succeeds —
+    # an unproven username in every Host block is worse than the stale one.
+    if [ "$PROBE_USER_SUSPECT" = 1 ] && confirm "Connect as a different user?" n; then
+      user=$(ask "the Mac's username" "$user")
+      [ -n "$user" ] || { warn "no username given"; return 1; }
+      PROBE_USER="$user"
+      continue
+    fi
     if confirm "Try again?" y; then
       # Only when the address is what is in doubt. After a refusal the address
       # is the one thing already proven, and asking for it again invites someone
@@ -525,9 +555,103 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
       fi
       continue
     fi
-    PROBE_ADDR="$addr"
+    PROBE_ADDR="$addr"; PROBE_USER="$user"
     return 1
   done
+}
+
+# --- phase A as an editor ----------------------------------------------------
+# The three files are the record, which is right until one of the facts they
+# record changes. A renamed account on the Mac is the case that found this: the
+# username is read back from a Host block's User line and was never shown, never
+# checked and nowhere changeable, so correcting it meant editing three blocks by
+# hand. The failure it produces names nothing — a connection closed during the
+# banner exchange, because macOS drops an account it does not know at that stage
+# rather than answering it.
+#
+# Each fact is edited by the phase that owns it, and written where it lives:
+#
+#   the Mac's username, the key   every Host block          phase A, here
+#   the Mac's .local name         allowedDomains, /etc/hosts  phase A, here
+#   a network's address           that network's Host block  phase B
+#   a network's SSID and static   the Mac's own script       phase C
+#
+# B and C could already replace their own values — a re-run for an existing
+# alias updates the Hostname in place, and a second phase C replaces that SSID's
+# arm. Only A was create-once.
+
+# Set by an edit that changes the .local name, because /etc/hosts maps that name
+# and is written at the end of the run rather than here.
+HOSTS_DIRTY=0
+
+phase_a_facts() { # print what is recorded, and where each value comes from
+  local a src_user="" src_key=""
+  for a in $(configured_aliases || true); do
+    [ -n "$src_user" ] || { [ -n "$(host_field "$a" User)" ] && src_user="$a"; }
+    [ -n "$src_key" ]  || { [ -n "$(host_field "$a" IdentityFile)" ] && src_key="$a"; }
+  done
+  say ""
+  say "  What this machine records about the Mac:"
+  say ""
+  printf '    %-12s %-24s %s\n' "username"   "${MAC_USER:-(none)}" \
+    "${src_user:+from Host $src_user}" >&2
+  printf '    %-12s %-24s %s\n' ".local name" "${MAC_NAME:-(none)}" \
+    "${MAC_NAME:+from allowedDomains}" >&2
+  printf '    %-12s %-24s %s\n' "key"        "${MAC_KEY/#$HOME/~}" \
+    "${src_key:+from Host $src_key}" >&2
+  say ""
+}
+
+# Returns 0 when something was changed, so the caller knows to offer the rest of
+# the run rather than stopping on "nothing to do".
+phase_a_edit() {
+  resolve_from_existing
+  phase_a_facts
+  confirm "Change any of these?" n || return 1
+
+  local new_user new_name new_key changed=0
+  new_user=$(ask "the Mac's username" "$MAC_USER")
+  new_name=$(ask "the Mac's .local name" "$MAC_NAME")
+  case "$new_name" in *.*) ;; "") ;; *) new_name="$new_name.local"; ok "read as $new_name" ;; esac
+  new_key=$(ask "key path" "${MAC_KEY/#$HOME/~}")
+  new_key="${new_key/#\~/$HOME}"
+
+  # The username first and on its own: every check below reaches the Mac, and
+  # none of them can while the account name is wrong.
+  if [ -n "$new_user" ] && [ "$new_user" != "$MAC_USER" ]; then
+    local b; b=$(backup_of "$SSH_CONFIG")
+    ssh_all_set_field User "$new_user"
+    dry || ok "username: $MAC_USER -> $new_user, in every Host block (backup: $b)"
+    MAC_USER="$new_user"; changed=1
+  fi
+
+  if [ -n "$new_key" ] && [ "$new_key" != "$MAC_KEY" ]; then
+    if [ ! -r "$new_key" ]; then
+      warn "$new_key is not readable — leaving the key as it was."
+    else
+      local b; b=$(backup_of "$SSH_CONFIG")
+      ssh_all_set_field IdentityFile "${new_key/#$HOME/~}"
+      dry || ok "key: $MAC_KEY -> $new_key, in every Host block (backup: $b)"
+      MAC_KEY="$new_key"; changed=1
+      # A key the Mac does not trust is not a key. Copying it is phase A's own
+      # job, so the marker goes and the fresh path runs on the next pass.
+      say ""
+      say "  The Mac has to be told to trust the new key, which is what phase A"
+      say "  does. Its marker is cleared so the next run copies it."
+      dry || rm -f "$MARKER"
+    fi
+  fi
+
+  if [ -n "$new_name" ] && [ "$new_name" != "$MAC_NAME" ]; then
+    DROP_ADDR="$MAC_NAME" allowed_domains_add "$new_name" || true
+    DROP_ADDR=""
+    MAC_NAME="$new_name"; changed=1
+    # /etc/hosts maps this name, and it is written once at the end of the run.
+    HOSTS_DIRTY=1
+  fi
+
+  [ "$changed" = 1 ] || { say ""; ok "nothing was changed."; return 1; }
+  return 0
 }
 
 # --- phase B ----------------------------------------------------------------
@@ -570,6 +694,32 @@ ssh_block_set_hostname() { # <alias> <addr>
   awk -v alias="$1" -v addr="$2" '
     /^[[:space:]]*Host[[:space:]]+/ { inblock = ($2 == alias) }
     inblock && tolower($1) == "hostname" { print "\tHostname " addr; next }
+    { print }
+  ' "$SSH_CONFIG" > "$tmp"
+  cat "$tmp" > "$SSH_CONFIG"
+  rm -f "$tmp"
+}
+
+# One Mac has one account name and one key, so those two live in every Host
+# block at once and change in all of them or in none. Hostname is the opposite —
+# it is per network and belongs to phase B — which is why this takes the keyword
+# rather than being a set_user and a set_key that would drift apart.
+#
+# A Host line may name several aliases, so every field on it is checked, not
+# just the second: a block serving mac-a and mac-b is still one of ours.
+ssh_all_set_field() { # ssh_all_set_field <Keyword> <value>
+  local kw="$1" val="$2" aliases tmp
+  aliases=$(configured_aliases | tr '\n' ' ')
+  [ -n "$aliases" ] || return 0
+  if dry; then would "set $kw to $val in every Host block that names a key"; return 0; fi
+  tmp=$(mktemp)
+  awk -v aliases="$aliases" -v kw="$kw" -v val="$val" '
+    BEGIN { n = split(aliases, a, " "); for (i = 1; i <= n; i++) want[a[i]] = 1 }
+    /^[[:space:]]*Host[[:space:]]+/ {
+      inblock = 0
+      for (i = 2; i <= NF; i++) if (($i) in want) inblock = 1
+    }
+    inblock && tolower($1) == tolower(kw) { print "\t" kw " " val; next }
     { print }
   ' "$SSH_CONFIG" > "$tmp"
   cat "$tmp" > "$SSH_CONFIG"
@@ -671,13 +821,27 @@ phase_b() {
   [ -n "$addr" ] || { warn "no address given"; return 1; }
 
   say ""
+  # Printed rather than assumed. The username and the key are read back out of
+  # an existing Host block and are the two values this phase never asks for, so
+  # a stale one is invisible until it fails as something that names neither.
+  say "  Connecting as $MAC_USER with ${MAC_KEY/#$HOME/~}."
   say "  Checking the Mac answers there before writing anything."
   if probe_until_answered "$MAC_USER" "$MAC_KEY" "$addr"; then
     addr="$PROBE_ADDR"
+    # Proven, so now it can be written. One Mac has one account name, so a
+    # correction belongs in every block, not only the one about to be added.
+    if [ "$PROBE_USER" != "$MAC_USER" ]; then
+      local ub; ub=$(backup_of "$SSH_CONFIG")
+      ssh_all_set_field User "$PROBE_USER"
+      dry || ok "username: $MAC_USER -> $PROBE_USER, in every Host block (backup: $ub)"
+      MAC_USER="$PROBE_USER"
+    fi
   else
+    # Whatever the retries settled on, so an unverified write records the address
+    # last tried rather than the one first typed.
+    addr="$PROBE_ADDR"
     # A block written against an address that never answered is the two-of-three
     # this wizard exists to prevent, so it is offered last and defaults to no.
-    addr="$PROBE_ADDR"
     say ""
     confirm "Write the configuration anyway, unverified?" n || return 1
     warn "writing $alias unverified — if the address is wrong, ssh $alias hangs."
@@ -1287,13 +1451,20 @@ if [ "$HOSTS_ONLY" = 1 ]; then
   exit 0
 fi
 
+if [ "$EDIT_ONLY" = 1 ]; then
+  # The whole run asks about networks, and a stale username is not a network.
+  phase_a
+  [ "$HOSTS_DIRTY" = 1 ] && { write_etc_hosts || warn "/etc/hosts was not written"; }
+  exit 0
+fi
+
 if [ "$STATUS_ONLY" = 1 ]; then
   step "Phase A"
   [ -e "$MARKER" ] && ok "marker: $(cat "$MARKER")" || warn "no marker at $MARKER"
   phase_a_status || true
   step "Networks"
   for a in $(configured_aliases || true); do
-    ok "$a -> $(ssh_block_hostname "$a")"
+    ok "$a -> $(ssh_block_hostname "$a") as $(host_field "$a" User)"
   done
   exit 0
 fi
@@ -1328,7 +1499,7 @@ if confirm "Set up a network now?" y; then
   fi
 fi
 
-if [ "$ADDED" = 1 ]; then
+if [ "$ADDED" = 1 ] || [ "$HOSTS_DIRTY" = 1 ]; then
   write_etc_hosts || warn "/etc/hosts was not written"
   say ""
   say "  Join another network and re-run this to add it. Phase A is skipped from"

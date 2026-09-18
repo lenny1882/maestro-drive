@@ -189,17 +189,38 @@ grep -q "something-unrelated" "$TMP/wiz/hosts.new" && grep -q "127.0.0.1" "$TMP/
 # Running it empty aborted at the first prompt with "known_user: unbound
 # variable" — `local x` under `set -u` leaves x UNSET, and the loop that would
 # assign it never ran.
-FR="$TMP/fresh"; mkdir -p "$FR"
+# ssh is stubbed, not merely pointed at an address that will not answer. What a
+# dead address produces is the environment's business — inside this sandbox a
+# refused connection arrives as kex_exchange_identification, which is the arm
+# that offers to change the username, so the transcript gained a prompt and
+# every fixed answer stream slid by one. A refusal is the failure these cases
+# want: it casts doubt on neither the address nor the account, so exactly one
+# prompt follows it.
+ssh_stub() { # ssh_stub <bin dir>
+  cat > "$1/ssh" <<'STUB'
+#!/bin/sh
+echo "ssh: connect to host stub port 22: Connection refused" >&2
+exit 255
+STUB
+  chmod +x "$1/ssh"
+}
+
+FR="$TMP/fresh"; mkdir -p "$FR" "$FR/bin"
+ssh_stub "$FR/bin"
 : > "$FR/ssh_config"; echo '{}' > "$FR/settings.json"
 printf '127.0.0.1\tlocalhost\n10.0.0.5\tsomething-unrelated\n' > "$FR/hosts"
 mkdir -p "$FR/lib"
+# The leading `n` answers "Change any of these?". Phase A stopped being
+# create-once on 18 Sep: a re-run now shows the username, the .local name and
+# the key it recorded and offers to change them, because a renamed account on
+# the Mac was correctable only by editing every Host block by hand.
 # The `n` after the address answers "Try again?". A probe that fails now offers
 # the way back before it offers the unverified write, so every scripted run
 # gained one answer there — and a stream that is short by one feeds the next
 # answer into "the Mac's address" and probes a host called `n`.
 fresh_out=$(printf 'macuser\nsomemac\n\n10.1.1.5\ny\nmac-newplace\n\nn\ny\nn\n\nn\n' | \
-  SSH_CONFIG="$FR/ssh_config" SETTINGS="$FR/settings.json" HOSTS_FILE="$FR/hosts" \
-  LIB_DIR="$FR/lib" timeout 120 "$W" --dry-run 2>&1)
+  PATH="$FR/bin:$PATH" SSH_CONFIG="$FR/ssh_config" SETTINGS="$FR/settings.json" \
+  HOSTS_FILE="$FR/hosts" LIB_DIR="$FR/lib" timeout 120 "$W" --dry-run 2>&1)
 fresh_rc=$?
 
 [ "$fresh_rc" = 0 ] \
@@ -448,7 +469,7 @@ retry_run() { # retry_run <how many probes fail> <answers>
 }
 
 # One refusal, then the person turns Remote Login on and says yes.
-r=$(retry_run 1 'y\nmac-probe\n10.9.9.9\ny\n\nn\nmac-probe\nn\n')
+r=$(retry_run 1 'n\ny\nmac-probe\n10.9.9.9\ny\n\nn\nmac-probe\nn\n')
 printf '%s' "$r" | grep -q "Try again?" \
   && ok "retry: a failed probe offers the way back" \
   || no "retry: a failed probe offers the way back" "$(printf '%s' "$r" | tail -6)"
@@ -465,7 +486,7 @@ printf '%s' "$r" | grep -q "answers and the key works" \
 
 # Nothing is written before the probe passes, so declining both has to leave the
 # file exactly as it was — the whole argument for probing first.
-r=$(retry_run 99 'y\nmac-probe\n10.9.9.9\nn\nn\n')
+r=$(retry_run 99 'n\ny\nmac-probe\n10.9.9.9\nn\nn\n')
 if grep -q "^Host mac-probe$" "$PRB/ssh_config"; then
   no "retry: declining both writes nothing" "the block was written anyway"
 else
@@ -477,7 +498,7 @@ printf '%s' "$r" | grep -q "Nothing has been written yet" \
         "$(printf '%s' "$r" | tail -6)"
 
 # The unverified write is still reachable, and still says what it is.
-r=$(retry_run 99 'y\nmac-probe\n10.9.9.9\nn\ny\n\nn\nmac-probe\nn\n')
+r=$(retry_run 99 'n\ny\nmac-probe\n10.9.9.9\nn\ny\n\nn\nmac-probe\nn\n')
 printf '%s' "$r" | grep -q "unverified" \
   && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
   && ok "retry: the unverified write is still offered, and named as unverified" \
@@ -490,6 +511,7 @@ printf '%s' "$r" | grep -q "unverified" \
 # one pass. sudo is stubbed on PATH rather than invoked, so /etc/hosts here is a
 # file in $TMP and the real one is never touched.
 RW="$TMP/realwrite"; mkdir -p "$RW/lib" "$RW/bin"
+ssh_stub "$RW/bin"
 printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
   "$TMP/fake-key" > "$RW/ssh_config"
 : > "$TMP/fake-key"
@@ -500,7 +522,7 @@ date +%F > "$RW/lib/phase-a-done"
 rw_run() { # rw_run <sudo-exit> -> output; answers are fixed
   printf '#!/bin/sh\nexit %s\n' "$1" > "$RW/bin/sudo"
   chmod +x "$RW/bin/sudo"
-  printf 'y\nmac-test\n192.168.99.50\nn\ny\ny\nn\ny\ny\ny\n' | \
+  printf 'n\ny\nmac-test\n192.168.99.50\nn\ny\ny\nn\ny\ny\ny\n' | \
     PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
     HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1
 }
@@ -562,7 +584,7 @@ printf '%s' "$rw_ok" | grep -qE 'ok    written$' \
 printf '{}\n' > "$RW/settings.json"
 printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
   "$TMP/fake-key" > "$RW/ssh_config"
-rw_noname=$(printf 'y\nmac-test\n192.168.99.50\nn\ny\nn\nn\nn\nn\n' | \
+rw_noname=$(printf 'n\ny\nmac-test\n192.168.99.50\nn\ny\nn\nn\nn\nn\n' | \
   PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
   HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1)
 printf '%s' "$rw_noname" | grep -q "cannot be written" \
@@ -575,6 +597,7 @@ printf '%s' "$rw_noname" | grep -q "cannot be written" \
 # beside itself, and the address it replaces must leave allowedDomains rather
 # than accumulating there.
 UP="$TMP/update"; mkdir -p "$UP/lib" "$UP/bin"
+ssh_stub "$UP/bin"
 printf '#!/bin/sh\nexit 1\n' > "$UP/bin/sudo"; chmod +x "$UP/bin/sudo"
 : > "$UP/key"
 printf 'Host mac-test\n\tHostname 192.168.99.50\n\tUser testuser\n\tIdentityFile %s\n' \
@@ -582,7 +605,7 @@ printf 'Host mac-test\n\tHostname 192.168.99.50\n\tUser testuser\n\tIdentityFile
 printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local","192.168.99.50"]}}}\n' > "$UP/settings.json"
 printf '127.0.0.1 localhost\n' > "$UP/hosts"
 date +%F > "$UP/lib/phase-a-done"
-printf 'y\nmac-test\n192.168.99.77\nn\ny\ny\nn\ny\nn\n' | \
+printf 'n\ny\nmac-test\n192.168.99.77\nn\ny\ny\nn\ny\nn\n' | \
   PATH="$UP/bin:$PATH" SSH_CONFIG="$UP/ssh_config" SETTINGS="$UP/settings.json" \
   HOSTS_FILE="$UP/hosts" LIB_DIR="$UP/lib" timeout 120 "$W" >/dev/null 2>&1
 
@@ -602,11 +625,114 @@ case " $up_dom " in
   *) no "re-run: the address it replaced leaves allowedDomains" "new address missing: $up_dom" ;;
 esac
 
+# --- phase A as an editor ----------------------------------------------------
+# What phase A records goes stale. The Mac's account was renamed on 18 Sep and
+# the wizard had no way to say so: the username is read back out of a Host
+# block's User line, was never printed, and could only be corrected by editing
+# every block by hand. Three blocks here, because one Mac has one account name
+# and a change that reaches only the block being added is the same two-of-three
+# this whole item is about.
+ED="$TMP/edit"; mkdir -p "$ED/lib" "$ED/bin"
+ssh_stub "$ED/bin"
+printf '#!/bin/sh\nexit 1\n' > "$ED/bin/sudo"; chmod +x "$ED/bin/sudo"
+: > "$ED/key"; : > "$ED/key2"
+ed_reset() {
+  { printf 'Host mac-a\n\tHostname 10.0.0.1\n\tUser olduser\n\tIdentityFile %s\n\n' "$ED/key"
+    printf 'Host mac-b\n\tHostname 10.0.0.2\n\tUser olduser\n\tIdentityFile %s\n\n' "$ED/key"
+    printf 'Host unrelated\n\tHostname 10.9.9.9\n\tUser someoneelse\n'
+  } > "$ED/ssh_config"
+  printf '{"sandbox":{"network":{"allowedDomains":["old-mac.local","10.0.0.1"]}}}\n' > "$ED/settings.json"
+  printf '127.0.0.1 localhost\n' > "$ED/hosts"
+  date +%F > "$ED/lib/phase-a-done"
+  rm -f "$ED"/*.bak-*
+}
+ed_wiz() { # ed_wiz <answers> [args...]
+  local answers="$1"; shift
+  printf '%b' "$answers" | PATH="$ED/bin:$PATH" SSH_CONFIG="$ED/ssh_config" \
+    SETTINGS="$ED/settings.json" HOSTS_FILE="$ED/hosts" LIB_DIR="$ED/lib" \
+    timeout 120 "$W" "$@" 2>&1
+}
+
+ed_reset
+e=$(ed_wiz 'n\nn\n')
+printf '%s' "$e" | grep -q "olduser" \
+  && printf '%s' "$e" | grep -q "old-mac.local" \
+  && printf '%s' "$e" | grep -qE "from Host mac-a" \
+  && ok "edit: a re-run shows the username, the name and where each came from" \
+  || no "edit: a re-run shows the username, the name and where each came from" \
+        "$(printf '%s' "$e" | head -14)"
+
+# Declining is the common case and has to be free.
+ed_reset; cp "$ED/ssh_config" "$ED/ssh_config.before"
+ed_wiz 'n\nn\n' >/dev/null
+cmp -s "$ED/ssh_config" "$ED/ssh_config.before" \
+  && ok "edit: declining changes nothing" \
+  || no "edit: declining changes nothing" "$(diff "$ED/ssh_config.before" "$ED/ssh_config" | head -4)"
+
+# The change that started this. One Mac, one account name, every block.
+ed_reset
+ed_wiz 'y\nnewuser\n\n\nn\n' --edit >/dev/null
+[ "$(grep -c '	User newuser$' "$ED/ssh_config")" = 2 ] \
+  && ok "edit: a new username lands in every block that names the key" \
+  || no "edit: a new username lands in every block that names the key" \
+        "$(grep -n User "$ED/ssh_config" | tr '\n' '/')"
+
+grep -q "User someoneelse" "$ED/ssh_config" \
+  && ok "edit: a block with no key of ours is left alone" \
+  || no "edit: a block with no key of ours is left alone" "the unrelated block was rewritten"
+
+grep -qE '^\s*Hostname 10\.0\.0\.1$' "$ED/ssh_config" \
+  && grep -qE '^\s*Hostname 10\.0\.0\.2$' "$ED/ssh_config" \
+  && ok "edit: changing the username leaves every address where it was" \
+  || no "edit: changing the username leaves every address where it was" \
+        "$(grep -i hostname "$ED/ssh_config" | tr '\n' '/')"
+
+ls "$ED"/ssh_config.bak-* >/dev/null 2>&1 \
+  && ok "edit: the ssh config is backed up before the username changes" \
+  || no "edit: the ssh config is backed up before the username changes" "no .bak-* beside it"
+
+# The .local name lives in allowedDomains and in /etc/hosts, so changing it has
+# to reach both — and /etc/hosts is written at the end of the run, not here.
+ed_reset
+e=$(ed_wiz 'y\n\nnew-mac.local\n\n\ny\ny\n' --edit)
+ed_dom=$(python3 -c "import json,sys;print(' '.join(json.load(open(sys.argv[1]))['sandbox']['network']['allowedDomains']))" "$ED/settings.json")
+case " $ed_dom " in
+  *" new-mac.local "*) case " $ed_dom " in
+      *" old-mac.local "*) no "edit: a new .local name replaces the old one" "both are there: $ed_dom" ;;
+      *) ok "edit: a new .local name replaces the old one" ;;
+    esac ;;
+  *) no "edit: a new .local name replaces the old one" "not added: $ed_dom" ;;
+esac
+printf '%s' "$e" | grep -q "etc/hosts" \
+  && ok "edit: renaming the Mac rewrites /etc/hosts, which maps that name" \
+  || no "edit: renaming the Mac rewrites /etc/hosts, which maps that name" \
+        "$(printf '%s' "$e" | tail -5)"
+
+# A key the Mac has never been told to trust is not a key, and telling it is
+# phase A's own job — so the marker goes and the next run copies it.
+ed_reset
+ed_wiz "y\n\n\n$ED/key2\nn\n" --edit >/dev/null
+[ -e "$ED/lib/phase-a-done" ] \
+  && no "edit: a new key clears the phase A marker so it gets copied" "the marker is still there" \
+  || ok "edit: a new key clears the phase A marker so it gets copied"
+
+# --status is where someone looks when something is wrong, and the username was
+# the one field it did not print.
+ed_reset
+# Captured, not piped: under pipefail the wizard's own exit status sinks the
+# pipeline whatever the grep found. Same trap as the diagnosis checks above.
+ed_status=$(ed_wiz '' --status) || true
+printf '%s' "$ed_status" | grep -q "as olduser" \
+  && ok "edit: --status prints the account it would connect as" \
+  || no "edit: --status prints the account it would connect as" \
+        "$(printf '%s' "$ed_status" | tail -4)"
+
 # --- the remove path, the anti-wizard ----------------------------------------
 # Adding writes three things that must agree, so removing has to unwrite the
 # same three. A round trip is the test that matters: add a network, take it out,
 # and every file is back where it started.
 RM="$TMP/remove"; mkdir -p "$RM/lib" "$RM/bin"
+ssh_stub "$RM/bin"
 printf '#!/bin/sh\ncase "$1" in -p) shift;; esac\nexec "$@"\n' > "$RM/bin/sudo"
 chmod +x "$RM/bin/sudo"
 : > "$RM/key"
@@ -634,7 +760,7 @@ orig_domains=$(rm_domains)
 # The `n` is "Try again?" — see the note on the write-path stream above. The
 # add half of the round trip is a scripted run like any other and gained the
 # same answer.
-rm_wiz 'y\nmac-gone\n10.0.0.99\nn\ny\ny\nn\ny\ny\ny\n' >/dev/null
+rm_wiz 'n\ny\nmac-gone\n10.0.0.99\nn\ny\ny\nn\ny\ny\ny\n' >/dev/null
 rm_wiz 'y\ny\n\ny\ny\n' --remove mac-gone >/dev/null
 
 diff -q "$RM/ssh_config.orig" "$RM/ssh_config" >/dev/null \
