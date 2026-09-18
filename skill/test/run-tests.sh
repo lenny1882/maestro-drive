@@ -46,6 +46,13 @@ echo "sanity"
 for f in "$REPO"/bin/*.sh "$REPO"/hooks/*.sh; do
   bash -n "$f" && ok "$(basename "$f") parses" || no "$(basename "$f") parses" "syntax error"
 done
+# The runner modules are POSIX sh, and the template's stubs are the shape every
+# new module starts from — a syntax error in one is a module nobody can copy.
+for f in "$REPO"/runners/*/*.sh; do
+  [ -r "$f" ] || continue
+  n="runners/$(basename "$(dirname "$f")")/$(basename "$f")"
+  sh -n "$f" && ok "$n parses" || no "$n parses" "syntax error"
+done
 python3 -c "import py_compile,sys; py_compile.compile('$REPO/bin/resolve.py', doraise=True)" \
   && ok "resolve.py compiles" || no "resolve.py compiles" "syntax error"
 for f in ipad-landscape-keyboard-up ipad-landscape-system-alert iphone-portrait-keyboard-up; do
@@ -1801,6 +1808,150 @@ out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/remote/build.sh" \
   && ok "the device build refuses when no profile covers the app (never touches the account)" \
   || no "the device build refuses when no profile covers the app (never touches the account)" "rc=$rc: $out"
 
+echo
+echo "build and install are separable (item 87)"
+# The framework's job ends at an artefact; installing it is the platform's. The
+# split is what lets a Flutter build reach an Android emulator, and the proof
+# that it is a real split is that --build-only produces the path and runs no
+# install command at all.
+SMSTUB="$TMP/smstub"; mkdir -p "$SMSTUB"
+cat > "$SMSTUB/xcrun" <<XR
+#!/bin/sh
+echo "XCRUN \$*" >> "$TMP/xcrun.calls"
+exit 0
+XR
+chmod +x "$SMSTUB/xcrun"
+SMREPO="$TMP/smrepo"; mkrepo "$SMREPO" uat
+pbx "$SMREPO" Debug-uat com.example.app.uat
+mkdir -p "$SMREPO/build/ios/iphonesimulator/Runner.app"
+
+: > "$TMP/xcrun.calls"
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/remote/build.sh" --repo "$SMREPO" \
+        --app-id com.example.app.uat --flavor uat --build-only --install SIMUDID 2>&1); rc=$?
+case "$out" in
+  *"artifact   "*"iphonesimulator/Runner.app"*) ok "--build-only names the artefact it produced" ;;
+  *) no "--build-only names the artefact it produced" "rc=$rc: $out" ;;
+esac
+grep -q 'simctl install' "$TMP/xcrun.calls" 2>/dev/null \
+  && no "--build-only installs nothing, even when a device was named" "it ran simctl install" \
+  || ok "--build-only installs nothing, even when a device was named"
+
+# Without it, the old behaviour is untouched: build, then install, then confirm.
+: > "$TMP/xcrun.calls"
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/remote/build.sh" --repo "$SMREPO" \
+        --app-id com.example.app.uat --flavor uat --install SIMUDID 2>&1); rc=$?
+case "$out" in
+  *"artifact   "*"installed  SIMUDID"*) ok "a full run still installs, and names the artefact as well" ;;
+  *) no "a full run still installs, and names the artefact as well" "rc=$rc: $out" ;;
+esac
+grep -q 'simctl install SIMUDID' "$TMP/xcrun.calls" 2>/dev/null \
+  && ok "the install went to the device that was named" \
+  || no "the install went to the device that was named" "calls: $(cat "$TMP/xcrun.calls" 2>/dev/null)"
+
+# The physical-device path is the one where the two were genuinely welded
+# together, inside the script handed to the GUI session. --build-only must stop
+# the devicectl half without stopping the codesigning build.
+out=$(INSTALL_BUNDLE=com.example.app.uat DVB --build-only); rc=$?
+case "$out" in
+  *"artifact   "*"iphoneos/Runner.app"*)
+    case "$out" in
+      *"installed  DEVUDID"*) no "--build-only skips devicectl on the device path" "it installed anyway" ;;
+      *) ok "--build-only skips devicectl on the device path" ;;
+    esac ;;
+  *) no "--build-only skips devicectl on the device path" "rc=$rc: $out" ;;
+esac
+
+
+echo
+echo "the runner modules the split calls out to (item 87)"
+# bin/build.sh needs SSH and cannot be tested here, but everything it now
+# delegates to is pure logic and can be. These are the verbs it depends on.
+RS="$REPO/runners"
+
+# platform.sh claim replaces the UUID-shape test that used to sit inside
+# bin/build.sh. A physical iPhone reaching the simulator path builds for the
+# wrong target and installs nothing, silently, which is what it is there to stop.
+sh "$RS/ios/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA \
+  && ok "ios claims a simulator UDID" || no "ios claims a simulator UDID" "it refused"
+sh "$RS/ios/platform.sh" claim 00008020-0011223344556677 2>/dev/null \
+  && no "ios refuses a physical device's udid" "it claimed the phone" \
+  || ok "ios refuses a physical device's udid"
+sh "$RS/android/platform.sh" claim emulator-5554 \
+  && ok "android claims an emulator serial" || no "android claims an emulator serial" "it refused"
+sh "$RS/android/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA 2>/dev/null \
+  && no "android refuses a simulator UDID" "it claimed it" \
+  || ok "android refuses a simulator UDID"
+
+# devices --booted is what --all now reads. Tab separated, one per line, so the
+# caller's `IFS=$'\t' read` takes the id and leaves the name alone however many
+# spaces are in it.
+SIMSTUB="$TMP/simstub"; mkdir -p "$SIMSTUB"
+cat > "$SIMSTUB/xcrun" <<'XR'
+#!/bin/sh
+cat <<'OUT'
+== Devices ==
+-- iOS 18.6 --
+    iPhone 16 Pro (6EA2EBFE-7483-4422-9E51-A345A74DADEA) (Booted)
+    iPad Pro 11-inch (7C0331AA-1111-2222-3333-444455550331) (Booted)
+OUT
+XR
+chmod +x "$SIMSTUB/xcrun"
+out=$(PATH="$SIMSTUB:$PATH" sh "$RS/ios/platform.sh" devices --booted)
+[ "$(printf '%s\n' "$out" | grep -c .)" = 2 ] \
+  && ok "devices --booted lists every booted simulator" \
+  || no "devices --booted lists every booted simulator" "got: $out"
+# A here-string, not a pipe: `read` in a pipeline runs in a subshell and the
+# variables never reach here — which is the same trap bin/build.sh's --all loop
+# avoids with process substitution.
+IFS=$'\t' read -r _u _st _nm <<< "$(printf '%s\n' "$out" | head -1)"
+case "$_u:$_nm" in
+  "6EA2EBFE-7483-4422-9E51-A345A74DADEA:iPhone 16 Pro")
+    ok "devices --booted separates the id from a name with spaces in it" ;;
+  *) no "devices --booted separates the id from a name with spaces in it" "got '$_u' / '$_nm'" ;;
+esac
+
+# framework.sh build maps the contract's arguments onto remote/build.sh, and it
+# must always pass --build-only: the whole point of the split is that the
+# framework stops at an artefact.
+FWSTUB="$TMP/fwstub"; mkdir -p "$FWSTUB"
+printf '#!/bin/sh\necho "ARGS $*"\n' > "$FWSTUB/build.sh"; chmod +x "$FWSTUB/build.sh"
+FB(){ RDIR="$FWSTUB" sh "$RS/flutter/framework.sh" build /some/repo "$@" 2>&1; }
+
+out=$(FB --platform ios --variant uat --app-id com.example.app.uat)
+case "$out" in
+  *--build-only*--flavor\ uat*) ok "build passes --build-only and maps --variant to --flavor" ;;
+  *) no "build passes --build-only and maps --variant to --flavor" "got: $out" ;;
+esac
+case "$out" in
+  *--install*) no "build never asks remote/build.sh to install" "it passed --install" ;;
+  *) ok "build never asks remote/build.sh to install" ;;
+esac
+
+out=$(FB --platform ios --mode release)
+case "$out" in
+  *--release*) ok "build maps --mode release" ;;
+  *) no "build maps --mode release" "got: $out" ;;
+esac
+
+# $DEV does not cross an SSH boundary, so a device build that was not told which
+# device must refuse rather than build for an empty udid.
+out=$(FB --platform ios-device); rc=$?
+{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'needs --device'; } \
+  && ok "a device build with no --device refuses rather than guessing" \
+  || no "a device build with no --device refuses rather than guessing" "rc=$rc: $out"
+
+out=$(FB --platform ios-device --device DEVUDID)
+case "$out" in
+  *--device\ DEVUDID*) ok "a device build passes the udid it was given" ;;
+  *) no "a device build passes the udid it was given" "got: $out" ;;
+esac
+
+# Flutter-on-Android is the combination the seam exists for, and remote/build.sh
+# has no android path. Exit 2 says "not this runner's job yet", not "failed".
+out=$(FB --platform android 2>&1); rc=$?
+{ [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no android path'; } \
+  && ok "an android build exits 2 saying why, rather than failing obscurely" \
+  || no "an android build exits 2 saying why, rather than failing obscurely" "rc=$rc: $out"
 
 echo
 echo "build residue in the checkout, told apart from real changes"
