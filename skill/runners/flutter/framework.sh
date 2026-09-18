@@ -1,0 +1,192 @@
+#!/bin/sh
+# Flutter framework runner — the WORKED EXAMPLE for runners/README.md.
+#
+# Nothing calls this yet. It exists to prove the contract fits the code that is
+# already here, and it does that by delegating: every verb below either runs one
+# of the scripts that holds the Flutter logic today, or names the exact lines
+# that do. No Flutter logic has been moved out of `remote/build.sh`,
+# `remote/vmservice.sh`, `bin/net.sh`, `bin/publish.sh`, `bin/prefs.sh`,
+# `bin/preflight.sh` or `remote/gitstate.sh` — they are all unchanged and all
+# still in use.
+#
+# Where the Mac-side scripts live. `bin/install.sh` pushes them to $RDIR, so a
+# verb running on the Mac finds them beside itself; $RDIR is passed in rather
+# than assumed, because the caller already knows it.
+set -u
+
+VERB=${1:-}; [ $# -gt 0 ] && shift
+: "${RDIR:=/tmp/maestro-mac}"
+
+case "$VERB" in
+
+claim)
+  _repo=${1:?claim <repo>}
+  # A Flutter app, not merely a Dart package: pubspec.yaml alone is also a pure
+  # Dart library, which builds with `dart` and has no ios/ or android/ at all.
+  if [ -r "$_repo/pubspec.yaml" ] && grep -q '^[[:space:]]*flutter:' "$_repo/pubspec.yaml"; then
+    echo "pubspec.yaml declares a flutter dependency"
+    exit 0
+  fi
+  exit 1
+  ;;
+
+describe)
+  # remote/build.sh --detect, unchanged. It reports the fvm-pinned SDK, the
+  # CocoaPods GEM_HOME, the flavour derived from the app id, the entrypoint and
+  # the last build, and writes nothing.
+  _repo=${1:?describe <repo>}; _appid=${2:-}
+  sh "$RDIR/build.sh" --repo "$_repo" ${_appid:+--app-id "$_appid"} --detect
+  ;;
+
+variants)
+  # `_flavours` in remote/build.sh: a flavour is real only when BOTH halves
+  # exist, an ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart.
+  # remote/build.sh does not expose it on its own yet, so this reproduces the
+  # pair test rather than shelling into it. Wiring call site 3 makes
+  # remote/build.sh print it and deletes this.
+  _repo=${1:?variants <repo>}
+  for _s in "$_repo"/ios/*.xcodeproj/xcshareddata/xcschemes/*.xcscheme; do
+    [ -r "$_s" ] || continue
+    _f=$(basename "$_s" .xcscheme)
+    case $_f in Runner|*\ *) continue ;; esac
+    [ -r "$_repo/lib/main_$_f.dart" ] && echo "$_f"
+  done
+  exit 0
+  ;;
+
+variant-for-appid)
+  # `_flavour_for_appid` in remote/build.sh. The bundle id is the evidence:
+  # Xcode names each configuration <Debug|Release|Profile>-<flavour> and each
+  # carries its own PRODUCT_BUNDLE_IDENTIFIER. Same note as `variants`.
+  _repo=${1:?variant-for-appid <repo> <app-id>}; _appid=${2:?app-id}
+  for _p in "$_repo"/ios/*.xcodeproj/project.pbxproj; do
+    [ -r "$_p" ] || continue
+    awk -v want="$_appid" '
+      /PRODUCT_BUNDLE_IDENTIFIER = /  { b=$3; sub(/;$/,"",b) }
+      /^[ \t]*name = /                { n=$3; gsub(/[";]/,"",n)
+                                        if (b == want && n ~ /-/) print n
+                                        b="" }
+    ' "$_p"
+  done | sed 's/^[^-]*-//' | sort -u
+  exit 0
+  ;;
+
+build)
+  # remote/build.sh --build-only: it builds and stops, printing `artifact <path>`
+  # as a line of its own. Installing that artefact is platform.sh install.
+  _repo=${1:?build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]}; shift
+  _plat=ios; _mode=debug; _variant=; _target=; _dev=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --platform) _plat=$2; shift 2 ;;
+      --mode)     _mode=$2; shift 2 ;;
+      --variant)  _variant=$2; shift 2 ;;
+      --target)   _target=$2; shift 2 ;;
+      --app-id)   _appid=$2; shift 2 ;;
+      --device)   _dev=$2; shift 2 ;;
+      *) echo "runners/flutter build: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+
+  # The platform decides HOW the build runs, not just what it produces. A
+  # physical iPhone needs a profile build in the Mac's GUI session, because
+  # codesign fails in an SSH one — hence --device rather than --install. The
+  # udid is passed rather than read from $DEV: this runs on the far side of an
+  # SSH call and the sandbox's environment does not cross it.
+  case "$_plat" in
+    ios)        set -- --repo "$_repo" --build-only ;;
+    ios-device)
+      [ -n "$_dev" ] || { echo "runners/flutter build: --platform ios-device needs --device <udid>" >&2; exit 2; }
+      set -- --repo "$_repo" --build-only --device "$_dev" ;;
+    android|android-device)
+      echo "runners/flutter build: Flutter-on-Android is the combination this seam" >&2
+      echo "  exists for, and remote/build.sh has no android path — it runs" >&2
+      echo "  'flutter build ios' only. See runners/README.md." >&2
+      exit 2 ;;
+    *) echo "runners/flutter build: unknown platform '$_plat'" >&2; exit 2 ;;
+  esac
+  [ "$_mode" = release ] && set -- "$@" --release
+  [ -n "${_appid:-}" ] && set -- "$@" --app-id "$_appid"
+  [ -n "$_variant" ] && set -- "$@" --flavor "$_variant"
+  [ -n "$_target" ] && set -- "$@" --target "$_target"
+  sh "$RDIR/build.sh" "$@"
+  ;;
+
+residue)
+  # The same five patterns as `_gs_residue` in remote/gitstate.sh, which is
+  # still the live copy. Wiring call site 1 leaves only one of the two.
+  cat <<'GLOBS'
+pubspec.lock
+*/pubspec.lock
+Podfile.lock
+*/Podfile.lock
+*/Flutter/Generated.xcconfig
+*/Flutter/flutter_export_environment.sh
+.flutter-plugins
+.flutter-plugins-dependencies
+GLOBS
+  exit 0
+  ;;
+
+devsession)
+  # `pgrep -fl flutter_tools`, as bin/preflight.sh runs it. pgrep's status is
+  # lost through a pipe, so the output is tested rather than $?.
+  _f=$(pgrep -fl flutter_tools 2>/dev/null | head -2)
+  if [ -n "$_f" ]; then printf '%s\n' "$_f"; exit 0; fi
+  echo 'none — nothing started the app with flutter run, so there is no Dart VM'
+  echo '       Service: bin/net.sh and bin/publish.sh will come back empty.'
+  echo '       Driving still works. Ask the user before starting one.'
+  exit 1
+  ;;
+
+inspect)
+  # remote/vmservice.sh, unchanged: the flutter run logs first because a file
+  # survives however long the build took, then the last VM_LOG_WINDOW of the
+  # simulator log. It caches, re-validates, and keeps the two failures apart.
+  _dev=${1:?inspect <device> <cache>}; _cache=${2:?cache}
+  bash "$RDIR/vmservice.sh" "$_dev" "$_cache"
+  ;;
+
+traffic-arm)
+  # dart:io HTTP profiling is OFF by default and lives on the isolate, so it has
+  # to be re-armed after anything that replaces the isolate. bin/publish.sh
+  # holds the live copy of this (_profiling / _profiling_on).
+  _base=${1:?traffic-arm <base> <session>}; _iso=${2:?session}
+  _r=$(curl -s -x "${grpc_proxy:-}" --max-time 8 \
+        "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso" 2>/dev/null)
+  case "$_r" in
+    *'"enabled":true'*) echo on; exit 0 ;;
+    *'"enabled":false'*)
+      curl -s -x "${grpc_proxy:-}" --max-time 8 \
+        "$_base/ext.dart.io.httpEnableTimelineLogging?isolateId=$_iso&enabled=true" >/dev/null 2>&1
+      echo on; exit 0 ;;
+    *) echo unknown; exit 1 ;;
+  esac
+  ;;
+
+traffic-list)
+  _base=${1:?traffic-list <base> <session>}; _iso=${2:?session}
+  _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net.json
+  curl -s -x "${grpc_proxy:-}" "$_base/ext.dart.io.getHttpProfile?isolateId=$_iso" > "$_out" || exit 1
+  python3 "$RDIR/net.py" list "$_out"
+  ;;
+
+traffic-one)
+  _base=${1:?traffic-one <base> <session> <id>}; _iso=${2:?session}; _id=${3:?id}
+  _out=${LDIR:-${TMPDIR:-/tmp}}/runner-net1.json
+  curl -s -x "${grpc_proxy:-}" "$_base/ext.dart.io.getHttpProfileRequest?isolateId=$_iso&id=$_id" > "$_out" || exit 1
+  python3 "$RDIR/net.py" one "$_out"
+  ;;
+
+prefs-prefix)
+  # shared_preferences writes every key as flutter.<key> into NSUserDefaults,
+  # which is why bin/prefs.sh defaults its filter to exactly this.
+  echo flutter
+  exit 0
+  ;;
+
+*)
+  echo "runners/flutter: unknown verb '${VERB:-(none)}'" >&2
+  exit 2
+  ;;
+esac
