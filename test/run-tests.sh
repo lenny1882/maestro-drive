@@ -333,12 +333,12 @@ DIAG="$TMP/diag"; mkdir -p "$DIAG"
 diag() { # diag <ssh stderr> -> output; exit status is "the address is suspect"
   ( say() { printf '%s\n' "$*"; }; warn() { printf '%s\n' "$*"; }; ok() { :; }
     MARKER=/dev/null
-    eval "$(sed -n '/^probe_diagnosis() {/,/^}/p' "$W")"
-    probe_diagnosis "$1" 10.9.9.9 )
+    eval "$(sed -n '/^remote_login_help() {/,/^}/p;/^probe_diagnosis() {/,/^}/p' "$W")"
+    probe_diagnosis "$1" 10.9.9.9 macuser )
 }
 
 refused="ssh: connect to host 10.9.9.9 port 22: Connection refused"
-d=$(diag "$refused")
+d=$(diag "$refused") || true
 printf '%s' "$d" | grep -q "Remote Login" \
   && printf '%s' "$d" | grep -q "System Settings" \
   && printf '%s' "$d" | grep -q "setremotelogin" \
@@ -354,7 +354,7 @@ else
 fi
 
 timedout="ssh: connect to host 10.9.9.9 port 22: Connection timed out"
-d=$(diag "$timedout")
+d=$(diag "$timedout") || true
 printf '%s' "$d" | grep -q "ipconfig getifaddr" \
   && ok "a timed-out probe says how to read the address off the Mac" \
   || no "a timed-out probe says how to read the address off the Mac" "$d"
@@ -364,17 +364,59 @@ else
   no "a timed-out probe does cast doubt on the address" "it did not"
 fi
 
-d=$(diag "ssh: connect to host 10.9.9.9 port 22: Network is unreachable")
+d=$(diag "ssh: connect to host 10.9.9.9 port 22: Network is unreachable") || true
 printf '%s' "$d" | grep -q "no route" \
   && ok "an unreachable probe is a route, not a Mac that is switched off" \
   || no "an unreachable probe is a route, not a Mac that is switched off" "$d"
 
 # Never a confident wrong answer. An error this does not recognise has to say so
 # rather than pick the nearest arm.
-d=$(diag "ssh: something nobody has seen before")
+d=$(diag "ssh: something nobody has seen before") || true
 printf '%s' "$d" | grep -q "did not say why" \
   && ok "an unrecognised error says it is unrecognised" \
   || no "an unrecognised error says it is unrecognised" "$d"
+
+# The one this hit in the field, 18 Sep. Something is listening on 22 and hangs
+# up mid-handshake, which on a Mac is Remote Login on but not for this account:
+# an account outside com.apple.access_ssh is dropped during the banner exchange
+# rather than told no, so it never arrives as Permission denied. It fell through
+# to the catch-all, which named the causes and gave no instructions at all.
+kex="kex_exchange_identification: Connection closed by remote host"
+d=$(diag "$kex") || true
+printf '%s' "$d" | grep -q "Remote Login" \
+  && printf '%s' "$d" | grep -q "access_ssh" \
+  && ok "a connection closed mid-handshake names Remote Login and the allow list" \
+  || no "a connection closed mid-handshake names Remote Login and the allow list" "$d"
+
+# Something answered on 22, so the address and the network are both proven.
+if diag "$kex" >/dev/null; then
+  no "a connection closed mid-handshake does not cast doubt on the address" "it did"
+else
+  ok "a connection closed mid-handshake does not cast doubt on the address"
+fi
+
+# Unrecognised must not mean silent. Remote Login is the cheapest thing to check
+# and the one a person cannot guess, so an error this cannot place still says
+# how to rule it out — it just does not claim that is the answer.
+d=$(diag "ssh: something nobody has seen before") || true
+printf '%s' "$d" | grep -q "setremotelogin" \
+  && printf '%s' "$d" | grep -q "did not say why" \
+  && ok "an unrecognised error still says how to rule Remote Login out" \
+  || no "an unrecognised error still says how to rule Remote Login out" "$d"
+
+# Every arm that could be Remote Login offers the same words, from one place.
+# Captured, never piped: probe_diagnosis exits 1 to mean "the address is not the
+# problem", and under pipefail that sinks the whole pipeline however well the
+# grep matched — which is what this check first reported as a missing arm.
+missing=""
+for e in "Connection refused" "$kex" "something nobody has seen before"; do
+  d=$(diag "$e") || true
+  printf '%s' "$d" | grep -q "System Settings -> General -> Sharing -> Remote Login" \
+    || missing="$missing $e"
+done
+[ -z "$missing" ] \
+  && ok "every arm that could be Remote Login says how to turn it on" \
+  || no "every arm that could be Remote Login says how to turn it on" "missed:$missing"
 
 # --- and offers the way back --------------------------------------------------
 # The fix happens on the Mac while the wizard waits, so the retry is the whole
