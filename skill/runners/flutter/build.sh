@@ -2,6 +2,10 @@
 # Runs ON THE MAC. Discovers how this Flutter project is built, and optionally
 # builds it for the simulator and installs it.
 #
+# This is the flutter framework runner's own file — framework.sh beside it is
+# the only thing that should call it. It lived in remote/ until 18 Sep, which is
+# where it was before the seam existed (BACKLOG item 87, 5.4).
+#
 #   build.sh --repo <dir> --detect
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] [--target <file>]
 #            [--install <udid>] [--release] [--build-only]
@@ -33,11 +37,18 @@
 # testable from Linux without a Mac.
 set -u
 
-REPO=; DETECT=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0
+REPO=; DETECT=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0; LIST=
 while [ $# -gt 0 ]; do
   case $1 in
     --repo)    REPO=$2; shift 2 ;;
     --detect)  DETECT=1; shift ;;
+    # Report-only modes, so framework.sh's `variants` and `variant-for-appid`
+    # ask this file rather than reproducing the rule. Two copies of "what counts
+    # as a flavour" is one copy too many: the pair test below is subtle, and a
+    # second implementation drifting from it would refuse the right build or
+    # accept the wrong one.
+    --list-variants)  LIST=variants; shift ;;
+    --variant-for)    LIST=forappid; shift ;;
     --build-only) BUILDONLY=1; shift ;;
     --flavor)  FLAVOR=$2; shift 2 ;;
     --target)  TARGET=$2; shift 2 ;;
@@ -152,6 +163,13 @@ _has_profile() {
   done
   return 1
 }
+
+# --- report-only modes, before anything that needs an SDK --------------------
+# These read the repo and print. No flutter, no cocoapods, no build.
+case "$LIST" in
+  variants) _flavours; exit 0 ;;
+  forappid) _flavour_for_appid; exit 0 ;;
+esac
 
 # --- report -----------------------------------------------------------------
 FL=$(_flutter) || { echo "build: no Flutter SDK found." >&2

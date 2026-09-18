@@ -67,8 +67,8 @@ echo; echo '== dev session =='
 # for. An exit 2 — a framework with no dev session at all — is an answer, not a
 # failure, so the status is not allowed to stop the rest of the report.
 RDIR='$RDIR' sh '$FW' devsession 2>&1 || true
-echo; echo '== vm service =='
-bash '$RDIR/vmservice.sh' '$d' '$RDIR/vmservice' 2>&1 | tail -1
+echo; echo '== debug endpoint =='
+RDIR='$RDIR' sh '$FW' inspect '$d' '$RDIR/vmservice' 2>&1 | tail -1
 "
 # The project's executable prior work, counted locally — journeys and flows live
 # here, not on the Mac. Put in front of the one call everybody makes so a covered

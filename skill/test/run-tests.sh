@@ -1582,7 +1582,7 @@ pbx(){ # pbx <dir> <config> <bundle id>
   printf '\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = %s;\n\t\t\tname = "%s";\n' \
     "$3" "$2" >> "$1/ios/Runner.xcodeproj/project.pbxproj"
 }
-B="sh $REPO/remote/build.sh"
+B="sh $REPO/runners/flutter/build.sh"
 RP="$TMP/repo"; mkrepo "$RP" dev uat prod
 pbx "$RP" Debug           com.example.app.dev      # the unflavoured default
 pbx "$RP" Debug-dev       com.example.app.dev
@@ -1665,7 +1665,7 @@ RP4="$TMP/repo4"; mkdir -p "$RP4/lib" "$TMP/minbin"
 # A PATH with a shell on it and nothing else: this machine has a flutter on its
 # own PATH, and the point is a Mac that has none.
 ln -sf "$(command -v sh)" "$TMP/minbin/sh"
-out=$(PATH="$TMP/minbin" HOME="$TMP/nohome" "$TMP/minbin/sh" "$REPO/remote/build.sh" \
+out=$(PATH="$TMP/minbin" HOME="$TMP/nohome" "$TMP/minbin/sh" "$REPO/runners/flutter/build.sh" \
         --repo "$RP4" --detect 2>&1); rc=$?
 [ "$rc" != 0 ] && case "$out" in
   *"fvm install"*) ok "no SDK anywhere says what to do about it" ;;
@@ -1737,7 +1737,7 @@ case "$u" in
 esac
 CURLV
 chmod +x "$TMP/vmstub/curl"
-VMS="bash $REPO/remote/vmservice.sh"
+VMS="bash $REPO/runners/flutter/vmservice.sh"
 
 printf 'A Dart VM Service on iPhone 16 Pro is available at: http://127.0.0.1:55407/R-KhdenhVwM=/\n' > "$TMP/frun-test.log"
 out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/frun-test.log" FRUN_LOG="$TMP/none.log" \
@@ -1794,7 +1794,7 @@ XR
 chmod +x "$DVSTUB/osascript" "$DVSTUB/security" "$DVSTUB/xcrun"
 DPROF="$TMP/dvhome/Library/Developer/Xcode/UserData/Provisioning Profiles"
 mkdir -p "$DPROF"; : > "$DPROF/x.mobileprovision"
-DVB(){ PATH="$DVSTUB:$PATH" HOME="$TMP/dvhome" sh "$REPO/remote/build.sh" \
+DVB(){ PATH="$DVSTUB:$PATH" HOME="$TMP/dvhome" sh "$REPO/runners/flutter/build.sh" \
          --repo "$DVREPO" --app-id com.example.app.uat --flavor uat --device DEVUDID "$@" 2>&1; }
 
 out=$(INSTALL_BUNDLE=com.example.app.uat DVB)
@@ -1812,7 +1812,7 @@ out=$(INSTALL_BUNDLE=com.example.app.dev DVB); rc=$?
   && ok "a build that installs the wrong bundle id is caught, not passed (item 45)" \
   || no "a build that installs the wrong bundle id is caught, not passed (item 45)" "rc=$rc: $out"
 
-out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/remote/build.sh" \
+out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/runners/flutter/build.sh" \
         --repo "$DVREPO" --app-id com.example.app.uat --flavor uat --device DEVUDID 2>&1); rc=$?
 { [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "no local provisioning profile"; } \
   && ok "the device build refuses when no profile covers the app (never touches the account)" \
@@ -1836,7 +1836,7 @@ pbx "$SMREPO" Debug-uat com.example.app.uat
 mkdir -p "$SMREPO/build/ios/iphonesimulator/Runner.app"
 
 : > "$TMP/xcrun.calls"
-out=$(PATH="$SMSTUB:$PATH" sh "$REPO/remote/build.sh" --repo "$SMREPO" \
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/runners/flutter/build.sh" --repo "$SMREPO" \
         --app-id com.example.app.uat --flavor uat --build-only --install SIMUDID 2>&1); rc=$?
 case "$out" in
   *"artifact   "*"iphonesimulator/Runner.app"*) ok "--build-only names the artefact it produced" ;;
@@ -1848,7 +1848,7 @@ grep -q 'simctl install' "$TMP/xcrun.calls" 2>/dev/null \
 
 # Without it, the old behaviour is untouched: build, then install, then confirm.
 : > "$TMP/xcrun.calls"
-out=$(PATH="$SMSTUB:$PATH" sh "$REPO/remote/build.sh" --repo "$SMREPO" \
+out=$(PATH="$SMSTUB:$PATH" sh "$REPO/runners/flutter/build.sh" --repo "$SMREPO" \
         --app-id com.example.app.uat --flavor uat --install SIMUDID 2>&1); rc=$?
 case "$out" in
   *"artifact   "*"installed  SIMUDID"*) ok "a full run still installs, and names the artefact as well" ;;
@@ -1932,9 +1932,30 @@ esac
 # framework.sh build maps the contract's arguments onto remote/build.sh, and it
 # must always pass --build-only: the whole point of the split is that the
 # framework stops at an artefact.
+# The module calls the build script BESIDE ITSELF, not one at $RDIR — they are
+# one runner's files and travel together. So the stub is a copy of the module
+# with a fake build.sh next to it, which also checks the sibling resolution.
 FWSTUB="$TMP/fwstub"; mkdir -p "$FWSTUB"
+cp "$RS/flutter/framework.sh" "$FWSTUB/framework.sh"
 printf '#!/bin/sh\necho "ARGS $*"\n' > "$FWSTUB/build.sh"; chmod +x "$FWSTUB/build.sh"
-FB(){ RDIR="$FWSTUB" sh "$RS/flutter/framework.sh" build /some/repo "$@" 2>&1; }
+FB(){ sh "$FWSTUB/framework.sh" build /some/repo "$@" 2>&1; }
+
+# variants and variant-for-appid ASK build.sh rather than reproducing its rule.
+# Two copies of "what counts as a flavour" is one too many: the pair test is
+# subtle, and a second implementation drifting from it would refuse the right
+# build or accept the wrong one.
+vo=$(sh "$RS/flutter/framework.sh" variants "$RP" | sort | tr '\n' ' ')
+bo=$($B --repo "$RP" --list-variants | sort | tr '\n' ' ')
+{ [ "$vo" = "$bo" ] && [ -n "$vo" ]; } \
+  && ok "variants comes from build.sh, not a second copy of the rule" \
+  || no "variants comes from build.sh, not a second copy of the rule" "module '$vo' / build '$bo'"
+vo=$(sh "$RS/flutter/framework.sh" variant-for-appid "$RP" com.example.app.uat | tr '\n' ' ')
+[ "$vo" = "uat " ] \
+  && ok "variant-for-appid comes from build.sh too" \
+  || no "variant-for-appid comes from build.sh too" "got '$vo'"
+grep -q 'xcshareddata/xcschemes' "$RS/flutter/framework.sh" \
+  && no "the flavour rule has one home" "framework.sh still reproduces it" \
+  || ok "the flavour rule has one home"
 
 out=$(FB --platform ios --variant uat --app-id com.example.app.uat)
 case "$out" in
