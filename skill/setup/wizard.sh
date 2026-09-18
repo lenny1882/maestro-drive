@@ -40,6 +40,19 @@ SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 # another.
 FALLBACK_KEY="$HOME/.ssh/mac_rc"
 
+# The ProxyCommand, written into every Host block below and passed to every
+# probe made BEFORE a block exists. Those probes name a raw address, which has
+# no Host block and so picked up no ProxyCommand: inside a Claude session that
+# address is unroutable and ssh answers "Network is unreachable", which the
+# wizard then reported as Remote Login being off. %% is doubled because ssh
+# expands % in an -o value exactly as it does in the config file. $grpc_proxy
+# is set inside a session and unset in an ordinary terminal, where this is a
+# direct nc — so the same string is correct in both.
+PROXY_CMD=$(cat <<'PROXY'
+sh -c 'if [ -n "$grpc_proxy" ]; then A=$(printf "%%s" "$grpc_proxy" | sed -e "s|^http://||" -e "s|@.*||"); exec socat - PROXY:localhost:%h:%p,proxyport=3128,proxyauth=$A; else exec nc %h %p; fi'
+PROXY
+)
+
 STATUS_ONLY=0; HOSTS_ONLY=0; DRY=0; REMOVE=""
 # A while loop rather than `for a in "$@"`, because --remove takes a value.
 while [ $# -gt 0 ]; do
@@ -272,7 +285,7 @@ phase_a() {
     # Foreground, output not captured, no BatchMode. ssh reads the password from
     # /dev/tty, so the prompt reaches the terminal as long as none of those
     # three is broken.
-    if ! ssh-copy-id -i "$key.pub" "$mac_user@$addr"; then
+    if ! ssh-copy-id -o ProxyCommand="$PROXY_CMD" -i "$key.pub" "$mac_user@$addr"; then
       say ""
       warn "ssh-copy-id failed. Refused on port 22 means Remote Login is off"
       warn "(System Settings -> General -> Sharing). Timed out means the wrong"
@@ -284,7 +297,8 @@ phase_a() {
     say "  Proving key authentication works. This uses BatchMode=yes, which is what"
     say "  every script uses — a password that merely worked would not prove it."
     if ssh -n -i "$key" -o BatchMode=yes -o ConnectTimeout=8 \
-           -o StrictHostKeyChecking=accept-new "$mac_user@$addr" true 2>/dev/null; then
+           -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
+           "$mac_user@$addr" true 2>/dev/null; then
       ok "key authentication works"
     else
       warn "the key was copied but BatchMode authentication still fails."
@@ -394,7 +408,7 @@ Host $1
 	IdentityFile $key_short
 	ConnectTimeout 15
 	ServerAliveInterval 30
-	ProxyCommand sh -c 'if [ -n "\$grpc_proxy" ]; then A=\$(printf "%%s" "\$grpc_proxy" | sed -e "s|^http://||" -e "s|@.*||"); exec socat - PROXY:localhost:%h:%p,proxyport=3128,proxyauth=\$A; else exec nc %h %p; fi'
+	ProxyCommand $PROXY_CMD
 BLOCK
 }
 
@@ -471,11 +485,13 @@ phase_b() {
   say ""
   say "  Checking the Mac answers there before writing anything."
   if ssh -n -i "$MAC_KEY" -o BatchMode=yes -o ConnectTimeout=8 \
-         -o StrictHostKeyChecking=accept-new "$MAC_USER@$addr" true 2>/dev/null; then
+         -o StrictHostKeyChecking=accept-new -o ProxyCommand="$PROXY_CMD" \
+         "$MAC_USER@$addr" true 2>/dev/null; then
     ok "$addr answers and the key works"
   else
     warn "$addr did not answer. Refused means Remote Login is off; timed out means"
-    warn "the wrong address, or the Mac is not on this network."
+    warn "the wrong address, or the Mac is not on this network; unreachable means"
+    warn "this machine has no route there at all."
     confirm "Write the configuration anyway?" n || return 1
   fi
 
@@ -539,7 +555,7 @@ c_target() { # c_target <alias> <addr>
   if [ -n "$(ssh_block_hostname "$1")" ] && ! dry; then
     C_SSH=("$1")
   else
-    C_SSH=(-i "$MAC_KEY" "$MAC_USER@$2")
+    C_SSH=(-i "$MAC_KEY" -o ProxyCommand="$PROXY_CMD" "$MAC_USER@$2")
   fi
 }
 
