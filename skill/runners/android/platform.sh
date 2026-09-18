@@ -111,6 +111,7 @@ data-container)
   ;;
 
 prefs-read)
+  [ "${1:-}" = --raw ] && shift   # the store IS xml here, so --raw is the same
   # DOCUMENTED, NOT MEASURED. SharedPreferences is XML under shared_prefs/, and
   # the default file is <app-id>_preferences.xml — but a Flutter app's
   # shared_preferences plugin writes FlutterSharedPreferences.xml instead, which

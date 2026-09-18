@@ -73,8 +73,10 @@ data-container)
   exit 2
   ;;
 
-# --- prefs-read <id> <app-id> ------------------------------------------------
-# The app's persisted preferences on stdout, one `key = value` per line.
+# --- prefs-read [--raw] <id> <app-id> ----------------------------------------
+# The app's persisted preferences on stdout, one `key = value` per line. --raw
+# gives the store as it sits on disk instead, for when the readable form has
+# mangled something.
 prefs-read)
   exit 2
   ;;

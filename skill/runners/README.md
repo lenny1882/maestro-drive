@@ -115,7 +115,7 @@ One executable, `runners/<name>/platform.sh`. All of it runs on the Mac except
 | `install <id> <artifact> [app-id]` | install, then confirm the app id is resident; non-zero if not | `simctl install` + `get_app_container`, `devicectl device install app` |
 | `container <id> <app-id>` | the installed bundle path, for `appcheck` | `xcrun simctl get_app_container` |
 | `data-container <id> <app-id>` | the app's data container, for `prefs.sh` | `get_app_container … data` |
-| `prefs-read <id> <app-id>` | the raw preferences store on stdout | the plist read in `bin/prefs.sh` |
+| `prefs-read [--raw] <id> <app-id>` | the preferences store on stdout, readable or as it sits on disk | the plist read in `bin/prefs.sh` |
 | `prefs-flush <id> <app-id>` | background the app so preferences reach disk | the `notifyutil` line in `bin/prefs.sh` |
 | `orientations <container>` | the orientations the installed bundle supports | the `Info.plist` block in `bin/preflight.sh` |
 | `screenshot <id> <path>` | write a screenshot on the Mac at that path | `xcrun simctl io … screenshot` in `bin/shot.sh` |

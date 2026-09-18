@@ -79,15 +79,21 @@ prefs-flush)
   ;;
 
 prefs-read)
-  _id=${1:?prefs-read <id> <app-id>}; _appid=${2:?app-id}
-  _c=$(xcrun simctl get_app_container "$_id" "$_appid" data 2>/dev/null) || exit 1
-  [ -n "$_c" ] || { echo "app $_appid is not installed on $_id" >&2; exit 1; }
+  # --raw gives the store as it sits on disk, for when the readable form has
+  # mangled something. Everything else gets `plutil -p`.
+  _raw=0; [ "${1:-}" = --raw ] && { _raw=1; shift; }
+  _id=${1:?prefs-read [--raw] <id> <app-id>}; _appid=${2:?app-id}
+  # No `|| exit 1` on the substitution: that exits before the message below and
+  # the caller gets a bare status with no reason, which reads as the reader being
+  # broken rather than the app being absent or the device shut down.
+  _c=$(xcrun simctl get_app_container "$_id" "$_appid" data 2>/dev/null)
+  [ -n "$_c" ] || { echo "cannot reach $_appid on $_id — the app is not installed, or the device is not booted" >&2; exit 1; }
   # `defaults read` cannot see an app's container domain, so the plist is read
   # as a file.
   _p="$_c/Library/Preferences/$_appid.plist"
   [ -f "$_p" ] || { echo "no prefs file at $_p" >&2
                     echo "  the app may not have written any NSUserDefaults yet" >&2; exit 1; }
-  plutil -p "$_p"
+  if [ "$_raw" = 1 ]; then cat "$_p"; else plutil -p "$_p"; fi
   ;;
 
 orientations)
