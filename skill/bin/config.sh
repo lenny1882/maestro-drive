@@ -261,7 +261,42 @@ _app_vars() {
 for _n in ${!APP_@}; do export "${_n?}"; done
 unset _n
 
-if [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
+# What a project must set depends on the transport. Local mode has no host and
+# no mDNS name to give, so the ssh message would print two (unset) values
+# against settings the reader was never meant to fill, and send them to a
+# --detect that lists ssh aliases they do not have. This message is one of the
+# more useful things this package prints; it stays that good for both shapes,
+# which means two messages rather than one with a conditional clause in it.
+#
+# The searched-paths and detached-process paragraphs are the same in both,
+# because the conf search is the same in both.
+if [ "$TRANSPORT" = local ]; then
+  if [ -z "$APP_ID" ]; then
+    cat >&2 <<MSG
+maestro-remote-mac: not configured for this project.
+
+  TRANSPORT=local  APP_ID=${APP_ID:-(unset)}
+  searched: \$MAESTRO_MAC_CONF, .maestro-mac.conf from \$PWD upwards, ~/.maestro-mac.conf,
+            and $_CONF_CACHE (this session's last find), which is $([ -r "$_CONF_CACHE" ] && cat "$_CONF_CACHE" || echo "empty")
+
+Local transport drives a simulator or emulator on this machine, so MAC_HOST and
+MAC_FQDN are neither needed nor read. APP_ID is the only required value: the
+bundle id on iOS, the applicationId on Android.
+
+If this is a watcher, sampler or anything else started detached, the search is
+the problem and not the config: it walks up from \$PWD, and a detached process
+starts nowhere near the project. Pass the conf explicitly:
+
+  MAESTRO_MAC_CONF=<project>/.maestro-mac.conf <your command>
+
+bin/init.sh cannot write a local conf yet. Two lines are the whole of one:
+
+  TRANSPORT=local
+  APP_ID=<bundle id or applicationId>
+MSG
+    return 1 2>/dev/null || exit 1
+  fi
+elif [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
   cat >&2 <<MSG
 maestro-remote-mac: not configured for this project.
 
