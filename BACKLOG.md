@@ -950,8 +950,9 @@ and a framework with no prefix reads every key rather than none.
 the mechanical work means Stage 3 is done against a contract known to hold
 rather than one hoped to.
 
-**2.1 DONE 18 Sep.** Every booted-device path in the platform contract has now
-run against a real device, which none of them had: Stages 1 and 3 were verified
+**2.1 DONE 18 Sep**, and extended on the same day to the multi-device forms.
+Every booted-device path in the platform contract has now run against a real
+device, which none of them had: Stages 1 and 3 were verified
 only on empty and error paths, because nothing was booted.
 
 Exercised through their real callers, not by hand — `boot`, `driver-up`,
@@ -977,7 +978,20 @@ Two things it found:
   and test the intent rather than the shipped string. The new test reads the
   file instead.
 
-Left as found: app installed, rig down, wall stopped, no simulator booted.
+**The forms that need more than one device, verified 18 Sep with two booted:**
+
+  drivers.sh down <udid>   stops one driver and leaves the other alone
+  drivers.sh up <udid>     brings it back ON THE SAME PORT — 22088, which is
+                           the per-device ports map holding across a restart,
+                           and is the whole reason that map lives on the Mac
+  build.sh --all           one build, both installs, `platform.sh devices
+                           --booted` feeding the target list and the install
+                           loop running on the Mac in ONE round trip
+  --all --install-only     both devices in 23s against 88s for the build-and-
+                           install, which is the saving scaling with the device
+                           count rather than being spent per device
+
+Left as found: rig down, nothing booted.
 
 **2.2 React Native on iOS, end to end.** The cheapest second target by a
 distance: `runners/ios` already works, so only `framework.sh` is new. Fill in
