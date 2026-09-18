@@ -73,13 +73,13 @@ case "${1:-start}" in
     echo "republishing the viewer on 127.0.0.1:$rport" >&2
 
     _ssh "mkdir -p '$RDIR'"
-    scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RDIR/relay.py" >/dev/null || exit 1
+    scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RHELP/relay.py" >/dev/null || exit 1
 
     # relay.py explains its own failures on stderr. An earlier version sent them
     # to /dev/null and printed a guess instead, so the one line that said what
     # was wrong was never seen by anyone (backlog 64).
     _ssh "pkill -f 'relay.py $VPORT ' 2>/dev/null; sleep 1
-cd '$RDIR' && nohup python3 relay.py $VPORT $rport > relay.log 2>&1 &
+cd '$RDIR' && nohup python3 '$RHELP/relay.py' $VPORT $rport > relay.log 2>&1 &
 sleep 2
 cat '$RDIR/relay.log'"
 

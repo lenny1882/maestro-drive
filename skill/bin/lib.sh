@@ -12,8 +12,8 @@ mkdir -p "$LDIR"
 # rather than a call to bin/runner.sh: runner.sh sources THIS file, and every
 # _dev would otherwise pay for a subprocess to learn something config.sh already
 # knows. runner.sh validates them and lists the alternatives; these do not.
-PLATFORM_SH="$RDIR/runners/${PLATFORM:-ios}/platform.sh"
-FRAMEWORK_SH="$RDIR/runners/${RUNNER:-flutter}/framework.sh"
+PLATFORM_SH="$RMODS/${PLATFORM:-ios}/platform.sh"
+FRAMEWORK_SH="$RMODS/${RUNNER:-flutter}/framework.sh"
 PLATFORM_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${PLATFORM:-ios}/platform.sh"
 FRAMEWORK_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${RUNNER:-flutter}/framework.sh"
 

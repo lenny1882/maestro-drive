@@ -194,13 +194,13 @@ _ensure_device() {
 _start() {
   [ "$(_up)" = "200" ] && return 0
   _ssh "mkdir -p '$RDIR'" >/dev/null
-  scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RDIR/relay.py" >/dev/null || return 1
+  scp "${SSH_OPTS[@]}" "$HERE/../remote/relay.py" "$MAC_HOST:$RHELP/relay.py" >/dev/null || return 1
   # pkill matches any relay on this DPORT, whatever its target: a stale relay left
   # pointing at the wrong port holds the socket and beats the correct one to it,
   # so an exact <DPORT> <DRIVER_PORT> match would leave it running (seen 10 Sep).
   _ssh "lsof -nP -iTCP:$DRIVER_PORT -sTCP:LISTEN >/dev/null 2>&1 || { echo 'nothing listening on $DRIVER_PORT — bin/drivers.sh up ${DEV} (or bin/device.sh up ${DEV} for a phone)' >&2; exit 1; }
 pkill -f 'relay.py $DPORT ' 2>/dev/null
-cd '$RDIR' && nohup python3 relay.py $DPORT $DRIVER_PORT >/dev/null 2>&1 &
+cd '$RDIR' && nohup python3 '$RHELP/relay.py' $DPORT $DRIVER_PORT >/dev/null 2>&1 &
 sleep 1" || { _rebind && _start; return $?; }
   [ "$(_up)" = "200" ] || { _rebind && { _start; return $?; }
                             _ensure_device && { _start; return $?; }

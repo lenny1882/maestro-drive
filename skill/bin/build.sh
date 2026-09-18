@@ -110,10 +110,10 @@ fi
 # The framework module's own build script, refreshed beside the module rather
 # than dropped at the top of $RDIR. Sent here as well as by bin/install.sh so a
 # build never depends on install.sh having been run.
-_ssh "mkdir -p '$RDIR/runners/${RUNNER:-flutter}'" >/dev/null
+_ssh "mkdir -p '$RMODS/${RUNNER:-flutter}'" >/dev/null
 if [ -r "$HERE/../runners/${RUNNER:-flutter}/build.sh" ]; then
   scp "${SSH_OPTS[@]}" "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
-      "$MAC_HOST:$RDIR/runners/${RUNNER:-flutter}/build.sh" >/dev/null || exit 1
+      "$MAC_HOST:$RMODS/${RUNNER:-flutter}/build.sh" >/dev/null || exit 1
 fi
 
 # --- detect: the framework reports, and nothing is built --------------------

@@ -309,17 +309,43 @@ the call; with a poisoned `ssh` on `PATH` that exits 99 and shouts, a local call
 runs and never touches it; `runners/android/platform.sh devices` runs from the
 checkout with nothing booted; suite 144 passed, 0 failed.
 
-**2.2 `$RDIR` is two jobs and only one of them collapses.** It is where the
-Mac-side code is staged — `lib.sh:15-16` builds `PLATFORM_SH` and
-`FRAMEWORK_SH` from it, `bin/install.sh` fills it — and it is scratch:
-`$RDIR/$N.png`, `$RDIR/flows`, `PORTS_MAP` at `lib.sh:291`. Locally the code is
-already in the checkout and the scratch is `$LDIR`. Collapsing `$RDIR` onto
-`$LDIR` wholesale points `PLATFORM_SH` at a temp directory nothing populates.
-Split the two names before wiring anything to them. *Files:*
-`skill/bin/config.sh`, `skill/bin/lib.sh`. *Done when:* the code path and the
-scratch path are separately named in `config.sh`, both resolve in `MODE=ssh` to
-exactly what `$RDIR` resolves to today, and locally the code path is the
-checkout.
+**2.2 DONE 18 Sep — `$RDIR` is two jobs and only one of them collapses.** It
+was where the Mac-side code is staged and where the scratch goes. `RDIR` keeps
+the scratch; the code is now `RMODS` and `RHELP`.
+
+**Two code names, not one, because the layouts differ.** Pushed across ssh, the
+helpers land flat beside the scratch — `$RDIR/hier.py`, `$RDIR/relay.py`,
+`$RDIR/wall.py`, `$RDIR/driverup.sh` — while in the checkout they are under
+`remote/`. The modules keep their `runners/<name>/` shape in both. So:
+
+```
+ssh    RMODS=$RDIR/runners        RHELP=$RDIR
+local  RMODS=<checkout>/runners   RHELP=<checkout>/remote
+```
+
+Both resolve across ssh to exactly what `$RDIR` resolved to before the split.
+
+**The scratch does not collapse onto `$LDIR` here, and 3.2 is why.**
+`bin/shot.sh` runs `base64 < '$RDIR/$N.png'` and redirects the decode to
+`$LDIR/$N.png`. Make those one directory before that round trip is converted
+and the redirect truncates the file the read is still coming from. The two
+scratch names stay distinct until 3.2 removes the copies between them.
+
+**A test caught it, which is the point of the test.** `driver.sh`'s stub
+`lib.sh` in `test/run-tests.sh` models the real one and set `RDIR` but not
+`RHELP`, so the item-46 recovery died on an unbound variable before reaching
+the path under test. Two failures, both real: the split does reach `driver.sh`.
+The stubs gained the names rather than the code gaining a `${RHELP:-$RDIR}`
+default, which would have hidden exactly this.
+
+*Files:* `skill/bin/config.sh`, `lib.sh`, `runner.sh`, `install.sh`, `build.sh`,
+`device.sh`, `driver.sh`, `viewer.sh`, `publish.sh`, `drivers.sh`, `wall.sh`,
+`flow.sh`, `hier.sh`, `runners/ios/platform.sh`, `test/run-tests.sh`.
+*Verified:* in ssh transport `RMODS` and `RHELP` resolve to `/tmp/maestro-mac/runners`
+and `/tmp/maestro-mac`; locally to the checkout's `runners/` and `remote/`;
+`PLATFORM_SH` now names the checkout's `runners/android/platform.sh` and its
+`devices` and `claim` verbs run through `_ssh` and exit 0, where before the
+split the same call exited 127; suite 144 passed, 0 failed.
 
 **2.3 `bin/install.sh` has nothing to push.** Once 2.2 lands, the helpers and
 the runner modules are already where a local verb looks for them. The unit is

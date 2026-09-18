@@ -163,8 +163,36 @@ export TRANSPORT
 # Simulator UDID. Empty means the first booted device.
 : "${DEV:=}"
 
-# Where helper scripts and scratch files live on the Mac.
+# Where scratch files live on the machine that holds the device. Screenshots,
+# hierarchy dumps, flow output, driver labels, the ports map, the rig record.
 : "${RDIR:=/tmp/maestro-mac}"
+
+# Where the CODE that runs on that machine lives (BACKLOG item 94, 2.2).
+#
+# $RDIR did both jobs and they come apart the moment the device is here. Across
+# ssh the helpers and the runner modules are PUSHED into $RDIR by
+# bin/install.sh, so code and scratch share a directory and one name served.
+# Locally there is nothing to push: the code is in the checkout already, and
+# pointing a module path at /tmp/maestro-mac finds nothing — measured, exit 127
+# from `sh: 0: Can't open`.
+#
+# Two names and not one, because the layouts differ. Pushed, the helpers land
+# flat beside the scratch; in the checkout they are under remote/. The modules
+# keep their runners/<name>/ shape in both.
+#
+#   ssh    RMODS=$RDIR/runners     RHELP=$RDIR
+#   local  RMODS=<checkout>/runners  RHELP=<checkout>/remote
+#
+# Both resolve across ssh to exactly what $RDIR resolved to before this split.
+if [ "$TRANSPORT" = local ]; then
+  _SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  : "${RMODS:=$_SKILL_DIR/runners}"
+  : "${RHELP:=$_SKILL_DIR/remote}"
+  unset _SKILL_DIR
+else
+  : "${RMODS:=$RDIR/runners}"
+  : "${RHELP:=$RDIR}"
+fi
 
 # Local scratch. Must be writable inside the sandbox.
 : "${LDIR:=${TMPDIR:-/tmp}}"

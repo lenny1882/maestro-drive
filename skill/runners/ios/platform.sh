@@ -176,7 +176,7 @@ driver-up)
   # maestro-ios-driver.jar and the same xcodebuild invocation Maestro uses, with
   # TEST_RUNNER_PORT choosing the port instead of taking 22087.
   _here=$(cd "$(dirname "$0")" && pwd)
-  sh "${RDIR:-/tmp/maestro-mac}/driverup.sh" "${1:?driver-up <id> <port>}" "${2:?port}" \
+  sh "${RHELP:-${RDIR:-/tmp/maestro-mac}}/driverup.sh" "${1:?driver-up <id> <port>}" "${2:?port}" \
      "${3:-${RDIR:-/tmp/maestro-mac}/drv}" 2>/dev/null ||
   sh "$_here/../../remote/driverup.sh" "$1" "$2" "${3:-/tmp/maestro-mac/drv}"
   ;;
