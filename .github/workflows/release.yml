@@ -43,6 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ship.sh used to refuse to publish over a syntax error or an ssh call
+      # inside a loop reading from stdin. ship.sh is gone and test/run-tests.sh
+      # carries those gates, but nothing ran it before a tarball was cut, so a
+      # tag carrying a broken bin/*.sh shipped and broke every session that
+      # installed it. The suite needs no Mac: it redirects HOME and CLAUDE_DIR
+      # into a temp directory, installs the package there and runs the skill's
+      # own cases out of that installed copy.
+      - name: Test
+        run: ./test/run-tests.sh
+
       - name: Build install tarball
         env:
           TAG: ${{ github.ref_name }}
