@@ -2066,6 +2066,16 @@ if command -v git >/dev/null 2>&1; then
     && no "publish.sh arms capture through the module" "it still has _profiling" \
     || ok "publish.sh arms capture through the module"
 
+  # Call site 5 (net.sh). No VM Service RPC names left in it, and no curl of its
+  # own — both halves, the published-relay fast path and the SSH fallback, go
+  # through the same three verbs.
+  grep -q 'ext\.dart\.io' "$REPO/bin/net.sh" \
+    && no "net.sh names no VM Service RPC of its own" "it still has ext.dart.io" \
+    || ok "net.sh names no VM Service RPC of its own"
+  grep -q 'net\.py' "$REPO/bin/net.sh" \
+    && no "net.sh leaves the profile format to the module" "it still calls net.py" \
+    || ok "net.sh leaves the profile format to the module"
+
   # And the flutter runner's answer is the list gitstate defaults to, so wiring
   # the two together cannot change what this project sees.
   a=$(sh "$REPO/runners/flutter/framework.sh" residue | sort)
