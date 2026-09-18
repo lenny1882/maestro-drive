@@ -2123,9 +2123,16 @@ if command -v git >/dev/null 2>&1; then
   grep -v '^ *#' "$REPO/bin/flow.sh" | grep -qE "maestro .*test .*\| *grep" \
     && no "flow.sh takes maestro's status before filtering the output" "it still pipes it" \
     || ok "flow.sh takes maestro's status before filtering the output"
-  grep -q 'exit .._rc' "$REPO/bin/flow.sh" \
-    && ok "flow.sh returns that status rather than the filter's" \
-    || no "flow.sh returns that status rather than the filter's" "no exit of the captured status"
+  # flow.sh must END on that status. The first version of this test grepped for
+  # `exit $_rc` and was satisfied by the one inside the REMOTE string — while
+  # flow.sh itself ended on `if [ -n "$SHOT" ]`, whose false condition exits 0.
+  # Measured 18 Sep: a flow asserting text on no screen returned 0 with the test
+  # passing. So check the last line of the file, which is the status the caller
+  # actually sees.
+  [ "$(grep -v '^ *$' "$REPO/bin/flow.sh" | tail -1)" = 'exit "$rc"' ] \
+    && ok "flow.sh ends on the flow's status, not on its last conditional" \
+    || no "flow.sh ends on the flow's status, not on its last conditional" \
+         "last line: $(grep -v '^ *$' "$REPO/bin/flow.sh" | tail -1)"
 
   # Call site 2. The two frameworks must give OPPOSITE advice from the same empty
   # result — no flutter run costs only the inside-the-app reads, no Metro may
