@@ -829,6 +829,67 @@ printf '%s' "$l" | grep -q "nothing is written" \
   || no "remove: a flag after a bare --remove is a flag, not an alias" \
         "$(printf '%s' "$l" | head -8)"
 
+# One write, one question. It asked twice — "Write /etc/hosts with sudo?" before
+# the file was built, then "Apply that?" after the diff — both defaulting to no,
+# and the second reads as a repeat of the first. Saying yes once left the file
+# untouched with no sudo prompt, which is indistinguishable from sudo failing,
+# and every test passed because each stream happened to carry a spare answer.
+# Reported 18 Sep 2026. So the assertion is the count: one yes writes the file.
+HW="$TMP/hostswrite"; mkdir -p "$HW/lib" "$HW/bin"
+ssh_stub "$HW/bin"
+printf '#!/bin/sh\ncase "$1" in -p) shift;; esac\nexec "$@"\n' > "$HW/bin/sudo"
+chmod +x "$HW/bin/sudo"
+: > "$HW/key"
+{ printf 'Host mac-one\n\tHostname 10.0.0.1\n\tUser someuser\n\tIdentityFile %s\n\n' "$HW/key"
+  printf 'Host mac-two\n\tHostname 10.0.0.2\n\tUser someuser\n\tIdentityFile %s\n' "$HW/key"
+} > "$HW/ssh_config"
+printf '{"sandbox":{"network":{"allowedDomains":["the-mac.local","10.0.0.1","10.0.0.2"]}}}\n' \
+  > "$HW/settings.json"
+printf '127.0.0.1 localhost\n\n# mac for ios simulator work\n10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n' \
+  > "$HW/hosts"
+date +%F > "$HW/lib/phase-a-done"
+
+# y to remove, blank to apply the settings.json diff, blank for the try-order,
+# and ONE y for the hosts write. Nothing spare: a stream carrying a spare answer
+# is exactly what hid this.
+hw=$(printf 'y\n\n\ny\n' | PATH="$HW/bin:$PATH" SSH_CONFIG="$HW/ssh_config" \
+  SETTINGS="$HW/settings.json" HOSTS_FILE="$HW/hosts" LIB_DIR="$HW/lib" \
+  timeout 60 "$W" --remove mac-two 2>&1)
+
+grep -q '10.0.0.2' "$HW/hosts" \
+  && no "hosts: one yes writes the file" "the address is still in $HW/hosts" \
+  || ok "hosts: one yes writes the file"
+
+# Anchored past the hosts prompt: settings.json reports `ok written` in the same
+# run, and matching that instead is how this check first passed while the hosts
+# file was untouched.
+printf '%s' "$hw" | sed -n '/with sudo?/,$p' | grep -qE 'ok    written' \
+  && ok "hosts: and it reports the write" \
+  || no "hosts: and it reports the write" "$(printf '%s' "$hw" | tail -6)"
+
+# The count itself, so a second confirmation cannot creep back in.
+[ "$(printf '%s' "$hw" | grep -c 'with sudo?')" = 1 ] \
+  && [ "$(printf '%s' "$hw" | grep -c 'Apply that?')" -le 1 ] \
+  && ok "hosts: the write is confirmed once, not twice" \
+  || no "hosts: the write is confirmed once, not twice" \
+        "$(printf '%s' "$hw" | grep -E 'with sudo\?|Apply that\?')"
+
+# Declining has to say what it costs and how to do it later, because the block
+# it just printed is the thing that will not resolve without it.
+printf '127.0.0.1 localhost\n\n# mac for ios simulator work\n10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n' \
+  > "$HW/hosts"
+{ printf 'Host mac-one\n\tHostname 10.0.0.1\n\tUser someuser\n\tIdentityFile %s\n\n' "$HW/key"
+  printf 'Host mac-two\n\tHostname 10.0.0.2\n\tUser someuser\n\tIdentityFile %s\n' "$HW/key"
+} > "$HW/ssh_config"
+hwn=$(printf 'y\n\n\nn\n' | PATH="$HW/bin:$PATH" SSH_CONFIG="$HW/ssh_config" \
+  SETTINGS="$HW/settings.json" HOSTS_FILE="$HW/hosts" LIB_DIR="$HW/lib" \
+  timeout 60 "$W" --remove mac-two 2>&1)
+printf '%s' "$hwn" | grep -q -- "--hosts" \
+  && grep -q '10.0.0.2' "$HW/hosts" \
+  && ok "hosts: declining leaves the file and says how to do it later" \
+  || no "hosts: declining leaves the file and says how to do it later" \
+        "$(printf '%s' "$hwn" | tail -6)"
+
 # --- phase A as an editor ----------------------------------------------------
 # What phase A records goes stale. The Mac's account was renamed on 18 Sep and
 # the wizard had no way to say so: the username is read back out of a Host

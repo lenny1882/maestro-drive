@@ -1532,12 +1532,6 @@ write_etc_hosts() {
   # Needs root, and it is the one file outside the user's home directory that
   # this touches. Default is no: printing the lines is always safe, writing
   # them is a decision.
-  if ! confirm "Write $HOSTS_FILE with sudo?" n; then
-    say ""
-    say "  Add them yourself — sudo \$EDITOR $HOSTS_FILE — replacing any existing"
-    say "  block under the same marker."
-    return 0
-  fi
 
   local tmp; tmp=$(mktemp)
   MARKER_TEXT="$HOSTS_MARKER" BLOCK="$block" python3 - "$HOSTS_FILE" > "$tmp" <<'PY'
@@ -1583,7 +1577,13 @@ PY
     would "back up $HOSTS_FILE and write the block above, with sudo"
     rm -f "$tmp"; return 0
   fi
-  if confirm "Apply that?" n; then
+  # One question for one write. It asked twice — "Write /etc/hosts with sudo?"
+  # before the file was built, then "Apply that?" after the diff — both
+  # defaulting to no, and the second reads as a repeat of the first. Answering
+  # the first and taking the default on the second left the file untouched with
+  # no sudo prompt, which is indistinguishable from sudo failing. Reported
+  # 18 Sep 2026. The diff has to come first anyway: the answer depends on it.
+  if confirm "Write $HOSTS_FILE with sudo?" n; then
     # Both sudo calls are checked. This function is called as
     # `write_etc_hosts || warn`, and a function invoked with `||` runs with
     # `set -e` suspended for its whole body — so a failing sudo does not abort
@@ -1603,7 +1603,11 @@ PY
       rm -f "$tmp"; return 1
     fi
   else
-    warn "left unchanged — curl on $MAC_NAME will not resolve"
+    warn "left unchanged — curl on $MAC_NAME will not resolve."
+    say ""
+    say "  Add the block above by hand if you want it — sudo \$EDITOR $HOSTS_FILE —"
+    say "  replacing whatever sits under the same marker. Or re-run:"
+    say "    $0 --hosts"
   fi
   rm -f "$tmp"
 }
