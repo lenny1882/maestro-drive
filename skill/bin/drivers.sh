@@ -403,8 +403,8 @@ _up_one() {  # _up_one <udid> <live-map> <ports-map>
   port=$(_port_for "$udid" "$map" "$pmap")
   echo "$udid  starting on $port (about 30s)"
   _ssh "mkdir -p '$RDIR'" >/dev/null
-  scp "${SSH_OPTS[@]}" "$HERE/../remote/driverup.sh" "$MAC_HOST:$RDIR/driverup.sh" >/dev/null || return 1
-  TMO=180 _ssh "RDIR='$RDIR' sh '$PLATFORM_SH' driver-up '$udid' '$port' '$RDIR/drv'" || return 1
+  scp "${SSH_OPTS[@]}" "$HERE/../remote/driverup.sh" "$MAC_HOST:$RHELP/driverup.sh" >/dev/null || return 1
+  TMO=180 _ssh "RDIR='$RDIR' RHELP='$RHELP' sh '$PLATFORM_SH' driver-up '$udid' '$port' '$RDIR/drv'" || return 1
   # Remember it was us. A driver that disappears from the scan afterwards was
   # taken by something, and the note in _driver_bind can say so.
   _driver_own "$udid" "$port"

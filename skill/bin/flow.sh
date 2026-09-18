@@ -72,7 +72,7 @@ POST=""
 sleep $SETTLE
 echo '--- hierarchy ---'
 maestro --device $d hierarchy > '$RDIR/hier.json' 2>/dev/null
-python3 '$RDIR/hier.py' '$RDIR/hier.json'"
+python3 '$RHELP/hier.py' '$RDIR/hier.json'"
 
 [ -n "$SHOT" ] && POST="$POST
 echo '--- screenshot ---'

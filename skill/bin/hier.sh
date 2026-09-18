@@ -24,4 +24,4 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 d=$(_dev) || exit 1
 _ssh "maestro --device $d hierarchy > '$RDIR/hier.json' 2>/dev/null
-      python3 '$RDIR/hier.py' '$RDIR/hier.json'"
+      python3 '$RHELP/hier.py' '$RDIR/hier.json'"

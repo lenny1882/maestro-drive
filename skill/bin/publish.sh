@@ -108,7 +108,7 @@ case "${1:-start}" in
     RPATH=$(printf '%s' "$VBASE" | sed -E 's|.*:[0-9]+||')
 
     _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null
-          nohup python3 '$RDIR/relay.py' $PUBPORT $RPORT >/dev/null 2>&1 &
+          nohup python3 '$RHELP/relay.py' $PUBPORT $RPORT >/dev/null 2>&1 &
           sleep 1
           lsof -nP -iTCP:$PUBPORT -sTCP:LISTEN >/dev/null 2>&1 && echo 'relay up' || echo 'relay FAILED'"
 

@@ -24,7 +24,7 @@ RUNNERS=$(cd "$(dirname "$0")/../runners" && pwd)
 
 # A Mac-side verb runs out of $RDIR, where bin/install.sh puts the module. The
 # relative layout is preserved, so a module may refer to its sibling scripts.
-RRUNNERS="$RDIR/runners"
+RRUNNERS="$RMODS"
 
 _module() {  # _module <framework|platform> -> path to the script
   local kind=$1 name
@@ -56,7 +56,7 @@ case "${1:-}" in
   framework|platform)
     kind=$1; shift
     m=$(_module "$kind") || exit $?
-    RDIR="$RDIR" LDIR="$LDIR" exec sh "$m" "$@"
+    RDIR="$RDIR" LDIR="$LDIR" RMODS="$RMODS" RHELP="$RHELP" exec sh "$m" "$@"
     ;;
 
   path)

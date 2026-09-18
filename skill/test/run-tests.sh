@@ -924,6 +924,8 @@ cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/t
 cat > "$DBIN/lib.sh" <<'LIBSH'
 MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
+# RHELP is where the pushed helpers live; config.sh sets it beside RDIR (item 94).
+RHELP=/tmp/none; RMODS=/tmp/none/runners
 _driver_bind(){ return 0; }
 _ssh(){ return 0; }
 LIBSH
@@ -2441,6 +2443,7 @@ echo "stub 1 device" > "$DDIR/devmap"   # _is_device greps "^$DEV " -> "stub "
 cat > "$DDIR/lib.sh" <<LIBSH
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
+RHELP=$TMP/none; RMODS=$TMP/none/runners
 DEVICE_MAP=$DDIR/devmap
 PLATFORM_SH=/x/platform.sh
 _driver_bind(){ return 0; }
