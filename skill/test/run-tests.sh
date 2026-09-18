@@ -695,6 +695,47 @@ case "$got" in *"MARKER MISSING"*) ok "a marker that is absent is called out" ;;
   *) no "a marker that is absent is called out" "got '$got'" ;; esac
 
 echo
+echo "wall.sh label refuses a flag rather than wearing it (item 89)"
+# Every one of these must exit before anything reaches a device: with no udid a
+# label goes to whatever _dev resolves to, which on a shared Mac is a peer's
+# simulator. That is how `label --help` overwrote one.
+LW() { MAC_HOST=x MAC_FQDN=x APP_ID=x MAESTRO_MAC_CONF=/dev/null "$REPO/bin/wall.sh" "$@" 2>&1; }
+
+lw_out=$(LW label --help); lw_rc=$?
+[ "$lw_rc" = 0 ] && printf '%s' "$lw_out" | grep -q "^usage: " \
+  && ok "label --help prints the usage and exits 0" \
+  || no "label --help prints the usage and exits 0" "rc=$lw_rc: $lw_out"
+
+printf '%s' "$lw_out" | grep -qi "ssh\|Host key\|Connection" \
+  && no "label --help never reaches a device" "it tried to connect" \
+  || ok "label --help never reaches a device"
+
+lw_out=$(LW label -h); lw_rc=$?
+[ "$lw_rc" = 0 ] \
+  && ok "label -h is the same as --help" \
+  || no "label -h is the same as --help" "rc=$lw_rc"
+
+lw_out=$(LW label --groupp brandco); lw_rc=$?
+[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q "unknown option --groupp" \
+  && ok "label refuses an unknown flag instead of labelling with it" \
+  || no "label refuses an unknown flag instead of labelling with it" "rc=$lw_rc: $lw_out"
+
+lw_out=$(LW label somename --group); lw_rc=$?
+[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q -- "--group needs a value" \
+  && ok "label refuses --group with nothing after it" \
+  || no "label refuses --group with nothing after it" "rc=$lw_rc: $lw_out"
+
+# A label that really does start with a dash is still writable, after --.
+lw_out=$(LW label -- --odd-name); lw_rc=$?
+printf '%s' "$lw_out" | grep -q "unknown option" \
+  && no "label takes a dashed name after --" "it still refused it" \
+  || ok "label takes a dashed name after --"
+
+lw_out=$(LW label); lw_rc=$?
+[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q "^usage: " \
+  && ok "label with no name prints the usage" \
+  || no "label with no name prints the usage" "rc=$lw_rc: $lw_out"
+
 echo "ssh host fallback"
 # No Mac needed: a stub ssh on PATH answers for one alias and hangs up on the
 # rest, which is exactly what a Mac on the other network looks like.

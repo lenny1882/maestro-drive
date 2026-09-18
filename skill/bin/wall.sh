@@ -71,14 +71,42 @@ case "${1:-start}" in
     if [ $# -gt 0 ] && printf '%s' "$1" | grep -qE '^[0-9A-Fa-f-]{36}$'; then
       udid=$1; shift
     fi
+    # Everything that is not a udid and not --group used to fall through to the
+    # catch-all and BECOME the label, so `wall.sh label --help` set the label to
+    # "--help" instead of printing this usage line, and a mistyped --groupp
+    # wrote itself into the name. Neither said anything: both exit 0 and print
+    # the label they just wrote as though it were what was asked for.
+    #
+    # The cost is not the wrong text, it is whose device it lands on. With no
+    # udid the label goes to whatever _dev resolves to, which on a Mac two
+    # sessions are sharing is whichever device has a driver up — reported
+    # 18 Sep 2026 by the sister project's session, which ran `label --help` to
+    # check the syntax and overwrote a peer's label doing it. Item 67 exists
+    # because a label is evidence of who is driving what; this erased it by
+    # accident, from a command whose intent was to read the usage.
+    _label_usage() { echo "usage: $0 label [<udid>] <name> [--group <g>]"; }
+    endflags=0
     while [ $# -gt 0 ]; do
+      if [ "$endflags" = 1 ]; then
+        name="${name:+$name }$1"; shift; continue
+      fi
       case "$1" in
-        --group) group=${2:-}; shift 2 ;;
+        # A label that genuinely starts with a dash goes after --, which is the
+        # convention every other tool uses and the reason an unknown flag can be
+        # refused rather than absorbed.
+        --) endflags=1; shift ;;
+        -h|--help) _label_usage; exit 0 ;;
+        --group) [ $# -ge 2 ] || { echo "label: --group needs a value" >&2; exit 2; }
+                 group=$2; shift 2 ;;
         --group=*) group=${1#--group=}; shift ;;
+        -*) echo "label: unknown option $1" >&2
+            _label_usage >&2
+            echo "  a label starting with a dash goes after --:  $0 label -- $1" >&2
+            exit 2 ;;
         *) name="${name:+$name }$1"; shift ;;
       esac
     done
-    [ -n "$name" ] || { echo "usage: $0 label [<udid>] <name> [--group <g>]" >&2; exit 2; }
+    [ -n "$name" ] || { _label_usage >&2; exit 2; }
     [ -n "$udid" ] || udid=$(_dev) || exit 1
     printf 'name=%s\ngroup=%s\nby=%s\n' "$name" "$group" "$(_label_by)" |
       _ssh "mkdir -p '$RDIR/labels' && cat > '$RDIR/labels/$udid'" || exit 1
