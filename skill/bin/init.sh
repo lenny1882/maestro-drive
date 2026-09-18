@@ -64,8 +64,15 @@ _android_evidence() {
   local d a
   d=$(adb devices 2>/dev/null | sed -n 's/\tdevice$//p' | head -1)
   [ -n "$d" ] && { printf 'a booted device, %s' "$d"; return 0; }
-  a=$(emulator -list-avds 2>/dev/null | head -3 | tr '\n' ' ')
-  [ -n "$a" ] && { printf 'AVDs defined but none booted: %s' "${a% }"; return 0; }
+  a=$(emulator -list-avds 2>/dev/null)
+  if [ -n "$a" ]; then
+    # All of them, with the count. A truncated list in a conf comment reads as
+    # the whole answer, and the reader has no way to tell that it is not.
+    printf 'AVDs defined but none booted (%s): %s' \
+      "$(printf '%s\n' "$a" | grep -c .)" \
+      "$(printf '%s' "$a" | tr '\n' ' ' | sed 's/ *$//')"
+    return 0
+  fi
   printf 'the SDK is here, with no device and no AVD'
 }
 

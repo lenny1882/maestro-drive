@@ -39,6 +39,24 @@ export JAVA_HOME=$HOME/.sdkman/candidates/java/current
 export PATH=$JAVA_HOME/bin:$PATH
 '
 
+# The same job locally, and it is NOT the same script (item 94, 2.1).
+#
+# REMOTE_ENV REPLACES PATH, which is right for a machine reached by ssh: the
+# non-interactive shell's PATH is whatever sshd hands it and the Mac's layout is
+# known. Run that here and it would drop every directory the caller's PATH
+# carries — on this machine the Android SDK lives under /mnt/sda, so adb would
+# vanish and every android verb would fail as "command not found" while looking
+# like a broken module.
+#
+# So: add, never replace. An existing JAVA_HOME wins, because a local machine
+# may have Java from somewhere other than sdkman, and a non-existent directory
+# prepended to PATH costs nothing.
+LOCAL_ENV='
+export PATH=$PATH:$HOME/.maestro/bin
+export JAVA_HOME=${JAVA_HOME:-$HOME/.sdkman/candidates/java/current}
+export PATH=$JAVA_HOME/bin:$PATH
+'
+
 # Which alias to talk to, when MAC_HOST names more than one.
 #
 # The Mac moves between networks and each network has its own alias. On 13 Aug
@@ -91,6 +109,10 @@ _probe_host() {  # _probe_host <alias> [connect-seconds]
 
 _pick_host() {  # sets MAC_HOST to a single alias
   local n cached c
+  # Local transport has no host to pick. The candidate count would answer 0 and
+  # fall out below anyway; this says so at the top rather than leaving a reader
+  # to work out that an empty MAC_HOST reaches the same place by accident.
+  [ "${TRANSPORT:-ssh}" = local ] && return 0
   n=$(_host_candidates | grep -c .)
   [ "$n" -le 1 ] && return 0          # nothing to choose; behave as before
 
@@ -139,6 +161,23 @@ _ssh_aliases() {
 # and journeys read line by line, so buffering would change how every caller
 # behaves.
 _ssh() {
+  # Local transport runs the very same script, through sh -c, on this machine.
+  # The 84 call sites do not change: they already hand over a shell script and
+  # read its output, and whether that script crosses a network is this
+  # function's business and none of theirs (item 94, 2.1).
+  #
+  # Still bounded by $TMO — a local command can hang as readily as a remote one,
+  # and a caller that set a timeout meant it. No retry, though: the 255/124
+  # re-pick below exists because ssh failed to reach a host, and locally there
+  # is no host to re-pick. A local 124 is the command itself running long, and
+  # half of what goes through here taps a screen.
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    timeout "$TMO" sh -c "$LOCAL_ENV
+cd '$REPO' 2>/dev/null || true
+$1"
+    return $?
+  fi
+
   _pick_host || return 1
   local rc
   timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$REMOTE_ENV
