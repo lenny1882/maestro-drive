@@ -371,6 +371,18 @@ tt_count=$(grep -cE '(^|[^-[:alnum:]_])ssh -tt ' "$W")
   || no "wizard: exactly one ssh asks for a terminal, and it is the install" \
         "$tt_count of them: $(grep -nE '(^|[^-[:alnum:]_])ssh -tt ' "$W" | head -3)"
 
+# /usr/local/bin does not exist on a Mac that has never had Homebrew, and
+# `install` does not create parent directories — so on a fresh machine the
+# script install fails with "No such file or directory". The directory step goes
+# first, and it is guarded: BSD `install -d` on a directory that exists returns 0
+# and rewrites its mode and owner anyway, which on an Intel Mac would take
+# Homebrew's /usr/local/bin to root:wheel to fix nothing.
+printf '%s' "$(sed -n '/install_cmds="/,/bootstrap system/p' "$W")" \
+  | head -1 | grep -q '\[ -d .* \] || sudo install -d' \
+  && ok "install: the directory is created first, and only when it is missing" \
+  || no "install: the directory is created first, and only when it is missing" \
+        "$(sed -n '/install_cmds="/,+1p' "$W")"
+
 grep -qE 'ssh -tt "\$alias" "set -e; \$install_cmds"' "$W" \
   && ok "wizard: the install runs under set -e, so a failed step stops the rest" \
   || no "wizard: the install runs under set -e, so a failed step stops the rest" \

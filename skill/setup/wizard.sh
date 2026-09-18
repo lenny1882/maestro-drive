@@ -1269,7 +1269,20 @@ print(" ".join(servers))
 
   # The five commands, in one place, printed either way.
   local install_cmds
-  install_cmds="sudo cp -p $REMOTE_SCRIPT $REMOTE_SCRIPT.bak 2>/dev/null
+  # The directory first, and only when it is missing. `install` does not create
+  # parent directories, and /usr/local/bin does not exist on a Mac that has
+  # never had Homebrew or anything else put something there — so on a genuinely
+  # fresh machine the script install fails with "No such file or directory".
+  #
+  # Guarded rather than unconditional: measured on a Mac 18 Sep 2026, BSD
+  # `install -d` on a directory that already exists returns 0 and rewrites its
+  # mode anyway — 700 became 755 — so with -o root -g wheel it would also rewrite
+  # the owner. On an Intel Mac Homebrew owns /usr/local/bin as the user, and
+  # taking it to root:wheel would break it silently, to fix nothing.
+  #
+  # /Library/LaunchDaemons always exists on macOS, so the plist needs no such step.
+  install_cmds="[ -d $(dirname "$REMOTE_SCRIPT") ] || sudo install -d -m 755 -o root -g wheel $(dirname "$REMOTE_SCRIPT")
+sudo cp -p $REMOTE_SCRIPT $REMOTE_SCRIPT.bak 2>/dev/null
 sudo install -m 755 -o root -g wheel $stage $REMOTE_SCRIPT
 sudo install -m 644 -o root -g wheel /tmp/networkChange.plist $REMOTE_PLIST
 sudo launchctl bootout system $REMOTE_PLIST 2>/dev/null
