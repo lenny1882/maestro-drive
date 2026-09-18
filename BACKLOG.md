@@ -1222,18 +1222,38 @@ installed apps for the setup wizard, which is conf-writing rather than driving.
 **Stage 4 — answer the six unanswered verbs.** Two are paper decisions and can
 be taken now. Two need hardware this Mac may not have.
 
-**4.1 `android boot` — settle the identifier.** An AVD name and an emulator
-serial are not the same thing and the contract assumes they are. Either add
-`resolve <name> -> <id>` or have `boot` print what it booted. *Paper.*
+**4.1 DONE 18 Sep — `boot` prints the id it booted, as its last line.** Not a
+second `resolve` verb: the caller always has to act on the booted device
+afterwards, so returning the id costs one line on a platform where it does not
+change and saves every caller a round trip on one where it does. `runners/ios`
+echoes its argument.
 
-**4.2 `react-native variants` — settle the second argument.** iOS schemes and
-Android product flavours are two lists where the contract asks for one, which
-makes this the single verb where the two axes are not independent. *Paper.*
+The consequence for `devices` is recorded with it: on a platform like that, the
+id column means "the id you use to act on this device IN ITS CURRENT STATE", so
+a shut-down emulator lists under its AVD name and a running one under its
+serial. Inherent to the platform, not a wrinkle in the contract.
 
-**4.3 `android container` — give `appcheck` an Android form.** The
-timestamp-and-plist comparison is the check that caught a wrong-branch build
-twice and it has no Android equivalent. `dumpsys package <id>` gives
-`versionName`, `versionCode` and `lastUpdateTime`. *Needs a device.*
+**4.2 DONE 18 Sep — `variants` and `variant-for-appid` take an optional
+`--platform <p>`.** A framework whose variants span both platforms accepts it
+and answers the same: one Flutter `--flavor uat` builds the iOS app and the
+Android one, so ignoring it is the right answer rather than an omission, and a
+caller can pass it unconditionally. React Native's do not span, and it needs
+telling which list.
+
+An optional argument rather than a second verb, because the caller always knows
+its platform already — `bin/build.sh` has `PLATFORM` in hand — so passing it is
+free and a framework that does not care is not made to care.
+
+`variant-for-appid` takes it for the same reason: an app id is itself
+per-platform, a bundle id on iOS and an applicationId on Android.
+
+**4.3 SUPERSEDED 18 Sep.** It asked for an Android `container`, and the answer
+turned out to be that `appcheck` should stop needing one. `platform.sh
+installed-info` reports what a platform CAN say and `appcheck` reasons from
+whatever arrives, so an absent key is a fact rather than a failure. Android
+answers `version`, `build` AND a timestamp through `dumpsys package`, which is
+more than a phone gives — so `container` being unanswerable there costs the
+check nothing. Written and unmeasured, like the rest of that module.
 
 **4.4 The Android driver trio.** Maestro's Android driver is an instrumented
 APK behind `adb forward`, sharing nothing with XCUITest. The question that

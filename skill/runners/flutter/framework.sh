@@ -56,6 +56,11 @@ describe)
   ;;
 
 variants)
+  # --platform is accepted and IGNORED, which is the right answer here rather
+  # than an omission: a Flutter flavour spans both platforms — one `--flavor
+  # uat` builds the iOS app and the Android one — so the list does not differ.
+  # React Native's does. (item 87, 4.2)
+  [ "${2:-}" = --platform ] && set -- "$1"
   # build.sh owns the rule — a flavour is real only when BOTH halves exist, an
   # ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart. This asked it
   # by reproducing the test until 18 Sep; now it asks it by calling it, so the
@@ -64,6 +69,8 @@ variants)
   ;;
 
 variant-for-appid)
+  # Same, and --platform is ignored for the same reason.
+  [ "${3:-}" = --platform ] && set -- "$1" "$2"
   # Same: the bundle id is the evidence, and build.sh knows how to read it out
   # of project.pbxproj.
   sh "$HERE/build.sh" --repo "${1:?variant-for-appid <repo> <app-id>}" \

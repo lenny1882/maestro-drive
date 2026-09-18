@@ -54,12 +54,20 @@ boot)
   # the serial is assigned by the port it lands on — so `boot` takes a name and
   # every other verb takes a serial, and the two cannot be the same argument.
   #
-  # runners/README.md's contract says `boot <id>`, which is written for iOS and
-  # is wrong here. Settle that before writing this: either the contract gains a
-  # `resolve <name> -> <id>` verb, or `boot` returns the id it booted.
-  echo "runners/android boot: unanswered — an AVD name and an emulator serial" >&2
-  echo "  are not the same identifier, and the contract assumes they are." >&2
-  echo "  See the comment in this file before implementing it." >&2
+  # SETTLED 18 Sep (item 87, 4.1): `boot` PRINTS THE ID IT BOOTED as its last
+  # line, and the caller uses that from then on. So this takes an AVD name and
+  # must end by printing the emulator-NNNN serial it landed on — which means
+  # waiting for the device to appear in `adb devices` and working out which of
+  # them is new, since the serial comes from the port the emulator took.
+  #
+  # Still unwritten because nothing here has an emulator to write it against,
+  # but the CONTRACT question is answered and this is now only work.
+  #
+  #   "$HOME/Library/Android/sdk/emulator/emulator" -avd "$1" &
+  #   then poll `adb devices` for a serial that was not there before,
+  #   then `adb -s <serial> wait-for-device`, then echo the serial
+  echo "runners/android boot: not written — needs an emulator to write against." >&2
+  echo "  The contract question is settled: print the serial you landed on." >&2
   exit 2
   ;;
 

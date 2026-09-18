@@ -61,13 +61,16 @@ describe)
   ;;
 
 variants)
-  # DOCUMENTED, NOT MEASURED, and it is TWO lists, not one — which is the thing
-  # to settle before writing it. A React Native project carries iOS schemes in
-  # ios/*.xcodeproj and Android productFlavors in android/app/build.gradle, and
-  # they need not have the same names. The contract's `variants <repo>` returns
-  # one list, so it probably has to take the platform as a second argument.
-  echo "runners/react-native variants: unanswered — iOS schemes and Android" >&2
-  echo "  productFlavors are two separate lists, and the contract asks for one." >&2
+  # SETTLED 18 Sep (item 87, 4.2): `variants <repo> [--platform <p>]`. This is
+  # the framework that needs it — iOS schemes live in ios/*.xcodeproj and
+  # Android product flavours in android/app/build.gradle, and they need not
+  # share names. With no --platform, return every variant the project has,
+  # deduplicated; with one, only that platform's.
+  #
+  # Still unwritten because there is no React Native checkout to write it
+  # against. The contract question is answered; this is now only work.
+  echo "runners/react-native variants: not written — needs a checkout to write" >&2
+  echo "  against. The contract question is settled: it takes --platform." >&2
   exit 2
   ;;
 
@@ -77,7 +80,8 @@ variant-for-appid)
   # — because it is Xcode's doing, not Flutter's. On Android the evidence is
   # applicationId/applicationIdSuffix per productFlavor in build.gradle, which is
   # a different file and a different parse.
-  echo "runners/react-native variant-for-appid: unanswered — see variants" >&2
+  echo "runners/react-native variant-for-appid: not written — see variants." >&2
+  echo "  Takes the same --platform: an app id is per-platform too." >&2
   exit 2
   ;;
 

@@ -71,8 +71,8 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | --- | --- | --- | --- |
 | `claim <repo>` | Mac | is this checkout mine? exit 0 and print the evidence | nothing — the framework is assumed |
 | `describe <repo> [app-id]` | Mac | the `build.sh --detect` report: toolchain, version, variant, entrypoint, last build | `remote/build.sh` lines 144-182 |
-| `variants <repo>` | Mac | one buildable variant name per line | `_flavours` |
-| `variant-for-appid <repo> <app-id>` | Mac | the variants that produce that app id, one per line | `_flavour_for_appid` |
+| `variants <repo> [--platform <p>]` | Mac | one buildable variant name per line; `--platform` is optional and ignored by a framework whose variants span both | `_flavours` |
+| `variant-for-appid <repo> <app-id> [--platform <p>]` | Mac | the variants that produce that app id, one per line | `_flavour_for_appid` |
 | `build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]` | Mac | builds, and prints `artifact <path>` as its last line | `remote/build.sh` lines 264-292 |
 | `version <repo>` | Mac | `<version>+<build>` a build from this checkout would produce — what a device is compared against, having no install time | nothing; the check did not exist |
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
@@ -113,7 +113,7 @@ One executable, `runners/<name>/platform.sh`. All of it runs on the Mac except
 | --- | --- | --- |
 | `claim <device-id>` | is this device id mine? | the UUID-shape test in `bin/build.sh` that tells a simulator from a phone |
 | `devices [--booted]` | one per line: `<id>` TAB `<state>` TAB `<name>` | `xcrun simctl list devices booted` in `lib.sh`, `drivers.sh`, `wall.py` |
-| `boot <id>` / `shutdown <id>` | boot or shut down, and wait for it to settle | `drivers.sh rig up` / `rig down` |
+| `boot <id>` / `shutdown <id>` | boot or shut down, wait for it to settle; `boot` prints **the id it booted** as its last line | `drivers.sh rig up` / `rig down` |
 | `install <id> <artifact> [app-id]` | install, then confirm the app id is resident; non-zero if not | `simctl install` + `get_app_container`, `devicectl device install app` |
 | `installed-info <id> <app-id>` | `key=value` lines for the installed app: `version`, `build`, and `epoch`/`container` where the platform has them. An absent key means "cannot tell" | the `get_app_container` + plist reads in `remote/appcheck.sh` |
 | `container <id> <app-id>` | the installed bundle path, for `appcheck` | `xcrun simctl get_app_container` |

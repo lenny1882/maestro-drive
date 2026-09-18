@@ -1949,6 +1949,14 @@ sh "$RS/ios/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA \
 sh "$RS/ios/platform.sh" claim 00008020-0011223344556677 2>/dev/null \
   && no "ios refuses a physical device's udid" "it claimed the phone" \
   || ok "ios refuses a physical device's udid"
+# 4.1: boot returns the id it booted, last line. A simulator keeps one UDID
+# whether it is up or not, so it echoes its argument — the verb returns it for
+# the platforms where it changes, which is Android: an AVD name becomes
+# emulator-NNNN once the emulator takes a port.
+grep -q 'echo "\$_id"' "$RS/ios/platform.sh" \
+  && ok "ios boot ends by printing the id it booted" \
+  || no "ios boot ends by printing the id it booted" "it does not"
+
 sh "$RS/android/platform.sh" claim emulator-5554 \
   && ok "android claims an emulator serial" || no "android claims an emulator serial" "it refused"
 sh "$RS/android/platform.sh" claim 6EA2EBFE-7483-4422-9E51-A345A74DADEA 2>/dev/null \
@@ -2040,6 +2048,21 @@ vo=$(sh "$RS/flutter/framework.sh" variant-for-appid "$RP" com.example.app.uat |
 grep -q 'xcshareddata/xcschemes' "$RS/flutter/framework.sh" \
   && no "the flavour rule has one home" "framework.sh still reproduces it" \
   || ok "the flavour rule has one home"
+
+# 4.2: --platform is optional, and a framework whose variants span both
+# platforms accepts it and answers the same. Flutter's do — one --flavor uat
+# builds the iOS app and the Android one — so ignoring it is the right answer
+# rather than an omission, and a caller can pass it unconditionally.
+vo=$(sh "$RS/flutter/framework.sh" variants "$RP" | sort | tr '\n' ' ')
+vp=$(sh "$RS/flutter/framework.sh" variants "$RP" --platform ios | sort | tr '\n' ' ')
+{ [ "$vo" = "$vp" ] && [ -n "$vo" ]; } \
+  && ok "--platform is accepted and changes nothing for a framework that spans both" \
+  || no "--platform is accepted and changes nothing for a framework that spans both" \
+       "without '$vo' / with '$vp'"
+vo=$(sh "$RS/flutter/framework.sh" variant-for-appid "$RP" com.example.app.uat --platform ios | tr '\n' ' ')
+[ "$vo" = "uat " ] \
+  && ok "variant-for-appid takes --platform too" \
+  || no "variant-for-appid takes --platform too" "got '$vo'"
 
 out=$(FB --platform ios --variant uat --app-id com.example.app.uat)
 case "$out" in
