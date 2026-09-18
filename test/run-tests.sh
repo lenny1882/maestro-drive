@@ -237,6 +237,25 @@ else
   ok "fresh machine: --dry-run wrote nothing"
 fi
 
+# --- every ssh in the wizard passes -n ---------------------------------------
+# A successful ssh reads and discards whatever is on stdin, and in an
+# interactive script stdin is where the answers come from. The /etc/hosts
+# liveness probe ran `ssh <alias> true` in a loop and ate the rest of the run's
+# input whenever an alias actually answered — invisible when a person is typing,
+# fatal to a scripted run, and only reproducible against a reachable Mac, which
+# is why every test before 18 Sep 2026 missed it. ssh-copy-id is exempt: it must
+# keep stdin to read the password.
+# Message text mentioning ssh is not an invocation: say/warn/would/ok all take
+# a quoted string, and one of them prints the very command a dry run WOULD run.
+bad_ssh=$(grep -nE '(^|[^-[:alnum:]_])ssh ' "$W" \
+          | grep -v 'ssh-copy-id' \
+          | grep -vE '^[0-9]+:[[:space:]]*#' \
+          | grep -vE '(say|warn|would|ok|no) "' \
+          | grep -v 'ssh -n ' || true)
+[ -z "$bad_ssh" ] \
+  && ok "wizard: every ssh passes -n so it cannot eat the answers" \
+  || no "wizard: every ssh passes -n so it cannot eat the answers" "$(printf '%s' "$bad_ssh" | head -3)"
+
 # --- the write path, for real ------------------------------------------------
 # Everything above runs --dry-run, so until 18 Sep 2026 the wizard had never
 # written anything, even to a copy. Running it for real found three defects in

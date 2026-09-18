@@ -273,7 +273,7 @@ phase_a() {
     say ""
     say "  Proving key authentication works. This uses BatchMode=yes, which is what"
     say "  every script uses — a password that merely worked would not prove it."
-    if ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=8 \
+    if ssh -n -i "$key" -o BatchMode=yes -o ConnectTimeout=8 \
            -o StrictHostKeyChecking=accept-new "$mac_user@$addr" true 2>/dev/null; then
       ok "key authentication works"
     else
@@ -460,7 +460,7 @@ phase_b() {
 
   say ""
   say "  Checking the Mac answers there before writing anything."
-  if ssh -i "$MAC_KEY" -o BatchMode=yes -o ConnectTimeout=8 \
+  if ssh -n -i "$MAC_KEY" -o BatchMode=yes -o ConnectTimeout=8 \
          -o StrictHostKeyChecking=accept-new "$MAC_USER@$addr" true 2>/dev/null; then
     ok "$addr answers and the key works"
   else
@@ -538,8 +538,16 @@ c_target() { # c_target <alias> <addr>
 # failing ssh takes the whole script down before the caller can check whether
 # the value came back empty. That is what made a failed phase C look like a hang
 # at its own header, with no message and exit 255.
+# -n on every ssh in this file. A successful ssh reads and discards whatever is
+# on stdin, and stdin here is where `ask` and `confirm` get their answers — so a
+# probe against a Mac that ANSWERS silently ate the rest of the run's input.
+# Interactively it is invisible, because a person has not typed ahead; it only
+# bites a scripted run, and only when the Mac is reachable, which is why every
+# earlier test missed it (measured 18 Sep 2026: a three-line stream, and `read`
+# after one successful probe returned nothing). Not ssh-copy-id, which must keep
+# its stdin to read the password.
 mac_run() { # mac_run <ignored> <command> -> stdout, empty if unreachable
-  ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
+  ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
       "${C_SSH[@]}" "$2" 2>/dev/null || true
 }
 
@@ -711,7 +719,7 @@ c_cycle_and_verify() { # <alias> <device> <static>
   # Detached, or SIGHUP kills it between off and on and the Mac stays off the
   # network. The leading sleep lets ssh return an exit code rather than a
   # broken pipe.
-  ssh -o BatchMode=yes "${C_SSH[@]}" \
+  ssh -n -o BatchMode=yes "${C_SSH[@]}" \
     "nohup /bin/sh -c 'sleep 2; networksetup -setairportpower $2 off; sleep 5; networksetup -setairportpower $2 on' >/dev/null 2>&1 </dev/null &" \
     || warn "the cycle command did not return cleanly; continuing to poll"
 
@@ -720,7 +728,7 @@ c_cycle_and_verify() { # <alias> <device> <static>
   # success and is not.
   local i seen_down=0
   for i in $(seq 1 40); do
-    if ssh -o BatchMode=yes -o ConnectTimeout=6 "${C_SSH[@]}" true 2>/dev/null; then
+    if ssh -n -o BatchMode=yes -o ConnectTimeout=6 "${C_SSH[@]}" true 2>/dev/null; then
       if [ "$seen_down" = 1 ]; then
         ok "back up at $3"
         mac_run "$1" 'tail -4 /tmp/netchange.log' | sed 's/^/    /'
@@ -803,7 +811,7 @@ write_etc_hosts() {
   # now, which is at least a fact, and no default when none answers.
   local live=""
   for a in $aliases; do
-    if ssh -o BatchMode=yes -o ConnectTimeout=4 "$a" true 2>/dev/null; then
+    if ssh -n -o BatchMode=yes -o ConnectTimeout=4 "$a" true 2>/dev/null; then
       live="$a"; say "  $a answers right now."; break
     fi
   done
