@@ -5,6 +5,25 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 HERE="$(cd "$(dirname "$0")/../remote" && pwd)"
 
+# Nothing to push when the device is here (item 94, 2.3). In local transport
+# $RHELP and $RMODS ARE the checkout's remote/ and runners/, so every copy below
+# would be a file onto itself — and the `cat > dst < src` form truncates dst
+# before the read begins, which would empty hier.py and every runner module in
+# the working tree. The chmod is not harmless either: hier.py, relay.py and
+# wall.py are 644 in git, so running it here leaves three mode changes behind in
+# `git status`.
+#
+# The scratch directory is still this script's to make. It is $RDIR in both
+# transports and nothing else creates it.
+if [ "$TRANSPORT" = local ]; then
+  _ssh "mkdir -p '$RDIR' '$RDIR/flows'" || exit 1
+  echo "local transport: the code is already in place, so nothing was copied."
+  echo "  modules:  $RMODS"
+  echo "  helpers:  $RHELP"
+  echo "  scratch:  $RDIR"
+  exit 0
+fi
+
 _ssh "mkdir -p '$RDIR' '$RDIR/flows' '$RHELP' '$RMODS'"
 # vmservice.sh and net.py left this list on 18 Sep: both are the flutter
 # framework runner's own files now and go with the modules below (item 87, 5.4).
