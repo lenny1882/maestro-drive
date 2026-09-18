@@ -245,7 +245,9 @@ first-run time across a network. Locally the machine is right here, so: no
 both present is refused with `--platform ios|android` rather than guessed;
 neither is refused naming the missing SDK. The evidence is written above the
 setting — a booted device where there is one, otherwise the AVD names, because
-those are different facts and the weaker one has to say so.
+those are different facts and the weaker one has to say so. The list is given
+whole, with its count: a truncated list in a conf comment reads as the whole
+answer and the reader cannot tell that it is not.
 
 **`--host` with `--local` is refused, not ignored.** A silently dropped flag
 leaves someone believing they configured something they did not.
@@ -277,14 +279,35 @@ diffs byte-identical against the pre-change script; suite 144 passed, 0 failed.
 not change in any unit of this stage. That is the whole bet; if a call site has
 to change, the bet was wrong and the shape goes back to Stage 1.
 
-**2.1 `_ssh` gains a local branch.** `bin/lib.sh:141-160`. In local mode it runs
-the same script through `sh -c` with the same `$REMOTE_ENV` prefix, and
-`_pick_host` (`lib.sh:92`) returns immediately without consulting the cache or
-calling `_probe_host` (`lib.sh:89`). `$SSH_OPTS` and `$TMO`'s retry-and-re-pick
-path at `lib.sh:155` are dead locally — a local `sh -c` does not stop answering
-mid-command. *Files:* `skill/bin/lib.sh`. *Done when:* `bin/device.sh list`
-against a local simulator returns the same rows the ssh path returns against the
-Mac, and `SSH_OPTS` is never expanded in a local run.
+**2.1 DONE 18 Sep — `_ssh` gains a local branch.** In local transport it runs
+the same script through `sh -c` on this machine. `_pick_host` returns at the
+top, `_probe_host` is never reached, `SSH_OPTS` is never expanded, and the
+retry-and-re-pick path is skipped: it exists because ssh failed to reach a
+host, and locally there is no host to re-pick — a local 124 is the command
+itself running long, and half of what goes through here taps a screen. `$TMO`
+still bounds it, because a local command hangs as readily as a remote one and a
+caller that set a timeout meant it.
+
+**`$REMOTE_ENV` could not be reused, and the reason is the unit's one real
+finding.** It *replaces* `PATH` with `/usr/bin:/bin:/usr/sbin:/sbin` plus
+Maestro and sdkman's Java — correct for a machine reached by ssh, where the
+non-interactive shell's `PATH` is whatever sshd hands it. Run it locally and it
+drops every directory the caller's `PATH` carries: on this machine the Android
+SDK is under `/mnt/sda`, so `adb` would vanish and every android verb would
+fail as `command not found` while reading like a broken module. `LOCAL_ENV`
+adds instead of replacing, and an existing `JAVA_HOME` wins.
+
+**Not enough on its own, and 2.2 is why.** The call sites ask for
+`$PLATFORM_SH`, which is `$RDIR/runners/…` — `/tmp/maestro-mac/...` locally,
+which nothing populates. Verified: the module runs through `_ssh` when called by
+its checkout path and exits 127 when called by its `$RDIR` path. That split is
+2.2's whole subject.
+
+*Files:* `skill/bin/lib.sh`. *Verified:* `_ssh 'echo hello'` prints it; `exit 3`
+comes back as 3; stdin passes through to `cat`; `adb` is still on `PATH` inside
+the call; with a poisoned `ssh` on `PATH` that exits 99 and shouts, a local call
+runs and never touches it; `runners/android/platform.sh devices` runs from the
+checkout with nothing booted; suite 144 passed, 0 failed.
 
 **2.2 `$RDIR` is two jobs and only one of them collapses.** It is where the
 Mac-side code is staged — `lib.sh:15-16` builds `PLATFORM_SH` and
