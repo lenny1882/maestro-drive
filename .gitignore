@@ -33,3 +33,9 @@ skill/reference/staging/
 # and APP_USER actually live.
 .maestro-mac.conf
 .maestro-mac.conf.*
+
+# This repo drives an app of its own, so it carries a maestro/ directory like
+# any project the skill is pointed at: flows under journeys/ and the notes
+# bin/notes.sh writes. That is this repo's own test material, not package
+# payload — the release tarball ships skill/ and lib/, never this.
+maestro/
