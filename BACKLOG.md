@@ -79,7 +79,101 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 90.** Items 1–89 are allocated; new items start from 90.
+**Next item number: 93.** Items 1–92 are allocated; new items start from 93.
+
+**Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
+say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
+done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
+work in them is real and is now filed as **91** and **92** below. The commit
+messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 90. The wall shows simulators only, and a phone is a device too — **OPEN, raised 18 Sep**
+
+`bin/wall.sh` puts every booted simulator on one page, live, and it is the first
+thing a session starts. A physical iPhone driven through `runners/ios-device` is
+invisible on it — so the one device whose screen you cannot see from your chair
+is the one the wall does not show.
+
+**Two things stand in the way, and only the second is hard.**
+
+**The wall asks ONE platform module.** `remote/wall.py` resolves
+`runners/<PLATFORM>/platform.sh` from the environment and calls `devices
+--booted` on it. A Mac with three simulators and a phone has two platforms live
+at once, so the wall would have to ask every module it can find and merge the
+answers, tagging each row with the module that produced it. That is a small
+change and a real one: it is the first place in the package where the two axes
+stop being "one choice per session".
+
+**Nothing is known to stream a physical device's screen.** `runners/ios-device
+capture-cmd` exits 2 saying exactly that, and it is not a gap to be filled by
+guessing. What is known, measured 18 Sep 2026:
+
+  `devicectl device capture screenshot` works on the phone — 6.7MB PNG, about a
+  second. That is a poll, not a stream.
+  `devicectl device capture screen-record` exists and records to a FILE, which
+  is the wrong shape for a tile that has to start before anyone is watching and
+  survive the browser going away.
+  Whether Maestro's `simulator-server` binary drives a physical device at all is
+  unestablished. It takes a platform word — `ios` for a simulator — and nobody
+  has tried another.
+
+So the first question is whether a phone can be streamed or only sampled. If
+only sampled, the wall's Stream class assumes MJPEG frames arriving from a
+child process, and a polled tile is a different thing living beside it rather
+than a parameter of it — a phone tile that updates every few seconds is still
+worth having, and saying so in the tile is better than a still frame that looks
+live.
+
+**Gated on:** nothing in this package. It is gated on finding out what can
+stream a phone.
+
+**Related.** Item 87 built `runners/ios-device` and left `capture-cmd`
+unanswered for this reason.
+
+## 91. A live driver stopped protecting a peer's wall label — **DONE 18 Sep 2026**
+
+Found by the first live `rig up` after item 87's Stage 3, which printed
+`awk: backslash not last character on line`.
+
+The live-driver guard in `_wall_label` is a `$( )` inside a double-quoted `_ssh`
+string, so the LOCAL shell expands it and the awk runs here. Its field
+references were escaped as `\$1` and `\$2`, as though it ran on the Mac, so awk
+died and the substitution came back empty — making the test always false.
+
+One of the three guards on reclaiming another session's label has therefore
+never worked. Only the age check stood, and a peer whose label was older than
+`LABEL_STALE_AFTER` would have been renamed out from under a live session, which
+is the exact failure item 67 added that test to prevent.
+
+The tests did not catch it because they reimplement the reclaim in shell and
+test the intended logic rather than the shipped string, and because a recent
+label is kept by the age check whether or not this guard fires. The new test
+reads the file.
+
+## 92. Three wrong-shell mistakes across the SSH boundary — **DONE 18 Sep 2026**
+
+Item 91 was found by accident, so this searched for the rest of its family
+rather than waiting for the next one. Three shapes:
+
+  **a local `$( )` escaped as though remote** — item 91 was the only instance.
+
+  **a POSIX helper sourced into the shell ssh hands over, which is zsh.**
+  `remote/gitstate.sh` had two constructs zsh does not share — it neither
+  word-splits an unquoted expansion nor globs an unquoted `case` pattern — and
+  reported every lock file as somebody's work for as long as it was
+  parameterised. `remote/appcheck.sh` was the same shape and survived on luck.
+  Both are executed with `sh … --run` now and zsh is out of the path.
+
+  **a pipe eating an exit status**, three times. `sh module inspect … | tail -1`
+  on the remote side returned tail's status, so an exit 2 arrived as success.
+  `bin/flow.sh` ran `maestro test | grep | tail`, so EVERY FLOW REPORTED
+  SUCCESS — and the first fix for it was itself incomplete, because flow.sh then
+  ended on `if [ -n "$SHOT" ]`, whose false condition exits 0.
+
+The lesson the tests carry now: read the shipped file, do not model it. Two of
+these passed a test that checked the intent.
 
 ---
 
