@@ -363,7 +363,11 @@ DIAG="$TMP/diag"; mkdir -p "$DIAG"
 diag() { # diag <ssh stderr> -> output; exit status is "the address is suspect"
   ( say() { printf '%s\n' "$*"; }; warn() { printf '%s\n' "$*"; }; ok() { :; }
     MARKER=/dev/null; SETTINGS=/dev/null
-    eval "$(sed -n '/^remote_login_help() {/,/^}/p;/^probe_diagnosis() {/,/^}/p' "$W")"
+    eval "$(sed -n '/^remote_login_help() {/,/^}/p;/^isolation_help() {/,/^}/p;/^probe_diagnosis() {/,/^}/p' "$W")"
+    # The real one measures this machine's subnet and ARP table. Stubbed here so
+    # both branches are reachable without a second network to run the suite on.
+    arp_unanswered() { [ "${ARP_UNANSWERED:-0}" = 1 ]; }
+    ip() { printf 'x src 10.9.9.8 x\n'; }
     probe_diagnosis "$1" 10.9.9.9 macuser )
 }
 
@@ -502,6 +506,62 @@ npx=$(printf 'n\ny\nmac-proxy\n10.7.7.7\nn\nn\n' | \
 printf '%s' "$npx" | grep -q "sandbox proxy" \
   && no "outside a session: nothing is written before the probe" "it wrote allowedDomains first" \
   || ok "outside a session: nothing is written before the probe"
+
+# Two machines on one subnet with nothing passing between them. Found 18 Sep
+# after an afternoon on the Mac: Remote Login on for all users, sshd accepting
+# its own loopback, the Mac holding the address it said it held, and neither
+# machine able to ping the other. The access point was refusing
+# station-to-station traffic, which nothing on either machine reveals — and
+# every arm above would have blamed the Mac.
+d=$(ARP_UNANSWERED=1 diag "ssh: connect to host 10.9.9.9 port 22: No route to host") || true
+printf '%s' "$d" | grep -q "does not answer ARP" \
+  && printf '%s' "$d" | grep -qi "isolation" \
+  && ok "same subnet with no ARP reply is named as the access point, not the Mac" \
+  || no "same subnet with no ARP reply is named as the access point, not the Mac" "$d"
+
+# The useful part is that it says the Mac is fine, because the Mac is where an
+# afternoon goes otherwise.
+printf '%s' "$d" | grep -q "Nothing on the Mac" \
+  && ok "isolation says explicitly that nothing on the Mac is wrong" \
+  || no "isolation says explicitly that nothing on the Mac is wrong" "$d"
+
+# It gives the confirming test, from the other end, with this machine's address
+# filled in — the check that distinguishes isolation from everything else.
+printf '%s' "$d" | grep -q "ping -c2 10.9.9.8" \
+  && ok "isolation names the ping to run from the Mac, with the address in it" \
+  || no "isolation names the ping to run from the Mac, with the address in it" "$d"
+
+# The address is the one thing proven right here — the Mac holds it — so a retry
+# must not ask for it again.
+if ARP_UNANSWERED=1 diag "ssh: connect to host 10.9.9.9 port 22: No route to host" >/dev/null; then
+  no "isolation does not cast doubt on the address" "it did"
+else
+  ok "isolation does not cast doubt on the address"
+fi
+
+# It is a measurement, so it outranks the message — "No route to host" with ARP
+# answering is a different fault and must not be read as isolation.
+d=$(diag "ssh: connect to host 10.9.9.9 port 22: No route to host") || true
+printf '%s' "$d" | grep -qi "isolation" \
+  && no "an answered ARP is not read as isolation" "$d" \
+  || ok "an answered ARP is not read as isolation"
+
+# OpenSSH 9.8 penalises a source address that keeps failing and drops it during
+# the handshake — the same symptom as everything else in this arm. It matters
+# here because the retry loop is what sustains it: the dropped connection is
+# itself another failure, so firing straight back renews the penalty.
+d=$(diag "$kex") || true
+printf '%s' "$d" | grep -q "sshd -T | grep -i penal" \
+  && printf '%s' "$d" | grep -q "launchctl kickstart" \
+  && ok "the closed handshake names source penalties and how to clear them" \
+  || no "the closed handshake names source penalties and how to clear them" "$d"
+
+# A refusal is Remote Login off, not a penalty. Naming penalties there would
+# send someone to wait out a timer that is not running.
+d=$(diag "$refused") || true
+printf '%s' "$d" | grep -q "penal" \
+  && no "a refusal is not read as a penalty" "$d" \
+  || ok "a refusal is not read as a penalty"
 
 # --- and offers the way back --------------------------------------------------
 # The fix happens on the Mac while the wizard waits, so the retry is the whole
