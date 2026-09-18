@@ -112,8 +112,8 @@ fi
 # build never depends on install.sh having been run.
 _ssh "mkdir -p '$RMODS/${RUNNER:-flutter}'" >/dev/null
 if [ -r "$HERE/../runners/${RUNNER:-flutter}/build.sh" ]; then
-  scp "${SSH_OPTS[@]}" "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
-      "$MAC_HOST:$RMODS/${RUNNER:-flutter}/build.sh" >/dev/null || exit 1
+  _push "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
+        "$RMODS/${RUNNER:-flutter}/build.sh" || exit 1
 fi
 
 # --- detect: the framework reports, and nothing is built --------------------

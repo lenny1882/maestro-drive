@@ -141,12 +141,12 @@ case "${1:-start}" in
   start)
     _check_simulatorkit || exit 1
     _ssh "mkdir -p '$RDIR' '$RHELP' '$RMODS/${PLATFORM:-ios}'"
-    scp "${SSH_OPTS[@]}" "$HERE/../remote/wall.py" "$MAC_HOST:$RHELP/wall.py" >/dev/null || exit 1
+    _push "$HERE/../remote/wall.py" "$RHELP/wall.py" || exit 1
     # wall.py asks the platform which devices exist and what streams one, and it
     # looks for the module beside itself. Sent here as well as by bin/install.sh
     # so that starting the wall never depends on install.sh having been run.
-    scp "${SSH_OPTS[@]}" "$HERE/../runners/${PLATFORM:-ios}/platform.sh" \
-        "$MAC_HOST:$RMODS/${PLATFORM:-ios}/platform.sh" >/dev/null || exit 1
+    _push "$HERE/../runners/${PLATFORM:-ios}/platform.sh" \
+          "$RMODS/${PLATFORM:-ios}/platform.sh" || exit 1
 
     # Start it, then show what it said. viewer.sh sent the remote script's
     # stderr to /dev/null, so the one line explaining a failure — "no service on

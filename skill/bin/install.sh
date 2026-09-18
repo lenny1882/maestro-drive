@@ -30,7 +30,7 @@ _ssh "mkdir -p '$RDIR' '$RDIR/flows' '$RHELP' '$RMODS'"
 # hier.py and relay.py stay — a Maestro hierarchy and a port forwarder are the
 # same whatever built the app.
 for f in hier.py relay.py; do
-  ssh "${SSH_OPTS[@]}" "$MAC_HOST" "cat > '$RHELP/$f'" < "$HERE/$f" || exit 1
+  _push "$HERE/$f" "$RHELP/$f" || exit 1
 done
 
 # The runner modules go too, keeping their directory layout, so a Mac-side verb
@@ -47,7 +47,7 @@ for d in "$RUNNERS"/*/; do
   # looks right. Found 18 Sep when the device forwarder would not bind.
   for f in "$d"*.sh "$d"*.py; do
     [ -r "$f" ] || continue
-    ssh "${SSH_OPTS[@]}" "$MAC_HOST" "cat > '$RMODS/$n/$(basename "$f")'" < "$f" || exit 1
+    _push "$f" "$RMODS/$n/" || exit 1
   done
 done
 

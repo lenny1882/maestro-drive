@@ -928,6 +928,8 @@ DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
 RHELP=/tmp/none; RMODS=/tmp/none/runners
 _driver_bind(){ return 0; }
 _ssh(){ return 0; }
+# _push stands where scp was before item 94's 3.1; the real one is in lib.sh.
+_push(){ return 0; }
 LIBSH
 cat > "$TMP/stub/curl" <<'CURLSH'
 #!/usr/bin/env bash
@@ -2450,6 +2452,7 @@ _driver_bind(){ return 0; }
 _rebind(){ return 1; }
 # The lock probe answers by status; 1 is "not locked", which is what this case
 # is about — the failure is the face-up crash in the log, not a locked screen.
+_push(){ return 0; }
 _ssh(){ case "\$*" in *locked*) return 1 ;; esac
         echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
 LIBSH

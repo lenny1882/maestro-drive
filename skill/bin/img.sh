@@ -143,7 +143,7 @@ _with_mac_sips() {
   r_in="$RDIR/img-in-$$-$base"; r_out="$RDIR/img-out-$$-$base"
   _ssh "mkdir -p '$RDIR'" >/dev/null || return 1
   _pick_host || return 1
-  scp "${SSH_OPTS[@]}" "$FILE" "$MAC_HOST:$r_in" >/dev/null || return 1
+  _push "$FILE" "$r_in" || return 1
   _ssh "$(_sips_script "$r_in" "$r_out")
 base64 < '$r_out'
 rm -f '$r_in' '$r_out'" | base64 -d > "$OUT.tmp" || { rm -f "$OUT.tmp"; return 1; }
