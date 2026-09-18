@@ -9,13 +9,13 @@
 # `bin/preflight.sh` or `remote/gitstate.sh` — they are all unchanged and all
 # still in use.
 #
-# Where the Mac-side scripts live. `bin/install.sh` pushes them to $RDIR, so a
-# verb running on the Mac finds them beside itself; $RDIR is passed in rather
-# than assumed, because the caller already knows it.
+# build.sh and vmservice.sh are this module's own files and sit beside this one,
+# on both sides: bin/install.sh pushes runners/ keeping its layout. They were in
+# remote/ until 18 Sep, which is where they were before the seam existed.
 set -u
 
 VERB=${1:-}; [ $# -gt 0 ] && shift
-: "${RDIR:=/tmp/maestro-mac}"
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 # curl through the sandbox proxy when there is one, direct when there is not.
 # That is the whole difference between reading the LAN-published relay from here
@@ -52,40 +52,22 @@ describe)
   # CocoaPods GEM_HOME, the flavour derived from the app id, the entrypoint and
   # the last build, and writes nothing.
   _repo=${1:?describe <repo>}; _appid=${2:-}
-  sh "$RDIR/build.sh" --repo "$_repo" ${_appid:+--app-id "$_appid"} --detect
+  sh "$HERE/build.sh" --repo "$_repo" ${_appid:+--app-id "$_appid"} --detect
   ;;
 
 variants)
-  # `_flavours` in remote/build.sh: a flavour is real only when BOTH halves
-  # exist, an ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart.
-  # remote/build.sh does not expose it on its own yet, so this reproduces the
-  # pair test rather than shelling into it. Wiring call site 3 makes
-  # remote/build.sh print it and deletes this.
-  _repo=${1:?variants <repo>}
-  for _s in "$_repo"/ios/*.xcodeproj/xcshareddata/xcschemes/*.xcscheme; do
-    [ -r "$_s" ] || continue
-    _f=$(basename "$_s" .xcscheme)
-    case $_f in Runner|*\ *) continue ;; esac
-    [ -r "$_repo/lib/main_$_f.dart" ] && echo "$_f"
-  done
-  exit 0
+  # build.sh owns the rule — a flavour is real only when BOTH halves exist, an
+  # ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart. This asked it
+  # by reproducing the test until 18 Sep; now it asks it by calling it, so the
+  # two cannot drift.
+  sh "$HERE/build.sh" --repo "${1:?variants <repo>}" --list-variants
   ;;
 
 variant-for-appid)
-  # `_flavour_for_appid` in remote/build.sh. The bundle id is the evidence:
-  # Xcode names each configuration <Debug|Release|Profile>-<flavour> and each
-  # carries its own PRODUCT_BUNDLE_IDENTIFIER. Same note as `variants`.
-  _repo=${1:?variant-for-appid <repo> <app-id>}; _appid=${2:?app-id}
-  for _p in "$_repo"/ios/*.xcodeproj/project.pbxproj; do
-    [ -r "$_p" ] || continue
-    awk -v want="$_appid" '
-      /PRODUCT_BUNDLE_IDENTIFIER = /  { b=$3; sub(/;$/,"",b) }
-      /^[ \t]*name = /                { n=$3; gsub(/[";]/,"",n)
-                                        if (b == want && n ~ /-/) print n
-                                        b="" }
-    ' "$_p"
-  done | sed 's/^[^-]*-//' | sort -u
-  exit 0
+  # Same: the bundle id is the evidence, and build.sh knows how to read it out
+  # of project.pbxproj.
+  sh "$HERE/build.sh" --repo "${1:?variant-for-appid <repo> <app-id>}" \
+     --app-id "${2:?app-id}" --variant-for
   ;;
 
 build)
@@ -126,7 +108,7 @@ build)
   [ -n "${_appid:-}" ] && set -- "$@" --app-id "$_appid"
   [ -n "$_variant" ] && set -- "$@" --flavor "$_variant"
   [ -n "$_target" ] && set -- "$@" --target "$_target"
-  sh "$RDIR/build.sh" "$@"
+  sh "$HERE/build.sh" "$@"
   ;;
 
 residue)
@@ -161,7 +143,7 @@ inspect)
   # survives however long the build took, then the last VM_LOG_WINDOW of the
   # simulator log. It caches, re-validates, and keeps the two failures apart.
   _dev=${1:?inspect <device> <cache>}; _cache=${2:?cache}
-  bash "$RDIR/vmservice.sh" "$_dev" "$_cache"
+  bash "$HERE/vmservice.sh" "$_dev" "$_cache"
   ;;
 
 traffic-arm)

@@ -107,8 +107,14 @@ if [ "$detect" = 0 ] && [ "$no_install" = 0 ]; then
   fi
 fi
 
-_ssh "mkdir -p '$RDIR'" >/dev/null
-scp "${SSH_OPTS[@]}" "$HERE/../remote/build.sh" "$MAC_HOST:$RDIR/build.sh" >/dev/null || exit 1
+# The framework module's own build script, refreshed beside the module rather
+# than dropped at the top of $RDIR. Sent here as well as by bin/install.sh so a
+# build never depends on install.sh having been run.
+_ssh "mkdir -p '$RDIR/runners/${RUNNER:-flutter}'" >/dev/null
+if [ -r "$HERE/../runners/${RUNNER:-flutter}/build.sh" ]; then
+  scp "${SSH_OPTS[@]}" "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
+      "$MAC_HOST:$RDIR/runners/${RUNNER:-flutter}/build.sh" >/dev/null || exit 1
+fi
 
 # --- detect: the framework reports, and nothing is built --------------------
 if [ "$detect" = 1 ]; then
