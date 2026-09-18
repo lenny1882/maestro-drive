@@ -259,7 +259,7 @@ it instead.
    manual — worth checking what else under `skill/` assumes 3.9+.
 
    **State on this machine.** `~/.claude/settings.json` has no `ssh` or `scp`
-   allow at all. `brandco-flutter-runner` and `claude-sandbox` each carry
+   allow at all. the client checkout and `claude-sandbox` each carry
    `Bash(ssh mac-*:*)` and `Bash(scp mac-*:*)` in
    `.claude/settings.local.json`, identical and duplicated by hand.
 
