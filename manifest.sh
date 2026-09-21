@@ -22,21 +22,21 @@
 # strips every entry whose command contains OWNS before adding the current
 # ones, and both hook commands contain it by way of their skill path.
 
-PKG="maestro-remote-mac"
-OWNS="maestro-remote-mac"
+PKG="maestro-drive"
+OWNS="maestro-drive"
 
 # A skill installs as a whole directory. install.sh copies or symlinks it.
 DIRS=(
-  "skill:$CLAUDE_DIR/skills/maestro-remote-mac"
+  "skill:$CLAUDE_DIR/skills/maestro-drive"
 )
 FILES=()
 STATE_DIRS=()
 
 # Where the installed hooks live. install.sh resolves this at install time, so
 # a test run with CLAUDE_DIR redirected registers the temp path and never the
-# real one. Both commands contain "maestro-remote-mac" by way of that path,
+# real one. Both commands contain "maestro-drive" by way of that path,
 # which is what lets the OWNS strip in install.sh and uninstall.sh find them.
-HOOK_DIR="$CLAUDE_DIR/skills/maestro-remote-mac/hooks"
+HOOK_DIR="$CLAUDE_DIR/skills/maestro-drive/hooks"
 
 # "bash <path>" rather than the bare path: the sandbox refuses chmod +x under
 # ~/.claude, so a hook installed there cannot be relied on to carry its exec
@@ -76,7 +76,7 @@ settings_merge() {
 #
 # "bash" with the script as an argument, for the exec-bit reason above.
 MCP_NAME="maestro-mac"
-MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/mcp.sh"
+MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-drive/bin/mcp.sh"
 
 # The bridge server (BACKLOG item 96), which is optional and asked about at
 # install time. It starts and stops the helper that runs this package's scripts
@@ -87,7 +87,7 @@ MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/mcp.sh"
 # python3 rather than bash, and the same exec-bit reasoning — the script is
 # named as an argument rather than run directly.
 MCP_BRIDGE_NAME="maestro-bridge"
-MCP_BRIDGE_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/bridge-mcp.py"
+MCP_BRIDGE_SCRIPT="$CLAUDE_DIR/skills/maestro-drive/bin/bridge-mcp.py"
 
 # Reads $HOME/.claude.json on stdin and sets this package's servers, leaving
 # every other key and every other server untouched.
@@ -110,7 +110,7 @@ claude_json_merge() {
 }
 
 REGISTRATIONS=(
-  "skills/maestro-remote-mac"
+  "skills/maestro-drive"
   "settings.json  PreToolUse/Bash  hooks/gate-journey-first.sh"
   "settings.json  SessionEnd       hooks/rig-down-on-end.sh"
   ".claude.json   mcpServers       bin/mcp.sh as \"$MCP_NAME\""

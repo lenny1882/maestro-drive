@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests for maestro-remote-mac.
+# Tests for maestro-drive.
 #
 # These are the skill's behaviour tests, and they are the ones that matter. They
 # run against real hierarchies captured off real devices in test/fixtures/, not
 # hand-written JSON, and nothing here touches a device, a network or the real
-# config — so they run just as well from ~/.claude/skills/maestro-remote-mac as
+# config — so they run just as well from ~/.claude/skills/maestro-drive as
 # from a checkout, which is what ../test/run-tests.sh uses them for: it installs
 # the skill into a throwaway CLAUDE_DIR and runs this file out of the installed
 # copy. The packaging tests live in ../test/run-tests.sh; run that one to get

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for the maestro-remote-mac package.
+# Tests for the maestro-drive package.
 #
 # Redirects HOME and CLAUDE_DIR into a temp directory, so the real config is
 # never touched.
@@ -1231,7 +1231,7 @@ printf '%s\n' '{
   && ok "installs" || no "installs" "$(tail -8 "$TMP/out")"
 grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
   && ok "leaves other packages' entries alone" || no "leaves other packages' entries alone" "removed them"
-[ -L "$CLAUDE_DIR/skills/maestro-remote-mac" ] \
+[ -L "$CLAUDE_DIR/skills/maestro-drive" ] \
   && ok "--link leaves a symlink, so edits to the checkout are live" \
   || no "--link leaves a symlink, so edits to the checkout are live" "it is a copy"
 
@@ -1250,7 +1250,7 @@ jq -e '[.hooks.SessionEnd[]?.hooks[]?.command] | any(endswith("hooks/rig-down-on
 
 # Both hooks are invoked as "bash <path>", not by bare path: ~/.claude refuses
 # chmod +x, so a hook there cannot be relied on to carry its exec bit.
-jq -e '[.hooks | .. | .command? // empty | select(contains("maestro-remote-mac"))]
+jq -e '[.hooks | .. | .command? // empty | select(contains("maestro-drive"))]
        | length == 2 and all(startswith("bash /"))' \
   "$CLAUDE_DIR/settings.json" >/dev/null \
   && ok "both hooks run through bash, by absolute path" \
@@ -1271,7 +1271,7 @@ grep -q "someone-elses-bash-thing" "$CLAUDE_DIR/settings.json" \
 
 jq -e '.mcpServers["maestro-mac"]
        | .command == "bash"
-         and (.args[0] | endswith("/skills/maestro-remote-mac/bin/mcp.sh"))
+         and (.args[0] | endswith("/skills/maestro-drive/bin/mcp.sh"))
          and (.args[0] | startswith("/"))' \
   "$HOME/.claude.json" >/dev/null \
   && ok "registers the MCP server by absolute path" \
@@ -1300,7 +1300,7 @@ jq -e '.mcpServers | has("maestro-bridge") | not' "$HOME/.claude.json" >/dev/nul
 "$REPO/install.sh" --link --yes --with-bridge >/dev/null 2>&1
 jq -e '.mcpServers["maestro-bridge"]
        | .command == "python3"
-         and (.args[0] | endswith("/skills/maestro-remote-mac/bin/bridge-mcp.py"))
+         and (.args[0] | endswith("/skills/maestro-drive/bin/bridge-mcp.py"))
          and (.args[0] | startswith("/"))' \
   "$HOME/.claude.json" >/dev/null \
   && ok "--with-bridge registers it by absolute path, run with python3" \
@@ -1331,7 +1331,7 @@ before_cj=$(jq -S . "$HOME/.claude.json")
 grep -q "dry run" "$TMP/out" && ok "--dry-run writes nothing" || no "--dry-run writes nothing" "$(tail -3 "$TMP/out")"
 
 "$REPO/uninstall.sh" --yes >/dev/null 2>&1
-if [ -e "$CLAUDE_DIR/skills/maestro-remote-mac" ] || [ -L "$CLAUDE_DIR/skills/maestro-remote-mac" ]; then
+if [ -e "$CLAUDE_DIR/skills/maestro-drive" ] || [ -L "$CLAUDE_DIR/skills/maestro-drive" ]; then
   no "uninstall removes the skill" "still there"
 else
   ok "uninstall removes the skill"
@@ -1341,7 +1341,7 @@ grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json" \
 grep -q "someone-elses-bash-thing" "$CLAUDE_DIR/settings.json" \
   && ok "uninstall leaves the other package's Bash hook alone" \
   || no "uninstall leaves the other package's Bash hook alone" "removed it"
-jq -e --arg o "maestro-remote-mac" '[.. | .command? // empty] | any(contains($o))' \
+jq -e --arg o "maestro-drive" '[.. | .command? // empty] | any(contains($o))' \
   "$CLAUDE_DIR/settings.json" >/dev/null 2>&1 \
   && no "uninstall removes our entries" "still registered" || ok "uninstall removes our entries"
 
@@ -1376,13 +1376,13 @@ echo "release tarball"
 # install, because a copy is where the interesting failures are: a symlink
 # install cannot drift from its source.
 TARBALL_CLAUDE="$TMP/tarball-claude"
-TARBALL_SKILL="$TARBALL_CLAUDE/skills/maestro-remote-mac"
+TARBALL_SKILL="$TARBALL_CLAUDE/skills/maestro-drive"
 if [ -f "$REPO/.github/workflows/release.yml" ]; then
   payload=$(sed -n 's/^ *"\$TAG" -- //p' "$REPO/.github/workflows/release.yml")
   [ -n "$payload" ] && ok "found the payload list in the workflow" || no "found the payload list in the workflow" "no git archive line"
-  mkdir -p "$TMP/tarball/maestro-remote-mac"
-  ( cd "$REPO" && tar -cf - $payload ) | ( cd "$TMP/tarball/maestro-remote-mac" && tar -xf - )
-  CLAUDE_DIR="$TARBALL_CLAUDE" "$TMP/tarball/maestro-remote-mac/install.sh" --yes >"$TMP/out" 2>&1 \
+  mkdir -p "$TMP/tarball/maestro-drive"
+  ( cd "$REPO" && tar -cf - $payload ) | ( cd "$TMP/tarball/maestro-drive" && tar -xf - )
+  CLAUDE_DIR="$TARBALL_CLAUDE" "$TMP/tarball/maestro-drive/install.sh" --yes >"$TMP/out" 2>&1 \
     && ok "a tarball install works" || no "a tarball install works" "$(tail -8 "$TMP/out")"
 else
   ok "no release workflow to check (--no-release)"
@@ -1395,20 +1395,20 @@ echo "the live tree is checked against what belongs in it (item 17)"
 # were invisible, and all three would have been destroyed by the next publish.
 if [ -d "$TARBALL_SKILL" ]; then
   # shellcheck source=manifest.sh
-  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-remote-mac"
+  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-drive"
     . "$REPO/manifest.sh"
     tree_matches 2>/dev/null ) \
     && ok "a clean install matches" || no "a clean install matches" "it did not"
 
   echo "a finding written into the live tree, as happened three times" > "$TARBALL_SKILL/reference/stray.md"
-  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-remote-mac"
+  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-drive"
     . "$REPO/manifest.sh"
     tree_matches 2>/dev/null ) \
     && no "a stray file in the live tree is caught" "it passed" || ok "a stray file in the live tree is caught"
   rm -f "$TARBALL_SKILL/reference/stray.md"
 
   mv "$TARBALL_SKILL/bin/resolve.py" "$TMP/resolve.py.held"
-  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-remote-mac"
+  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-drive"
     . "$REPO/manifest.sh"
     tree_matches 2>/dev/null ) \
     && no "a file missing from the live tree is caught" "it passed" || ok "a file missing from the live tree is caught"
@@ -1420,7 +1420,7 @@ if [ -d "$TARBALL_SKILL" ]; then
   mkdir -p "$TARBALL_SKILL/bin/__pycache__" "$TARBALL_SKILL/reference/staging"
   : > "$TARBALL_SKILL/bin/__pycache__/resolve.cpython-38.pyc"
   : > "$TARBALL_SKILL/reference/staging/some-project-tooling-findings.md"
-  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-remote-mac"
+  ( CLAUDE_DIR="$TARBALL_CLAUDE"; PKG="maestro-drive"
     . "$REPO/manifest.sh"
     tree_matches 2>/dev/null ) \
     && ok "__pycache__ and reference/staging are not strays" \

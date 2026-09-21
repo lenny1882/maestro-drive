@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove maestro-remote-mac from this machine.
+# Remove maestro-drive from this machine.
 #
 #   ./uninstall.sh                 ask before editing either config file
 #   ./uninstall.sh --yes           no prompts
@@ -11,8 +11,8 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SETTINGS="$CLAUDE_DIR/settings.json"
 CLAUDE_JSON="$HOME/.claude.json"
-LIB_DIR="$HOME/.local/share/maestro-remote-mac"
-STATE="${XDG_STATE_HOME:-$HOME/.local/state}/maestro-remote-mac"
+LIB_DIR="$HOME/.local/share/maestro-drive"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/maestro-drive"
 
 ASSUME_YES=0; KEEP_SETTINGS=0
 for a in "$@"; do

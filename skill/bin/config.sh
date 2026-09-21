@@ -37,7 +37,7 @@ _CONF_CACHE="${LDIR:-${TMPDIR:-/tmp}}/conf-path"
 _find_conf() {
   if [ -n "${MAESTRO_DRIVE_CONF:-}" ]; then
     [ -r "$MAESTRO_DRIVE_CONF" ] || {
-      echo "maestro-remote-mac: \$MAESTRO_DRIVE_CONF=$MAESTRO_DRIVE_CONF is not readable" >&2; return 1; }
+      echo "maestro-drive: \$MAESTRO_DRIVE_CONF=$MAESTRO_DRIVE_CONF is not readable" >&2; return 1; }
     echo "$MAESTRO_DRIVE_CONF"; return
   fi
   local d="$PWD"
@@ -75,7 +75,7 @@ if [ -n "${PROFILE:-}" ] && [ -n "$MAESTRO_DRIVE_CONF_FOUND" ]; then
     # shellcheck disable=SC1090
     . "$_pfile"
   else
-    echo "maestro-remote-mac: profile '$PROFILE' not found — expected $_pfile" >&2
+    echo "maestro-drive: profile '$PROFILE' not found — expected $_pfile" >&2
     exit 1
   fi
 fi
@@ -106,7 +106,7 @@ fi
 case "$TRANSPORT" in
   ssh | local | bridge) ;;
   *)
-    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
+    echo "maestro-drive: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac
@@ -356,7 +356,7 @@ unset _n
 # because the conf search is the same in both.
 if [ "$TRANSPORT" = bridge ] && [ -n "$APP_ID" ] && [ -z "$BRIDGE_DIR" ]; then
   cat >&2 <<MSG
-maestro-remote-mac: TRANSPORT=bridge with no BRIDGE_DIR.
+maestro-drive: TRANSPORT=bridge with no BRIDGE_DIR.
 
 The device is on this machine and this process cannot reach it, so scripts go
 to a helper through a directory both sides can see. Nothing says where that is.
@@ -379,7 +379,7 @@ fi
 if _fs_shared; then
   if [ -z "$APP_ID" ]; then
     cat >&2 <<MSG
-maestro-remote-mac: not configured for this project.
+maestro-drive: not configured for this project.
 
   TRANSPORT=$TRANSPORT  APP_ID=${APP_ID:-(unset)}
   searched: \$MAESTRO_DRIVE_CONF, .maestro-drive.conf from \$PWD upwards, ~/.maestro-drive.conf,
@@ -405,7 +405,7 @@ MSG
   fi
 elif [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
   cat >&2 <<MSG
-maestro-remote-mac: not configured for this project.
+maestro-drive: not configured for this project.
 
   MAC_HOST=${MAC_HOST:-(unset)}  MAC_FQDN=${MAC_FQDN:-(unset)}  APP_ID=${APP_ID:-(unset)}
   searched: \$MAESTRO_DRIVE_CONF, .maestro-drive.conf from \$PWD upwards, ~/.maestro-drive.conf,
@@ -512,7 +512,7 @@ PY
   if [ -n "$_perm_missing" ]; then
     : > "$_PERM_WARNED"
     cat >&2 <<MSG
-maestro-remote-mac: no permission allow covers these calls, so each one will
+maestro-drive: no permission allow covers these calls, so each one will
 wait for a prompt:
 
 $(printf '%s\n' "$_perm_missing" | sed 's/^/  /; s/$/ .../')

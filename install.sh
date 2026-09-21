@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installer for maestro-remote-mac.
+# Installer for maestro-drive.
 #
 #   ./install.sh           install
 #   ./install.sh --link    symlink instead of copying, for working on the repo
@@ -23,7 +23,7 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 # Claude Code keeps mcpServers here, not in settings.json. The file also holds
 # project records and auth state, so it is never rewritten in place.
 CLAUDE_JSON="$HOME/.claude.json"
-LIB_DIR="$HOME/.local/share/maestro-remote-mac"
+LIB_DIR="$HOME/.local/share/maestro-drive"
 
 LINK=0; ASSUME_YES=0; DRY=0; BRIDGE_FLAG=ask
 for a in "$@"; do
@@ -215,7 +215,7 @@ fi
 # which is what the wizard is for. The marker is a phase A flag — networks
 # themselves are discoverable from the three files, so nothing else is tracked.
 step "SSH and network setup"
-WIZARD="$CLAUDE_DIR/skills/maestro-remote-mac/setup/wizard.sh"
+WIZARD="$CLAUDE_DIR/skills/maestro-drive/setup/wizard.sh"
 [ -x "$WIZARD" ] || WIZARD="$REPO/skill/setup/wizard.sh"
 if [ -e "$LIB_DIR/phase-a-done" ]; then
   ok "phase A done $(cat "$LIB_DIR/phase-a-done" 2>/dev/null)"

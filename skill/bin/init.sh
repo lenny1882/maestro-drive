@@ -345,7 +345,7 @@ if [ "$WRITE" = 1 ]; then
   fi
   if [ "$LOCAL" = 1 ]; then
     cat > "$OUT" <<EOF
-# maestro-remote-mac — settings for this project.
+# maestro-drive — settings for this project.
 # Written by bin/init.sh. The := form means anything already exported wins,
 # so a one-off run can override a single value without editing this file.
 
@@ -359,7 +359,7 @@ if [ "$WRITE" = 1 ]; then
 EOF
   else
     cat > "$OUT" <<EOF
-# maestro-remote-mac — settings for this project.
+# maestro-drive — settings for this project.
 # Written by bin/init.sh. The := form means anything already exported wins,
 # so a one-off run can override a single value without editing this file.
 

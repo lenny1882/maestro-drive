@@ -26,8 +26,8 @@ name: Release
 # README) instead, and uploads it under a fixed filename so update.sh and the
 # README's install one-liner can both find it without knowing the version
 # number in advance:
-# .../releases/latest/download/maestro-remote-mac.tar.gz always resolves to
-# the newest one, and .../releases/download/vX.Y.Z/maestro-remote-mac.tar.gz
+# .../releases/latest/download/maestro-drive.tar.gz always resolves to
+# the newest one, and .../releases/download/vX.Y.Z/maestro-drive.tar.gz
 # to a specific one.
 
 on:
@@ -54,14 +54,22 @@ jobs:
       - name: Test
         run: ./test/run-tests.sh
 
+      # TWO ASSET NAMES, for the rename (BACKLOG item 98). An installed copy runs
+      # the update.sh it was installed with, and every copy from before the
+      # rename asks for maestro-remote-mac.tar.gz. GitHub redirects the repo
+      # slug, so the URL resolves — but an asset that is not there is a 404 and
+      # those installs would stop updating at the last release under the old
+      # name. The old name is a byte-for-byte copy of the new one and can be
+      # dropped once nobody is on a pre-rename install.
       - name: Build install tarball
         env:
           TAG: ${{ github.ref_name }}
         run: |
           git archive --format=tar.gz \
-            --prefix="maestro-remote-mac/" \
-            -o "maestro-remote-mac.tar.gz" \
+            --prefix="maestro-drive/" \
+            -o "maestro-drive.tar.gz" \
             "$TAG" -- skill lib manifest.sh install.sh uninstall.sh update.sh VERSION README.md
+          cp "maestro-drive.tar.gz" "maestro-remote-mac.tar.gz"
 
       - name: Create GitHub Release
         env:
@@ -76,4 +84,5 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             "${prerelease_flag[@]}" \
+            "maestro-drive.tar.gz" \
             "maestro-remote-mac.tar.gz"

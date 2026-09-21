@@ -81,7 +81,7 @@ Generate one for this purpose rather than reusing a personal key, and install
 it on the Mac:
 
 ```sh
-ssh-keygen -t ed25519 -N '' -f ~/.ssh/mac_rc -C "maestro-remote-mac"
+ssh-keygen -t ed25519 -N '' -f ~/.ssh/mac_rc -C "maestro-drive"
 ssh-copy-id -i ~/.ssh/mac_rc.pub <mac-user>@<mac-ip>
 ```
 
@@ -231,7 +231,7 @@ ordered and couples two packages that know nothing about each other.
   "hooks": [
     {
       "type": "command",
-      "command": "bash ~/.claude/skills/maestro-remote-mac/hooks/gate-journey-first.sh"
+      "command": "bash ~/.claude/skills/maestro-drive/hooks/gate-journey-first.sh"
     }
   ]
 }
@@ -260,7 +260,7 @@ hand and inherits it (BACKLOG item 67).
     "hooks": [
       {
         "type": "command",
-        "command": "bash ~/.claude/skills/maestro-remote-mac/hooks/rig-down-on-end.sh"
+        "command": "bash ~/.claude/skills/maestro-drive/hooks/rig-down-on-end.sh"
       }
     ]
   }
@@ -274,7 +274,7 @@ with no `.maestro-drive.conf` and no claim file there is nothing to take down.
 
 **Both hooks ship with the skill and both are registered for you.** They live in
 the repo's `skill/hooks/`, and `install.sh` puts the whole `skill/` directory at
-`~/.claude/skills/maestro-remote-mac`, then writes the two blocks above into
+`~/.claude/skills/maestro-drive`, then writes the two blocks above into
 `settings.json` with the resolved path.
 
 That reverses an earlier decision to register neither, on the grounds that both
@@ -286,8 +286,8 @@ situation it exists to prevent. A skill whose hooks need a hand-edit of
 
 Both blocks are shown above so you can recognise them. `./install.sh --dry-run`
 prints the diff before writing, `settings.json` is copied to
-`settings.json.bak-maestro-remote-mac` first, and `./uninstall.sh` removes both
-entries — it finds them by the `maestro-remote-mac` in their path, so an entry
+`settings.json.bak-maestro-drive` first, and `./uninstall.sh` removes both
+entries — it finds them by the `maestro-drive` in their path, so an entry
 you have since edited by hand is still removed as long as the path survives.
 
 ## 6. Project settings
@@ -322,7 +322,7 @@ exists while something holds a Maestro session open — in practice, this server
 "maestro-mac": {
   "type": "stdio",
   "command": "bash",
-  "args": ["/home/<you>/.claude/skills/maestro-remote-mac/bin/mcp.sh"]
+  "args": ["/home/<you>/.claude/skills/maestro-drive/bin/mcp.sh"]
 }
 ```
 
@@ -335,7 +335,7 @@ as the command, for the same exec-bit reason as the hooks.
 
 `~/.claude.json` is not `settings.json`: it also holds your project records and
 login state. The installer writes a temp file beside it and renames it rather
-than rewriting it in place, and keeps `~/.claude.json.bak-maestro-remote-mac`.
+than rewriting it in place, and keeps `~/.claude.json.bak-maestro-drive`.
 Claude Code writes that file itself while it is running and concurrent writes
 are a known way to corrupt it, so install from a terminal with no session
 running where you can.
@@ -343,7 +343,7 @@ running where you can.
 To register it by hand instead:
 
 ```sh
-claude mcp add --scope user maestro-mac -- bash ~/.claude/skills/maestro-remote-mac/bin/mcp.sh
+claude mcp add --scope user maestro-mac -- bash ~/.claude/skills/maestro-drive/bin/mcp.sh
 ```
 
 `bin/mcp.sh` sources `lib.sh`, picks the right SSH alias from
@@ -379,19 +379,19 @@ your simulator.
 From the newest release, with no clone:
 
 ```sh
-curl -fsSL https://github.com/lenny1882/maestro-remote-mac/releases/latest/download/maestro-remote-mac.tar.gz | tar -xz
-cd maestro-remote-mac && ./install.sh
+curl -fsSL https://github.com/lenny1882/maestro-drive/releases/latest/download/maestro-drive.tar.gz | tar -xz
+cd maestro-drive && ./install.sh
 ```
 
 Or from a checkout, if you intend to work on the toolkit itself:
 
 ```sh
-git clone https://github.com/lenny1882/maestro-remote-mac && cd maestro-remote-mac
+git clone https://github.com/lenny1882/maestro-drive && cd maestro-drive
 ./install.sh --link
 ```
 
 `--link` symlinks `skill/` in place of copying it, so edits to the checkout are
-live and nothing you write under `~/.claude/skills/maestro-remote-mac` is lost
+live and nothing you write under `~/.claude/skills/maestro-drive` is lost
 to the next install. Claude Code follows the symlink. Either way the installer
 ends by resolving an element out of a captured hierarchy, so an install that
 landed but cannot run says so rather than reporting success.
@@ -411,8 +411,8 @@ ignored:
 
 ```sh
 cd <the project you drive from>
-~/.claude/skills/maestro-remote-mac/bin/init.sh --local --detect
-~/.claude/skills/maestro-remote-mac/bin/init.sh --local --app <bundle-id or applicationId> \
+~/.claude/skills/maestro-drive/bin/init.sh --local --detect
+~/.claude/skills/maestro-drive/bin/init.sh --local --app <bundle-id or applicationId> \
     --repo <checkout here> --write
 ```
 
@@ -420,9 +420,9 @@ Across a network:
 
 ```sh
 cd <the project you drive from>
-~/.claude/skills/maestro-remote-mac/bin/init.sh --detect                 # aliases here
-~/.claude/skills/maestro-remote-mac/bin/init.sh --host <alias> --detect  # sims, apps, checkouts
-~/.claude/skills/maestro-remote-mac/bin/init.sh --host <alias> \
+~/.claude/skills/maestro-drive/bin/init.sh --detect                 # aliases here
+~/.claude/skills/maestro-drive/bin/init.sh --host <alias> --detect  # sims, apps, checkouts
+~/.claude/skills/maestro-drive/bin/init.sh --host <alias> \
     --fqdn <mac>.local --app <bundle-id> \
     --repo <checkout on the Mac> --write
 ```
@@ -441,7 +441,7 @@ That writes `.maestro-drive.conf` and creates `maestro/journeys/` and
 `maestro/app-notes.md`. Then, once per machine, push the Mac-side helpers:
 
 ```sh
-~/.claude/skills/maestro-remote-mac/bin/install.sh
+~/.claude/skills/maestro-drive/bin/install.sh
 ```
 
 ## 10. Prove it, in order
