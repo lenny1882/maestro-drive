@@ -74,9 +74,10 @@ fi
 
 echo "# no relay published - falling back to SSH (run ./publish.sh for ~7x)" >&2
 d=$(_dev) || exit 1
-# The same three verbs, run ON THE MAC against its own loopback. $grpc_proxy is
-# not set there, so the module curls direct and the base URI is the only
-# difference between this and the fast path above.
+# The same three verbs, run on the machine WITH the device, against its own
+# loopback. The module curls direct there in both transports and the base URI is
+# the only difference between this and the fast path above: ssh does not forward
+# $grpc_proxy to the Mac, and locally lib.sh empties it (item 94, 4.2).
 _ssh "set -e
 V=\$(RDIR='$RDIR' sh '$FW_REMOTE' inspect '$d' '$RDIR/vmservice-$d')
 V=\$(printf '%s\\n' \"\$V\" | tail -1)

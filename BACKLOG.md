@@ -583,10 +583,34 @@ new — both helpers in both transports, a local driver that does not answer
 starting no relay and naming port 22087, and `stop` killing nothing. No live
 local run yet; that is 5.2.
 
-**4.2 `$grpc_proxy` on every curl.** It is the sandbox's egress proxy, needed to
-reach another machine's LAN address. Locally it must not be set, or the request
-leaves for a proxy that will refuse it. *Files:* the curl call sites under
-`skill/bin`. *Done when:* no local request carries a proxy variable.
+**4.2 DONE 21 Sep — `$grpc_proxy` on every curl.** It is the sandbox's egress
+proxy, the only route to another machine's LAN address. Locally the target is
+this machine's loopback, which a proxy refuses — and the refusal reads as the
+service being down. `lib.sh` empties the variable in local transport and
+exports it; `curl -x ""` is curl's own spelling of no proxy.
+
+**Emptied in one place rather than branched at four, because one call site is
+not in this package.** `publish.sh` and `net.sh` curl directly, but the third
+reader is `runners/flutter/framework.sh:25`, which chooses with
+`[ -n "${grpc_proxy:-}" ]` in a process those scripts spawn. It inherits the
+environment, so an exported empty value answers all three — and the module
+needed no edit, which matters because every runner module carries that same
+line from the TEMPLATE.
+
+**It was wrong locally in a way ssh hid.** Across ssh the Mac-side verbs never
+see the proxy, because ssh does not forward the environment. 2.1 made `_ssh`
+run the same script through `sh -c` here, where it inherits everything — so a
+local `net.sh` fallback would have sent its loopback read to the sandbox proxy
+while its remote twin went direct.
+
+**Defaulted in both transports, which fixes a crash that was never about the
+transport.** Every caller runs under `set -u`, and `curl -x "$grpc_proxy"` with
+the variable unset is an unbound-variable abort rather than a direct request —
+that is the state outside a Claude sandbox, where the ssh path also runs.
+
+**Verified:** 464 passed, 0 failed, three new — a set proxy emptied locally and
+seen empty by a child process, left alone across ssh, and empty rather than
+unbound when nothing set it.
 
 **4.3 The wall.** `wall.py:807` binds `0.0.0.0` and `wall.sh:35-36` builds
 `http://$MAC_FQDN:$WALLPORT/` unless `WALL_URL` is set. `WALL_URL` may already

@@ -8,6 +8,27 @@
 
 mkdir -p "$LDIR"
 
+# The sandbox's egress proxy, and whether a curl from here goes through it
+# (item 94, 4.2).
+#
+# Across ssh it must: the sandbox has no direct route off this machine, so every
+# read of the Mac's published relay is `curl -x "$grpc_proxy"`. Locally it must
+# not — the target is this machine's own loopback, and a loopback address handed
+# to the proxy comes back refused, which reads as the service being down.
+#
+# Emptied here rather than branched at each call site, because the call sites
+# are not all in this package: bin/publish.sh and bin/net.sh curl directly, and
+# the framework module chooses by `[ -n "$grpc_proxy" ]` in a process this one
+# spawns. One exported empty value answers all three, and `curl -x ""` is curl's
+# own spelling of "no proxy".
+#
+# Defaulted in BOTH transports because every caller runs under `set -u`, where a
+# bare "$grpc_proxy" outside the sandbox is an unbound-variable crash rather
+# than a direct request.
+: "${grpc_proxy:=}"
+if [ "${TRANSPORT:-ssh}" = local ]; then grpc_proxy=; fi
+export grpc_proxy
+
 # Where the runner modules are, on each side (BACKLOG item 87). Plain paths
 # rather than a call to bin/runner.sh: runner.sh sources THIS file, and every
 # _dev would otherwise pay for a subprocess to learn something config.sh already

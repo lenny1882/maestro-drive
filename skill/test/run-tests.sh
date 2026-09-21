@@ -2540,6 +2540,35 @@ grep -q 'pkill' "$TMP/nrl.log" 2>/dev/null \
   || ok "and stop kills nothing"
 
 echo
+echo "local transport: the sandbox proxy is not on the way to a loopback (item 94, 4.2)"
+# A proxy handed a 127.0.0.1 target refuses it, and the refusal reads as the
+# service being down. The value is emptied rather than each call site branching,
+# because one of the call sites is the framework module, in a process bin/net.sh
+# spawns — so the check is what a CHILD sees, not just this shell.
+px_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null grpc_proxy=http://proxy:3128 bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  sh -c "printf %s \"\${grpc_proxy-UNSET}\""' 2>/dev/null)
+[ -z "$px_out" ] \
+  && ok "locally a set proxy is emptied, and the module inherits the empty value" \
+  || no "locally a set proxy is emptied, and the module inherits the empty value" "child saw '$px_out'"
+
+px_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null grpc_proxy=http://proxy:3128 bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  sh -c "printf %s \"\${grpc_proxy-UNSET}\""' 2>/dev/null)
+[ "$px_out" = "http://proxy:3128" ] \
+  && ok "across ssh the proxy is left alone — it is the only route to the Mac" \
+  || no "across ssh the proxy is left alone — it is the only route to the Mac" "child saw '$px_out'"
+
+# Outside a sandbox there is no proxy at all, and every caller runs under set -u:
+# a bare "$grpc_proxy" there is an unbound-variable crash, not a direct request.
+px_out=$(env -u grpc_proxy MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  set -u; . '"$REPO"'/bin/lib.sh 2>/dev/null
+  printf "[%s]" "$grpc_proxy"' 2>&1)
+[ "$px_out" = "[]" ] \
+  && ok "with no proxy set at all it is empty, not unbound" \
+  || no "with no proxy set at all it is empty, not unbound" "got '$px_out'"
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
