@@ -1,8 +1,12 @@
 # maestro-remote-mac
 
-A Claude Code skill for driving an iOS simulator that lives on a different
-machine — tapping, typing, swiping, reading the screen and running whole UI
-journeys from a Linux box, over SSH and HTTP to a Mac.
+A Claude Code skill for driving a simulator or emulator — tapping, typing,
+swiping, reading the screen and running whole UI journeys — wherever the device
+is. `TRANSPORT` in the project's conf says which: `ssh` for a Mac across the
+network, which is what this was built for and what most of this page describes,
+or `local` for a device on the machine running the skill, where nothing goes
+over ssh and every URL is `127.0.0.1`. The local path is covered by the test
+suite and has not yet driven a real device.
 
 The problem it solves is that the obvious route does not work. Maestro's own MCP
 server compiles the driver port in as a literal `22087` with no override, and
@@ -66,8 +70,9 @@ registration.
 
 ## Install
 
-Needs `jq`. The machine you install it on is the Linux box, not the Mac —
-nothing is installed on the Mac beyond Maestro itself.
+Needs `jq`. Install it on the machine you drive *from* — across a network that
+is the Linux box and not the Mac, where nothing is installed beyond Maestro
+itself; locally it is the one machine there is.
 
     curl -fsSL https://github.com/lenny1882/maestro-remote-mac/releases/latest/download/maestro-remote-mac.tar.gz | tar -xz
     cd maestro-remote-mac && ./install.sh

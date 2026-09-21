@@ -720,12 +720,31 @@ the answer in item 87's 4.4, not here. *Files:*
 run against a booted emulator, each one's header says measured rather than
 documented, and 4.4's question has an answer with the command that produced it.
 
-**5.4 The docs stop describing a Mac across a network as the only shape.**
-`SKILL.md`, `README.md`, `reference/setup.md`. `setup.md` is entirely SSH and
-network setup — locally none of its seven parts apply, which is a section
-saying so rather than a rewrite. *Files:* `skill/SKILL.md`, `README.md`,
-`skill/reference/setup.md`. *Done when:* a local reader is not sent through
-`ssh-copy-id`.
+**5.4 DONE 21 Sep — the docs stop describing a Mac across a network as the only
+shape.** A section in each of the three, not a rewrite.
+
+**`setup.md` gets a table of the ten steps and what each one is locally.** Six
+are about a machine that is not in the picture: the SSH key, `~/.ssh/config`
+and `/etc/hosts` are skipped outright, step 1's checks move to this machine, and
+step 9 becomes `init.sh --local`. `ssh-copy-id` now appears only inside step 2,
+which the table sends a local reader past.
+
+**`SKILL.md` says it once, at the top, and then says how to read the rest.**
+Thirteen lines below it say "on the Mac", and rewriting them would be thirteen
+chances to get one wrong; the entry says `TRANSPORT` decides which machine has
+the device and that "on the Mac" means "on the machine with the device".
+
+**The frontmatter description changed, which is how the skill is found.** It
+said "an already-running iOS simulator app on the remote Mac". Every trigger
+phrase is kept; what it now covers is a simulator or an emulator, on a remote
+Mac or on this machine.
+
+**All three say the local path has not driven a real device.** It is covered by
+the suite and nothing else, and a reader who hits something should expect to be
+the first. That line comes out when 5.2 does.
+
+**Verified:** 493 passed, 0 failed, four new — each of the three documents
+naming `TRANSPORT`, and `setup.md` carrying the skip table.
 
 **5.5 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
 describes one of two shapes once this lands. A rename is the repo, the installed

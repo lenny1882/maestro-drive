@@ -1,10 +1,39 @@
 # Setting this up on a new machine
 
+This page is about the Mac across a network, which is one of the two shapes this
+package drives. If the simulator or emulator is on the machine you are sitting
+at, read **A device on this machine** below and skip most of what follows.
+
 Everything the skill does happens on the Mac, so a new Linux box needs four
 things wired up before any of it runs: a way to reach the Mac over SSH, a way
 to reach it over HTTP, an `maestro-mac` MCP server registered with Claude Code,
 and the skill itself on disk. `bin/init.sh` covers only the last step —
 per-project settings — and assumes all of this already works.
+
+## A device on this machine
+
+`TRANSPORT=local` in `.maestro-mac.conf` means the device is here and nothing
+goes over ssh. Six of the ten steps below are then about a machine that is not
+in the picture:
+
+| step | locally |
+| --- | --- |
+| 1. On the Mac | the same checks, on **this** machine: Maestro, Java, python3, and the platform's own toolchain — Xcode for iOS, the Android SDK for an emulator. Remote Login and the firewall exception are not needed |
+| 2. The SSH key | **skip.** Nothing connects to anything |
+| 3. `~/.ssh/config` | **skip** |
+| 4. `/etc/hosts` | **skip.** Every URL the skill builds is `127.0.0.1` |
+| 5. Claude Code global settings | the `ssh`/`scp` permission entries are not used; the hooks are |
+| 6. Project settings | the same |
+| 7. Register the MCP server | the same entry. `bin/mcp.sh` reads the conf and execs `maestro mcp` here instead of over ssh |
+| 8. Install the skill | the same |
+| 9. Per project | `bin/init.sh --local --detect`, then `--local --app <id> --write`. `bin/install.sh` has nothing to copy and says so |
+| 10. Prove it | `bin/preflight.sh`, `bin/wall.sh`, `bin/drivers.sh up` — the ssh and `$grpc_proxy` lines do not apply |
+
+Nobody is sent through `ssh-copy-id` to drive a device that is already here.
+
+**Not yet run end to end.** Every local path is covered by the test suite and
+none of it has driven a real device (BACKLOG item 94, 5.2). The first person to
+try it should expect to find things, and should write down what they find.
 
 Placeholders below, used consistently — substitute your own and nothing else
 needs changing:
@@ -369,7 +398,18 @@ newest release and re-runs it for you.
 
 ## 9. Per project
 
-Only now does `bin/init.sh` apply:
+Only now does `bin/init.sh` apply. For a device on this machine it is
+`--local` instead, and the two flags that name a Mac are refused rather than
+ignored:
+
+```sh
+cd <the project you drive from>
+~/.claude/skills/maestro-remote-mac/bin/init.sh --local --detect
+~/.claude/skills/maestro-remote-mac/bin/init.sh --local --app <bundle-id or applicationId> \
+    --repo <checkout here> --write
+```
+
+Across a network:
 
 ```sh
 cd <the project you drive from>

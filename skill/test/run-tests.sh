@@ -2786,6 +2786,22 @@ MCPMARK="$LP/mcpmark" TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="
   || no "mcp.sh execs the server on this machine, not through ssh" "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
 
 echo
+echo "the docs describe both shapes (item 94, 5.4)"
+# A reader whose device is on this machine must not be sent through the SSH
+# setup. The entry point, the README and the setup page each have to say that
+# where the device is is a setting.
+for f in SKILL.md ../README.md reference/setup.md; do
+  n=$(basename "$f")
+  grep -q 'TRANSPORT' "$REPO/$f" 2>/dev/null \
+    && ok "$n says where the device is is a setting" \
+    || no "$n says where the device is is a setting" "no mention of TRANSPORT"
+done
+# Step 2 is ssh-copy-id. The local table has to send the reader past it.
+grep -q 'skip' "$REPO/reference/setup.md" && grep -q 'ssh-copy-id' "$REPO/reference/setup.md" \
+  && ok "setup.md names the steps a local machine skips" \
+  || no "setup.md names the steps a local machine skips" "no skip table"
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
