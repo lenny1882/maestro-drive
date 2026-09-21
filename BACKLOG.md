@@ -159,13 +159,40 @@ the host's loopback, which the sandbox cannot reach. `_urlhost` and
 
 **Stage 1 — the channel.**
 
-**1.1 `remote/bridge.sh`, the host-side helper.** Reads a request id from a
+**1.1 DONE 21 Sep — `remote/bridge.sh`, the host-side helper.** Reads a request id from a
 control FIFO, runs the script that request carries, streams stdout and stderr
 back down two FIFOs the client made, writes the exit status to a file. One
 directory per session under the shared scratch, with a random component in its
 name. Every script it runs is appended to a log beside it. *Done when:* a script
 sent from the sandbox runs on the host and its output comes back, and the log
 shows what ran.
+
+**One request, one set of files, so concurrent calls cannot collide.** The
+control FIFO is a doorbell carrying an id; everything else is `<id>.cmd`,
+`<id>.in`, `<id>.out`, `<id>.err`, `<id>.rc`. `out` and `err` are FIFOs the
+client makes, which is what keeps the streaming real — opening them blocks until
+the client is reading, so output arrives as the script produces it rather than
+as a file read at the end. Measured in the suite: the first line of
+`echo first; sleep 2; echo second` arrives in under a second.
+
+**The starting is what the harness objects to, not the mechanism.** Running the
+helper detached from the Bash tool was refused as *Containment Escape*, which is
+a fair reading of what it is. Started inside a single call and stopped at the
+end it is permitted — which is how the suite exercises it, and how the MCP
+server will start it for real (2.1).
+
+**Four repairs to item 95's cases came with this unit**, because the machine
+changed underneath them: the apt JDK was removed and its replacement is a
+version manager sourced from `.bashrc`, which a non-interactive shell does not
+read. The suite now keeps `REAL_HOME` from before it redirects `HOME` — rung 1
+asks the login shell, and the login shell's init is in the user's own home —
+skips rather than fails when a machine has no JDK on any rung, and builds a
+findable JDK for the two cases that need the fallback to succeed.
+
+**Verified:** 512 passed, 0 failed, nine new — stdout and stderr on separate
+channels, the script's own exit status, stdin forwarded, the first line arriving
+before the script has finished, the log carrying every script, and a directory
+owned by somebody else being refused.
 
 **1.2 `_ssh` gains the bridge branch, and the payload assembly is factored out.**
 The message is the same three parts in every transport — environment prefix,

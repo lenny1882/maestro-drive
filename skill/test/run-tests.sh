@@ -28,6 +28,10 @@ FIX="$REPO/test/fixtures"
 # Scratch, and HOME redirected with it: nothing here may touch the real config
 # or the real ~/.ssh.
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# The real one, kept before HOME is redirected: remote/javahome.sh asks the
+# login shell where its JDK is, and the login shell's init is in the user's own
+# home. A case that needs a real machine's real answer uses this (item 95).
+REAL_HOME=$HOME
 export HOME="$TMP/home"; mkdir -p "$HOME"
 # $TMPDIR with it: config.sh remembers the conf it found under $LDIR, which
 # defaults to $TMPDIR (item 71), and a case that sources config.sh without
@@ -2751,7 +2755,7 @@ lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c
 printf '#!/usr/bin/env bash\necho "SSH WAS CALLED" >&2\nexit 99\n' > "$LP/bin/ssh"
 chmod +x "$LP/bin/ssh"
 lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" PATH="$LP/bin:$PATH" bash -c \
-  "$LPLIB; _ssh 'printf ran-here'" 2>&1)
+  "$LPLIB; _ssh 'printf ran-here'" 2>/dev/null)
 [ "$lp" = "ran-here" ] \
   && ok "_ssh runs the script on this machine and never reaches for ssh" \
   || no "_ssh runs the script on this machine and never reaches for ssh" "got '$lp'"
@@ -2813,10 +2817,16 @@ JH="$TMP/jh"; mkdir -p "$JH/bin" "$JH/empty"
 # A PATH with the three tools the script uses and no java on it. An empty PATH
 # would fail for the wrong reason — env could not find sh to run it with.
 for _t in sh dirname readlink; do ln -sf "$(command -v $_t)" "$JH/bin/$_t"; done
-jh_out=$(sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
-{ [ "$jh_rc" = 0 ] && [ -x "$jh_out/bin/java" ]; } \
-  && ok "javahome.sh finds this machine's JDK and prints its home" \
-  || no "javahome.sh finds this machine's JDK and prints its home" "rc=$jh_rc out='$jh_out'"
+jh_out=$(HOME="$REAL_HOME" sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
+if [ "$jh_rc" = 0 ]; then
+  [ -x "$jh_out/bin/java" ] \
+    && ok "javahome.sh finds this machine's JDK and prints its home" \
+    || no "javahome.sh finds this machine's JDK and prints its home" "rc=0 but no java under '$jh_out'"
+else
+  # Not a failure. A machine with no JDK is the case the next assertion is
+  # about, and this suite must not require one to be installed.
+  echo "  skip  javahome.sh finds this machine's JDK — this machine has none on any rung"
+fi
 
 # A machine with no java at all must say so rather than name a directory that
 # happens to exist elsewhere. An empty PATH, an empty HOME so no dotfile sets
@@ -2879,7 +2889,13 @@ jh_out=$(env -u JAVA_HOME HOME="$JH/empty" SHELL=/bin/sh PATH="$JH/shim:$JH/bin"
 # A recorded RJAVA that no longer exists must not be exported. Maestro's CLI is
 # a Gradle start script: a JAVA_HOME that is set and wrong aborts it, where an
 # absent one lets the fallback find whatever is there now.
-jh_out=$(RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+#
+# A JDK the fallback can reach without an interactive shell, because this
+# machine's real one is only on the login shell's PATH (item 95, rung 1).
+mkdir -p "$JH/onpath/bin"
+printf '#!/bin/sh\nexit 0\n' > "$JH/onpath/bin/java"; chmod +x "$JH/onpath/bin/java"
+JH_PATH="$JH/onpath/bin:$PATH"
+jh_out=$(PATH="$JH_PATH" RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
   '. '"$REPO"'/bin/lib.sh 2>/dev/null; sh -c "$LOCAL_ENV
 printf JH=%s \"\$JAVA_HOME\"" 2>/dev/null' 2>/dev/null)
 case "$jh_out" in
@@ -2896,11 +2912,96 @@ esac
 
 # init.sh records it as a finding.
 JHI="$TMP/jhinit"; mkdir -p "$JHI"
-( cd "$JHI" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
+( cd "$JHI" && PATH="$JH_PATH" MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
     --app com.example.app --write >/dev/null 2>&1 )
 grep -q '"${RJAVA:=/' "$JHI/.maestro-mac.conf" 2>/dev/null \
   && ok "init.sh --local records the JDK it found as RJAVA" \
   || no "init.sh --local records the JDK it found as RJAVA" "$(grep -n RJAVA "$JHI/.maestro-mac.conf" 2>/dev/null | head -2)"
+
+echo
+echo "the bridge helper carries what _ssh carries (item 96, 1.1)"
+# One script in, stdin attached, stdout and stderr streamed back separately, the
+# real exit status. Those four are what every call site already depends on: half
+# of them read output line by line, publish.sh tells exit 2 from exit 1, and
+# wall.sh pipes into a cat on the far side.
+#
+# The helper is started here and killed at the end of the block. In use it is
+# started outside the sandbox, which is the whole point of it — but the protocol
+# is the same either way, and this exercises the protocol.
+BR="$TMP/bridge"; mkdir -p "$BR"
+sh "$REPO/remote/bridge.sh" "$BR" > "$BR/serve.log" 2>&1 &
+BR_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR" \
+  && ok "the helper comes up and opens its control fifo" \
+  || no "the helper comes up and opens its control fifo" "$(cat "$BR/serve.log" 2>/dev/null | head -2)"
+
+# _bridge_call <id> <script> [stdin-text] -- the client half, spelled out here so
+# the test exercises the protocol rather than a helper function's idea of it.
+_bridge_call() {
+  local id=$1 script=$2 input=${3:-}
+  printf '%s\n' "$script" > "$BR/$id.cmd"
+  printf '%s' "$input" > "$BR/$id.in"
+  echo 20 > "$BR/$id.tmo"
+  rm -f "$BR/$id.out" "$BR/$id.err" "$BR/$id.rc"
+  mkfifo "$BR/$id.out" "$BR/$id.err"
+  cat "$BR/$id.err" > "$BR/$id.errtext" &
+  echo "$id" > "$BR/control"
+  cat "$BR/$id.out"
+  timeout 5 sh -c 'until [ -f "$1" ]; do :; done' _ "$BR/$id.rc"
+}
+
+brout=$(_bridge_call one 'echo out-line; echo err-line >&2; exit 7')
+brrc=$(cat "$BR/one.rc" 2>/dev/null)
+[ "$brout" = "out-line" ] \
+  && ok "stdout comes back, and only stdout" \
+  || no "stdout comes back, and only stdout" "got '$brout'"
+[ "$(cat "$BR/one.errtext" 2>/dev/null)" = "err-line" ] \
+  && ok "stderr comes back on its own channel" \
+  || no "stderr comes back on its own channel" "got '$(cat "$BR/one.errtext" 2>/dev/null)'"
+[ "$brrc" = "7" ] \
+  && ok "the exit status is the script's own, not the channel's" \
+  || no "the exit status is the script's own, not the channel's" "got '$brrc'"
+
+brout=$(_bridge_call two 'cat' 'piped-in')
+[ "$brout" = "piped-in" ] \
+  && ok "stdin is forwarded — wall.sh label pipes into a cat on the far side" \
+  || no "stdin is forwarded — wall.sh label pipes into a cat on the far side" "got '$brout'"
+
+brout=$(_bridge_call three 'echo first; echo second')
+[ "$(printf '%s' "$brout" | tr "\n" " ")" = "first second" ] \
+  && ok "several lines come back, in order" \
+  || no "several lines come back, in order" "got '$brout'"
+
+# Streaming rather than a file read at the end, which lib.sh calls load-bearing:
+# journeys read line by line and shot.sh pipes base64 through. The first line
+# has to arrive while the script is still running, so this reads one line and
+# checks the clock rather than checking the whole output.
+printf 'echo first; sleep 2; echo second\n' > "$BR/four.cmd"
+: > "$BR/four.in"; echo 20 > "$BR/four.tmo"
+rm -f "$BR/four.out" "$BR/four.err"; mkfifo "$BR/four.out" "$BR/four.err"
+cat "$BR/four.err" >/dev/null &
+echo four > "$BR/control"
+br_t0=$(date +%s)
+br_first=$(timeout 10 head -1 < "$BR/four.out")
+br_t1=$(date +%s)
+{ [ "$br_first" = "first" ] && [ $((br_t1 - br_t0)) -lt 2 ]; } \
+  && ok "the first line arrives before the script has finished" \
+  || no "the first line arrives before the script has finished" \
+       "got '$br_first' after $((br_t1 - br_t0))s"
+
+# Every script it runs is in the log, which is what makes it auditable.
+grep -q 'echo out-line' "$BR/log" 2>/dev/null \
+  && ok "every script is appended to the log" \
+  || no "every script is appended to the log" "not in $BR/log"
+
+# A directory owned by somebody else is a door somebody else propped open.
+brout=$(sh "$REPO/remote/bridge.sh" /tmp 2>&1); brrc=$?
+{ [ "$brrc" != 0 ] && printf '%s' "$brout" | grep -q 'owned by'; } \
+  && ok "it refuses a directory that is not ours" \
+  || no "it refuses a directory that is not ours" "rc=$brrc: $brout"
+
+kill $BR_PID 2>/dev/null
+wait $BR_PID 2>/dev/null
 
 echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
