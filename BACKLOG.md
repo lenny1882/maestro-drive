@@ -96,7 +96,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep**
+## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep; reproduced and the first decision settled 21 Sep — the conf lists all three aliases and the server starts**
 
 `maestro-mac` failed to connect for this entire session — `CONNECTION_CLOSED`,
 every time, including after `/mcp` reconnects. Nothing else was wrong: the Mac
@@ -110,11 +110,38 @@ one candidate, cannot reach it, and the server exits before it speaks a word of
 MCP; Claude Code reports that a server closed the connection, which reads as a
 broken install.
 
-**Three things to decide, not one to fix.**
+**`maestro-bridge` shows the same sentence for an unrelated reason, and the two
+were conflated on 21 Sep.** That server takes no conf and touches no Mac, so a
+network change cannot close it; it failed at session start because the session
+was spawned before item 98 renamed the skill directory, and it connected on the
+next restart with no change made. Both entries in `~/.claude.json` name
+`~/.claude/skills/maestro-drive/bin/`. `CONNECTION_CLOSED` names the transport
+and nothing else, so which server said it is the first thing to establish.
 
-**Where the aliases live.** `MAC_HOST` may name several, and `_pick_host` walks
-them — but this conf names one. A conf listing all three would have found the
-Mac by itself, which is what item 18 built the list for.
+**Three things to decide, not one to fix — the first is now settled.**
+
+**Where the aliases live — SETTLED 21 Sep, and it needed no code.** `MAC_HOST`
+may name several, and `_pick_host` walks them — but this conf named one. The
+conf now reads `mac-home mac-senseguest mac-office`, the three `Host` blocks in
+`~/.ssh/config`, existing value first, which is what item 18 built the list for.
+
+**Reproduced first, so the fix is not a guess.** Running `bin/mcp.sh` directly
+on 21 Sep printed `socat[22] E CONNECT 192.168.4.250:22: Bad Gateway`, then
+`kex_exchange_identification: Connection closed by remote host`, and exited
+**255**. With the list in place the same command printed `mcp_viewer_ready
+http://127.0.0.1:9999` and `MCP Server: Started. Waiting for messages. Working
+directory: /Users/lennny`, and exited 0.
+
+**Read `lib.sh:205` before concluding the list mechanism was broken.**
+`_pick_host` returns at `[ "$n" -le 1 ] && return 0` — with one candidate it
+never probes, never caches and never re-picks. So the single-alias conf did not
+merely make a good mechanism unlucky; it switched the mechanism off. That is why
+the failure was total rather than slow.
+
+**`bin/init.sh` still writes one.** Line 369 emits `: "${MAC_HOST:=$HOST}"` from
+the single `--host` it was given, so every conf it writes starts in the state
+that caused this. Patching one conf by hand does not close this item; that line
+does, and it is the only part of the first decision still open.
 
 **What the server should do when it cannot reach the Mac.** Exiting is honest
 and unreadable. A server that starts, answers `tools/list`, and returns "the Mac
