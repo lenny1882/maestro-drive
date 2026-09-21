@@ -84,7 +84,7 @@ walks up from `$PWD`, and a process started from `$TMPDIR` is nowhere near the
 project — it stops with "not configured for this project", which reads as a
 broken install. Since 17 Sep `config.sh` remembers the conf this session last
 found and falls back to it, so this usually resolves itself; pass
-`MAESTRO_MAC_CONF=<project>/.maestro-mac.conf` explicitly when it does not.
+`MAESTRO_DRIVE_CONF=<project>/.maestro-drive.conf` explicitly when it does not.
 
 **A pid is namespace-local, so a pid file cannot be a lock across calls.** The
 same fresh-container rule that kills `nohup` makes pids meaningless between

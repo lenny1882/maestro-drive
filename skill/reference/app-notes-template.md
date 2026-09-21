@@ -39,7 +39,7 @@
       project's bug/test findings.
     - Anything about Maestro itself — that is reference/maestro-notes.md.
     - Screenshots as evidence for positions. Frames come from the hierarchy.
-    - Credentials. This file is committed; .maestro-mac.conf is not. Put the
+    - Credentials. This file is committed; .maestro-drive.conf is not. Put the
       value there as APP_<NAME> and write ${APP_<NAME>} here. bin/notes.sh add
       refuses text containing one, and bin/secrets.sh check finds any that got
       in another way.

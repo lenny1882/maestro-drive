@@ -2,7 +2,7 @@
 """An MCP server whose only job is to start and stop the bridge helper.
 
   "maestro-bridge": {"type": "stdio", "command": "python3",
-                     "args": ["~/.claude/skills/maestro-remote-mac/bin/bridge-mcp.py"]}
+                     "args": ["~/.claude/skills/maestro-drive/bin/bridge-mcp.py"]}
 
 Why a server at all (BACKLOG item 96). Inside a Claude session the Bash tool is
 sandboxed: no /dev/kvm, its own PID and network namespaces, writes confined to
@@ -120,7 +120,7 @@ def _conf(d):
         "                             `hostname -I` on the machine with the device gives it.\n"
     )
     return (
-        "Put these in the project's .maestro-mac.conf:\n"
+        "Put these in the project's .maestro-drive.conf:\n"
         '  : "${TRANSPORT:=bridge}"\n'
         '  : "${BRIDGE_DIR:=%s}"\n'
         "%s"
@@ -170,7 +170,7 @@ def status():
 TOOL = {
     "name": "bridge",
     "description": (
-        "Start, stop or report the maestro-remote-mac bridge helper — the process "
+        "Start, stop or report the maestro-drive bridge helper — the process "
         "outside the Bash sandbox that runs this package's scripts on the machine "
         "with the device. It takes no paths and runs nothing else."
     ),

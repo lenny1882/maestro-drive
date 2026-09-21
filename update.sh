@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Update maestro-remote-mac to the newest GitHub Release, then re-run the installer.
+# Update maestro-drive to the newest GitHub Release, then re-run the installer.
 #
 # "Newest" means whatever the GitHub Releases API calls /releases/latest — a
 # release left as a draft, or marked pre-release, is skipped no matter how its
-# version number sorts. This downloads that release's maestro-remote-mac.tar.gz
+# version number sorts. This downloads that release's maestro-drive.tar.gz
 # asset and extracts it over this directory, so it works the same whether you
 # installed from a downloaded tarball or a git clone — no git required.
 #
@@ -20,9 +20,9 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT="maestro-remote-mac"
-GITHUB_SLUG="lenny1882/maestro-remote-mac"
-TARBALL_NAME="maestro-remote-mac.tar.gz"
+PROJECT="maestro-drive"
+GITHUB_SLUG="lenny1882/maestro-drive"
+TARBALL_NAME="maestro-drive.tar.gz"
 
 [ -f "$REPO/VERSION" ] || {
   printf '%s does not look like a %s install (no VERSION file).\n' "$REPO" "$PROJECT" >&2

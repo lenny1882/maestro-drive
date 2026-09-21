@@ -29,10 +29,10 @@ skill/reference/staging/
 # `git add -A` sweeps straight in.
 #
 # The second line is the PROFILE layering: PROFILE=uat reads
-# .maestro-mac.conf.uat, and per-environment confs are where APP_PIN, APP_STORE
+# .maestro-drive.conf.uat, and per-environment confs are where APP_PIN, APP_STORE
 # and APP_USER actually live.
-.maestro-mac.conf
-.maestro-mac.conf.*
+.maestro-drive.conf
+.maestro-drive.conf.*
 
 # This repo drives an app of its own, so it carries a maestro/ directory like
 # any project the skill is pointed at: flows under journeys/ and the notes

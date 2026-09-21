@@ -27,7 +27,7 @@
 #
 #   "SessionEnd": [
 #     { "hooks": [ { "type": "command",
-#         "command": "bash ~/.claude/skills/maestro-remote-mac/hooks/rig-down-on-end.sh" } ] }
+#         "command": "bash ~/.claude/skills/maestro-drive/hooks/rig-down-on-end.sh" } ] }
 #   ]
 #
 # `bash <path>`, not the path alone: the sandbox refuses chmod +x under

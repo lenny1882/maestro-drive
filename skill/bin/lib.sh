@@ -93,8 +93,8 @@ if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
   PATH=$JAVA_HOME/bin:$PATH
   export PATH
 else
-  echo "maestro-remote-mac: no JDK on this machine, and the conf does not say where one is." >&2
-  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-mac.conf)" >&2
+  echo "maestro-drive: no JDK on this machine, and the conf does not say where one is." >&2
+  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-drive.conf)" >&2
 fi
 '
 
@@ -110,7 +110,7 @@ _java_env() {
   if [ -n "${RJAVA:-}" ]; then
     printf "if [ -x '%s/bin/java' ]; then\n" "$RJAVA"
     printf "  export JAVA_HOME='%s'\n  PATH=\$JAVA_HOME/bin:\$PATH\n  export PATH\nelse\n" "$RJAVA"
-    printf "  echo 'maestro-remote-mac: the conf records RJAVA=%s and there is no JDK there.' >&2\n" "$RJAVA"
+    printf "  echo 'maestro-drive: the conf records RJAVA=%s and there is no JDK there.' >&2\n" "$RJAVA"
     printf "  echo '  Looking for another one. Re-record it:  bin/init.sh --detect' >&2\n"
     printf '%s\nfi\n' "$_JAVA_ENV_FALLBACK"
   else
@@ -274,11 +274,11 @@ _bridge_id() { printf '%s-%s-%s' "$$" "${RANDOM:-0}" "$(date +%s%N 2>/dev/null |
 _bridge_send() {  # _bridge_send <assembled script>
   local d=${BRIDGE_DIR:-} id rcv i
   [ -n "$d" ] || {
-    echo "maestro-remote-mac: TRANSPORT=bridge needs BRIDGE_DIR in the conf." >&2
+    echo "maestro-drive: TRANSPORT=bridge needs BRIDGE_DIR in the conf." >&2
     echo "  It is the directory the helper serves — start one and set it." >&2
     return 1; }
   [ -p "$d/control" ] || {
-    echo "maestro-remote-mac: no bridge helper is serving $d." >&2
+    echo "maestro-drive: no bridge helper is serving $d." >&2
     echo "  Nothing was run. Start it, then retry." >&2
     return 1; }
 
@@ -322,7 +322,7 @@ _bridge_send() {  # _bridge_send <assembled script>
   rm -f "$d/$id.cmd" "$d/$id.in" "$d/$id.tmo" "$d/$id.out" "$d/$id.err" "$d/$id.rc"
   case "$rcv" in
     ''|*[!0-9]*)
-      echo "maestro-remote-mac: the bridge helper returned no exit status." >&2
+      echo "maestro-drive: the bridge helper returned no exit status." >&2
       return 1 ;;
   esac
   return "$rcv"
@@ -363,7 +363,7 @@ _ssh() {
   if { [ "$rc" = 255 ] || [ "$rc" = 124 ]; } \
      && [ -n "${_HOST_PICKED:-}" ] && [ "$(_host_candidates | grep -c .)" -gt 1 ]; then
     rm -f "$HOST_CACHE"; unset _HOST_PICKED
-    echo "maestro-remote-mac: $MAC_HOST stopped answering — re-picking" >&2
+    echo "maestro-drive: $MAC_HOST stopped answering — re-picking" >&2
     _pick_host || return 1
     timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$(_payload "$1")"
     rc=$?
@@ -528,7 +528,7 @@ _dev() {
     if [ "$n" -gt 1 ]; then
       echo "note: $n devices are booted and DEV is not set — using:" >&2
       printf '%s\n' "$booted" | awk -F'\t' '{printf "  %s  %s\n", $1, $3}' >&2
-      echo "  pin one with DEV=<udid> in .maestro-mac.conf" >&2
+      echo "  pin one with DEV=<udid> in .maestro-drive.conf" >&2
     fi
   fi
   [ -n "$DEV" ] || { echo "no booted device on $(_where) (platform: ${PLATFORM:-ios})" >&2; return 1; }
@@ -697,7 +697,7 @@ _driver_bind() {
         # so this refuses rather than picking.
         echo "$n drivers are running and DEV is not set:" >&2
         printf '%s\n' "$map" | awk '{printf "  %s  port %s\n", $1, $2}' >&2
-        echo "  set DEV=<udid>, or pin it in .maestro-mac.conf" >&2
+        echo "  set DEV=<udid>, or pin it in .maestro-drive.conf" >&2
         return 1
       fi
       line=$map

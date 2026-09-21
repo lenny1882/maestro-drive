@@ -220,7 +220,7 @@ _rig_up() {
   local devs=() booted d name up_map p_map
   mapfile -t devs < <(_rig_devices "$@") || true
   if [ ${#devs[@]} -eq 0 ]; then
-    echo "rig: no devices. Pass udids, or set RIG_DEVICES in .maestro-mac.conf:" >&2
+    echo "rig: no devices. Pass udids, or set RIG_DEVICES in .maestro-drive.conf:" >&2
     echo "  : \"\${RIG_DEVICES:=<udid> <udid> <udid>}\"" >&2
     echo "Booted right now:" >&2
     _booted | sed 's/^/  /' >&2
