@@ -194,12 +194,34 @@ channels, the script's own exit status, stdin forwarded, the first line arriving
 before the script has finished, the log carrying every script, and a directory
 owned by somebody else being refused.
 
-**1.2 `_ssh` gains the bridge branch, and the payload assembly is factored out.**
+**1.2 DONE 21 Sep — `_ssh` gains the bridge branch, and the payload assembly is factored out.**
 The message is the same three parts in every transport — environment prefix,
 `cd $REPO`, the caller's script — and it is currently written out twice. A third
 copy is not the answer. *Done when:* a given call produces byte-identical script
 text in all three transports, and the bridge branch streams stdout, forwards
 stdin and returns the real exit status.
+
+**`_payload` is the assembly, and the suite asserts local and bridge produce the
+same bytes.** ssh's differs in one thing only, and deliberately: `REMOTE_ENV`
+replaces `PATH` where `LOCAL_ENV` adds to it (2.1's reason — replacing it here
+would lose the Android SDK under `/mnt/sda`).
+
+**Stdin is a channel, not a file read up front, and getting that wrong hung the
+suite.** The first version drained stdin into a file before ringing, which
+stalls every call whose caller leaves stdin open and sends nothing — most of
+them. It is a FIFO with a background writer now, which is what ssh does.
+
+**A background command in a non-interactive shell gets `/dev/null` for stdin
+unless it is told otherwise**, so that writer delivered an empty stdin and said
+nothing about it. It names the call's own stdin explicitly through fd 9. The
+case that catches it pipes text into `_ssh "cat"` and reads it back.
+
+**A helper that is not serving is like a host that is not answering:** it says
+so, runs nothing and returns 1. No retry — the same reasoning that keeps the
+local branch retry-free, because half of what goes through `_ssh` taps a screen.
+
+**Verified:** 520 passed, 0 failed, eight new; 145 passed, 0 failed in the
+package's suite.
 
 **1.3 The values follow the table.** `_push`/`_pull` take local's answer;
 `_urlhost`, `_driver_base` and `$grpc_proxy` take ssh's. *Done when:* a bridge

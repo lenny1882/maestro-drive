@@ -71,7 +71,9 @@ _serve() {  # _serve <id>
   _log "$id  ---"
   sed 's/^/    /' "$cmd" >> "$LOG" 2>/dev/null || true
 
-  [ -f "$in" ] || : > "$in"
+  # A regular file or a FIFO, whichever the client made. `[ -f ]` would be false
+  # for a FIFO and the create below would then block opening it for writing.
+  [ -e "$in" ] || : > "$in"
   tmo=$(cat "$DIR/$id.tmo" 2>/dev/null)
   case "$tmo" in ''|*[!0-9]*) tmo=180 ;; esac
 
