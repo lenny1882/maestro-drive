@@ -1360,6 +1360,42 @@ jq -e '.mcpServers["someone-elses-server"] and .projects["/some/path"]
   && ok "uninstall leaves other servers and account state alone" \
   || no "uninstall leaves other servers and account state alone" "$(jq -c 'keys' "$HOME/.claude.json")"
 
+echo "upgrading from the old name (item 98)"
+# The package was maestro-remote-mac until 21 Sep 2026. An upgrade across the
+# rename is the one case the OWNS strip cannot see on its own: the entries
+# already in settings.json, and the directories already on disk, carry the old
+# name. Left behind they are not clutter — a second skill directory is a second
+# copy of the skill for Claude Code to load, with its own PreToolUse gate on
+# every Bash call and a SessionEnd hook pointing into a tree nothing updates.
+OLDSKILL="$CLAUDE_DIR/skills/maestro-remote-mac"
+OLDLIB="$HOME/.local/share/maestro-remote-mac"
+mkdir -p "$OLDSKILL/hooks" "$OLDLIB"
+printf 'stale\n' > "$OLDSKILL/SKILL.md"
+printf '2026-09-01\n' > "$OLDLIB/phase-a-done"
+printf '%s\n' '{"hooks":{
+  "PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash '"$OLDSKILL"'/hooks/gate-journey-first.sh"}]}],
+  "SessionEnd":[{"hooks":[{"type":"command","command":"bash '"$OLDSKILL"'/hooks/rig-down-on-end.sh"}]}],
+  "Stop":[{"hooks":[{"type":"command","command":"someone-elses-thing"}]}]
+}}' > "$CLAUDE_DIR/settings.json"
+
+"$REPO/install.sh" --link --yes >"$TMP/out" 2>&1   && ok "an upgrade from the old name installs"   || no "an upgrade from the old name installs" "$(tail -8 "$TMP/out")"
+
+[ -e "$OLDSKILL" ]   && no "the old skill directory is removed" "still at $OLDSKILL"   || ok "the old skill directory is removed"
+[ -e "$OLDLIB" ]   && no "the old lib directory is removed" "still at $OLDLIB"   || ok "the old lib directory is removed"
+# Moved, not deleted: phase-a-done says the SSH setup was completed, and losing
+# it sends somebody back through a wizard they already finished.
+[ -f "$HOME/.local/share/maestro-drive/phase-a-done" ]   && ok "what the old lib directory held is kept, not lost"   || no "what the old lib directory held is kept, not lost" "phase-a-done gone"
+
+jq -e '[.. | .command? // empty] | any(contains("maestro-remote-mac"))'   "$CLAUDE_DIR/settings.json" >/dev/null 2>&1   && no "the old name's hook entries are stripped"        "$(jq -c '[..|.command?//empty]' "$CLAUDE_DIR/settings.json")"   || ok "the old name's hook entries are stripped"
+jq -e '[.hooks.PreToolUse[] | select(.matcher == "Bash")] | length == 1'   "$CLAUDE_DIR/settings.json" >/dev/null   && ok "one gate on Bash afterwards, not two"   || no "one gate on Bash afterwards, not two"        "$(jq -c '.hooks.PreToolUse' "$CLAUDE_DIR/settings.json")"
+grep -q "someone-elses-thing" "$CLAUDE_DIR/settings.json"   && ok "the sweep still leaves other packages alone"   || no "the sweep still leaves other packages alone" "removed them"
+
+# And uninstall sweeps them too: an uninstall that leaves a skill directory
+# Claude Code still loads is not an uninstall.
+mkdir -p "$OLDSKILL" "$OLDLIB"
+"$REPO/uninstall.sh" --yes >/dev/null 2>&1
+{ [ -e "$OLDSKILL" ] || [ -e "$OLDLIB" ]; }   && no "uninstall sweeps the old name's directories" "one of them survived"   || ok "uninstall sweeps the old name's directories"
+
 echo "the README describes both shapes (item 94, 5.4)"
 # The skill's own documents are checked by its suite. This one is not installed,
 # so it is checked here: a reader whose device is on this machine must not be
