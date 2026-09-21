@@ -78,12 +78,34 @@ settings_merge() {
 MCP_NAME="maestro-mac"
 MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/mcp.sh"
 
-# Reads $HOME/.claude.json on stdin and sets this package's one server, leaving
+# The bridge server (BACKLOG item 96), which is optional and asked about at
+# install time. It starts and stops the helper that runs this package's scripts
+# outside the Bash sandbox, for a Linux machine whose sandbox sits between the
+# package and a device that is on that machine. A Mac has no use for it: local
+# transport reaches its own simulator.
+#
+# python3 rather than bash, and the same exec-bit reasoning — the script is
+# named as an argument rather than run directly.
+MCP_BRIDGE_NAME="maestro-bridge"
+MCP_BRIDGE_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/bridge-mcp.py"
+
+# Reads $HOME/.claude.json on stdin and sets this package's servers, leaving
 # every other key and every other server untouched.
+#
+#   claude_json_merge [1]   -- 1 also registers the bridge server
+#
+# It never REMOVES the bridge entry. An installer that quietly took away a
+# capability somebody registered would be as surprising as one that quietly
+# added it, and `uninstall.sh` is where things get removed.
 claude_json_merge() {
-  jq --arg name "$MCP_NAME" --arg script "$MCP_SCRIPT" '
+  jq --arg name "$MCP_NAME" --arg script "$MCP_SCRIPT" \
+     --arg bname "$MCP_BRIDGE_NAME" --arg bscript "$MCP_BRIDGE_SCRIPT" \
+     --argjson bridge "${1:-0}" '
     .mcpServers //= {}
     | .mcpServers[$name] = {type: "stdio", command: "bash", args: [$script]}
+    | if $bridge == 1
+      then .mcpServers[$bname] = {type: "stdio", command: "python3", args: [$bscript]}
+      else . end
   '
 }
 
@@ -92,6 +114,7 @@ REGISTRATIONS=(
   "settings.json  PreToolUse/Bash  hooks/gate-journey-first.sh"
   "settings.json  SessionEnd       hooks/rig-down-on-end.sh"
   ".claude.json   mcpServers       bin/mcp.sh as \"$MCP_NAME\""
+  ".claude.json   mcpServers       bin/bridge-mcp.py as \"$MCP_BRIDGE_NAME\" (only if asked for)"
 )
 
 # Everything under skill/ that is part of the published tree. Two kinds of file
