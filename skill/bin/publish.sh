@@ -40,8 +40,9 @@ FW_REMOTE=$("$HERE/runner.sh" rpath framework) || exit 1
 # Kept for the by-hand recipe _report prints; nothing above it uses it now.
 _vm() { curl -s -x "$grpc_proxy" --max-time 8 "$1/$2" 2>/dev/null; }
 
-# "<was> <now>", each on|off|unknown. The module runs here in the sandbox and
-# reaches the published relay through $grpc_proxy.
+# "<was> <now>", each on|off|unknown. The module runs here rather than on the
+# machine with the device, and reaches the endpoint through $grpc_proxy across
+# ssh and directly in local transport — it reads the variable lib.sh sets.
 _arm() { # _arm <base> <isolate>
   sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null || true
 }
