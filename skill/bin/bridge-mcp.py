@@ -221,4 +221,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # Two entry points, one implementation. The SessionEnd hook cannot call an
+    # MCP tool — hooks are not a Claude session — so it runs this with --stop.
+    if len(sys.argv) > 1 and sys.argv[1] in ("--stop", "--status", "--start"):
+        print(ACTIONS[sys.argv[1][2:]]())
+        raise SystemExit(0)
     main()
