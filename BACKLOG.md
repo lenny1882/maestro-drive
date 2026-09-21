@@ -672,11 +672,31 @@ is where that is paid for.
 
 **Stage 5 — proof, docs, and the name.**
 
-**5.1 The suite runs both modes.** `test/run-tests.sh` redirects `HOME` and
-`CLAUDE_DIR` into a temp directory and installs the package there, so it already
-runs without a Mac. It needs a local-mode pass over the conf shapes from 1.2 and
-the no-op paths from 2.3 and 3.1. *Files:* `skill/test/run-tests.sh`. *Done
-when:* the suite covers both modes and still needs no Mac.
+**5.1 DONE 21 Sep — the suite runs both modes.** Sixteen cases, in one block:
+the conf shapes from 1.2, what `init.sh --local` writes from 1.4, the three
+copies from 3.1 and 3.2, `_ssh` from 2.1, `install.sh` from 2.3 and `mcp.sh`
+from 3.3. With the eighteen Stage 4 carried, the suite is 489 passed, 0 failed
+and still needs no Mac.
+
+**Two of them are about a failure staying wrong in the right way.** An ssh conf
+with no `MAC_HOST` must keep failing as a broken remote conf — that is 1.1's
+whole argument for an explicit `TRANSPORT` — and a local project must not be
+handed the ssh diagnostic, which names `MAC_HOST` and `MAC_FQDN` as missing
+values when locally they are not settings at all.
+
+**`install.sh` is checked by checksum, not by what it prints.** The risk in 2.3
+was never a needless copy: `$RHELP` and `$RMODS` ARE the checkout locally, the
+`cat > dst` form truncates before it reads, and the chmod leaves mode changes in
+`git status`. The case md5s `remote/` and `runners/` either side of the run.
+
+**`_push` is tested on the trap rather than the happy path.** `cp a a` exits 1
+with "are the same file", and every call site ends in `|| exit 1` — so the
+self-copy, the self-copy through a directory destination and a real copy are
+three separate cases.
+
+**What the suite still cannot reach:** anything needing a booted device. Every
+Stage 4 unit is verified by stub and inventory only. 5.2 is where that is paid
+for.
 
 **5.2 One live run, end to end, against an emulator on this machine.** The
 lesson item 87 paid for twice: a contract verified only on empty and error paths

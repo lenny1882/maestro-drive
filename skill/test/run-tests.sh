@@ -2653,6 +2653,139 @@ case "$mi_out" in
 esac
 
 echo
+echo "the suite runs both transports (item 94, 5.1)"
+# Everything above this point is the ssh path. These are the shapes that exist
+# only locally: what a conf must set, what init.sh writes, and the copies that
+# become no-ops. Still no Mac — and no device either.
+LP="$TMP/localpass"; mkdir -p "$LP/proj" "$LP/ldir" "$LP/rhelp" "$LP/rdir" "$LP/dst" "$LP/bin"
+LPLIB=". $REPO/bin/lib.sh 2>/dev/null"
+
+# --- 1.2, what a local project must set -------------------------------------
+printf ': "${TRANSPORT:=local}"\n: "${APP_ID:=com.example.app}"\n' > "$LP/proj/ok.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/ok.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh || exit 1; printf "%s %s" "$TRANSPORT" "$APP_ID"' 2>&1)
+[ "$lp" = "local com.example.app" ] \
+  && ok "a local conf loads with APP_ID and nothing else" \
+  || no "a local conf loads with APP_ID and nothing else" "got '$lp'"
+
+printf ': "${TRANSPORT:=local}"\n' > "$LP/proj/bare.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/bare.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$lp" in
+  *"TRANSPORT=local"*"APP_ID=(unset)"*) ok "an unconfigured local project is told the local shape" ;;
+  *) no "an unconfigured local project is told the local shape" "said: $(printf '%s' "$lp" | head -3)" ;;
+esac
+# The ssh diagnostic line names MAC_HOST and MAC_FQDN as missing values. Locally
+# they are not missing, they are not settings — printing that line would send a
+# reader to configure a machine that is not in the picture.
+case "$lp" in
+  *"MAC_HOST=(unset)"*) no "and it is not asked for a Mac it does not have" "printed the ssh diagnostic" ;;
+  *) ok "and it is not asked for a Mac it does not have" ;;
+esac
+
+# 1.1's reason for an explicit setting: an ssh conf whose MAC_HOST is missing or
+# misspelt must keep failing AS a broken remote conf. If emptiness meant local,
+# the typo would start hunting for a device on this machine instead.
+printf ': "${MAC_FQDN:=m.local}"\n: "${APP_ID:=c.e.a}"\n' > "$LP/proj/broken.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/broken.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$lp" in
+  *"MAC_HOST=(unset)"*) ok "an ssh conf with no MAC_HOST still fails as a broken remote conf" ;;
+  *) no "an ssh conf with no MAC_HOST still fails as a broken remote conf" "said: $(printf '%s' "$lp" | head -3)" ;;
+esac
+
+# --- 1.4, the conf init.sh writes -------------------------------------------
+LPI="$LP/initlocal"; mkdir -p "$LPI"
+( cd "$LPI" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
+    --app com.example.app --write >/dev/null 2>&1 )
+if [ -r "$LPI/.maestro-mac.conf" ]; then
+  grep -q 'TRANSPORT:=local' "$LPI/.maestro-mac.conf" \
+    && ok "init.sh --local writes TRANSPORT=local" \
+    || no "init.sh --local writes TRANSPORT=local" "absent"
+  # The settings, not the prose: the conf's own comment explains that MAC_HOST
+  # and MAC_FQDN are neither needed nor read, and saying so is the point.
+  grep -q 'MAC_HOST:=\|MAC_FQDN:=' "$LPI/.maestro-mac.conf" \
+    && no "and sets no MAC_HOST or MAC_FQDN" "$(grep -n 'MAC_HOST:=\|MAC_FQDN:=' "$LPI/.maestro-mac.conf" | head -1)" \
+    || ok "and sets no MAC_HOST or MAC_FQDN"
+else
+  no "init.sh --local writes TRANSPORT=local" "no conf written"
+  no "and sets no MAC_HOST or MAC_FQDN" "no conf written"
+fi
+lp=$(cd "$LP" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --host mac-x --app a 2>&1); rc=$?
+{ [ "$rc" != 0 ] && printf '%s' "$lp" | grep -q 'no --host or --fqdn'; } \
+  && ok "--host with --local is refused rather than silently dropped" \
+  || no "--host with --local is refused rather than silently dropped" "rc=$rc: $lp"
+
+# --- 3.1 and 3.2, the copies that become no-ops ------------------------------
+# `cp a a` exits 1 with "are the same file", and every _push call site ends in
+# `|| exit 1`, so a bare cp would fail every local run. Worse, the `cat > dst`
+# form truncates before it reads.
+printf 'original\n' > "$LP/rhelp/hier.py"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/rhelp/hier.py'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/rhelp/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "_push of a file onto itself succeeds and leaves it intact" \
+  || no "_push of a file onto itself succeeds and leaves it intact" "got '$lp'"
+
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/rhelp/'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/rhelp/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "and the same file through a directory destination is still a no-op" \
+  || no "and the same file through a directory destination is still a no-op" "got '$lp'"
+
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/dst/'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/dst/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "a real local push is a real copy, taking the basename as scp does" \
+  || no "a real local push is a real copy, taking the basename as scp does" "got '$lp'"
+
+# $RDIR and $LDIR do NOT collapse (2.2, 3.2), so _pull is a real copy locally.
+printf 'shot\n' > "$LP/rdir/shot.png"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _pull '$LP/rdir/shot.png' '$LP/ldir/shot.png'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/ldir/shot.png')\"" 2>&1)
+[ "$lp" = "rc=0 shot" ] \
+  && ok "_pull locally copies between the two scratch directories" \
+  || no "_pull locally copies between the two scratch directories" "got '$lp'"
+
+# --- 2.1, _ssh runs the script here ------------------------------------------
+printf '#!/usr/bin/env bash\necho "SSH WAS CALLED" >&2\nexit 99\n' > "$LP/bin/ssh"
+chmod +x "$LP/bin/ssh"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" PATH="$LP/bin:$PATH" bash -c \
+  "$LPLIB; _ssh 'printf ran-here'" 2>&1)
+[ "$lp" = "ran-here" ] \
+  && ok "_ssh runs the script on this machine and never reaches for ssh" \
+  || no "_ssh runs the script on this machine and never reaches for ssh" "got '$lp'"
+
+# --- 2.3, install.sh has nothing to push -------------------------------------
+# The danger is not that it copies needlessly: $RHELP and $RMODS ARE the
+# checkout locally, so a copy is a file onto itself and the chmod leaves mode
+# changes in git status. This checksums the tree it would have written into.
+lp_before=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" RDIR="$LP/instscratch" \
+  timeout 30 bash "$REPO/bin/install.sh" 2>&1)
+lp_after=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+[ "$lp_before" = "$lp_after" ] \
+  && ok "install.sh locally leaves every file in the checkout byte-identical" \
+  || no "install.sh locally leaves every file in the checkout byte-identical" "the tree changed"
+case "$lp" in
+  *"nothing was copied"*) ok "and says so rather than reporting a push that did not happen" ;;
+  *) no "and says so rather than reporting a push that did not happen" "said: $(printf '%s' "$lp" | head -2)" ;;
+esac
+[ -d "$LP/instscratch/flows" ] \
+  && ok "and still makes the scratch directory, which is its job in both transports" \
+  || no "and still makes the scratch directory, which is its job in both transports" "no $LP/instscratch/flows"
+
+# --- 3.3, mcp.sh execs the server here ---------------------------------------
+printf '#!/usr/bin/env bash\necho "maestro $*" > "$MCPMARK"\n' > "$LP/bin/maestro"
+chmod +x "$LP/bin/maestro"
+rm -f "$LP/mcpmark"
+MCPMARK="$LP/mcpmark" TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" \
+  PATH="$LP/bin:$PATH" timeout 30 bash "$REPO/bin/mcp.sh" >/dev/null 2>&1
+[ "$(cat "$LP/mcpmark" 2>/dev/null)" = "maestro mcp" ] \
+  && ok "mcp.sh execs the server on this machine, not through ssh" \
+  || no "mcp.sh execs the server on this machine, not through ssh" "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
