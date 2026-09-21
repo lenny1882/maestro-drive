@@ -311,8 +311,23 @@ package's suite.
 
 **Stage 3 — proof.**
 
-**3.1 The suite runs three transports.** 5.1's block gains a column. The helper
+**3.1 DONE 21 Sep — the suite runs three transports.** 5.1's block gains a column. The helper
 can be started in-process, so it still needs no Mac and no device.
+
+**Thirty-four bridge cases in all, across 1.1 to 3.1**, and the helper is
+started inside the run every time — so the suite still needs no Mac, no device
+and nothing registered. 94's 5.1 block now covers `install.sh`, `_pull` and
+`mcp.sh` under the bridge as well, which is where the two columns show: the
+checkout is left byte-identical and nothing is copied, exactly as locally,
+while the `mkdir` that makes the scratch has to travel through the helper to
+happen at all.
+
+**`mcp.sh` execs the server here under the bridge too**, and for a reason worth
+writing down: it is spawned by Claude Code, so it is already outside the
+sandbox. It has no need of the bridge, and routing it through one would put a
+channel between a process and the machine it is already standing on.
+
+**Verified:** 544 passed, 0 failed; 145 passed, 0 failed in the package's suite.
 
 **3.2 The live run — this is item 94's 5.2.** `rig up`, a flow, a screenshot,
 `net.sh`, `prefs.sh`, against `Pixel_6_Pro_API_34` and

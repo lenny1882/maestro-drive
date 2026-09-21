@@ -2669,7 +2669,7 @@ case "$mi_out" in
 esac
 
 echo
-echo "the suite runs both transports (item 94, 5.1)"
+echo "the suite runs all three transports (item 94 5.1, item 96 3.1)"
 # Everything above this point is the ssh path. These are the shapes that exist
 # only locally: what a conf must set, what init.sh writes, and the copies that
 # become no-ops. Still no Mac — and no device either.
@@ -2800,6 +2800,43 @@ MCPMARK="$LP/mcpmark" TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="
 [ "$(cat "$LP/mcpmark" 2>/dev/null)" = "maestro mcp" ] \
   && ok "mcp.sh execs the server on this machine, not through ssh" \
   || no "mcp.sh execs the server on this machine, not through ssh" "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
+
+# --- and the same three, under the bridge ------------------------------------
+# The bridge shares the filesystem with the device host, so these behave as they
+# do locally. What differs is that the script travels, which is why the helper
+# has to be up for install.sh's mkdir to happen at all.
+LPB="$TMP/localpass-bridge"; mkdir -p "$LPB"
+sh "$REPO/remote/bridge.sh" "$LPB" > "$LPB/serve.log" 2>&1 &
+LPB_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$LPB"
+
+lp_before=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+lp=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null \
+  LDIR="$LP/ldir" RDIR="$LP/bridgescratch" timeout 60 bash "$REPO/bin/install.sh" 2>&1)
+lp_after=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+{ [ "$lp_before" = "$lp_after" ] && printf '%s' "$lp" | grep -q "nothing was copied"; } \
+  && ok "install.sh over the bridge copies nothing and leaves the checkout alone" \
+  || no "install.sh over the bridge copies nothing and leaves the checkout alone" "said: $(printf '%s' "$lp" | head -2)"
+[ -d "$LP/bridgescratch/flows" ] \
+  && ok "and still makes the scratch, through the helper" \
+  || no "and still makes the scratch, through the helper" "no $LP/bridgescratch/flows"
+
+printf 'shot\n' > "$LP/rdir/bridge.png"
+lp=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; _pull '$LP/rdir/bridge.png' '$LP/ldir/bridge.png'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/ldir/bridge.png')\"" 2>/dev/null)
+[ "$lp" = "rc=0 shot" ] \
+  && ok "_pull over the bridge is a copy, not an scp" \
+  || no "_pull over the bridge is a copy, not an scp" "got '$lp'"
+
+rm -f "$LP/mcpmark"
+MCPMARK="$LP/mcpmark" TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 \
+  MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" PATH="$LP/bin:$PATH" timeout 30 bash "$REPO/bin/mcp.sh" >/dev/null 2>&1
+[ "$(cat "$LP/mcpmark" 2>/dev/null)" = "maestro mcp" ] \
+  && ok "mcp.sh execs the server here under the bridge too — it is already outside the sandbox" \
+  || no "mcp.sh execs the server here under the bridge too — it is already outside the sandbox" \
+       "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
+
+kill $LPB_PID 2>/dev/null; wait $LPB_PID 2>/dev/null
 
 echo
 echo "the docs describe both shapes (item 94, 5.4)"
