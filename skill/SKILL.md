@@ -17,8 +17,10 @@ emulator on the machine running the skill. In local transport `MAC_HOST` and
 `MAC_FQDN` are neither needed nor read, every URL is `127.0.0.1`, and the
 commands are the same ones. Where a line below says "on the Mac", read "on the
 machine with the device". `reference/setup.md` has what a local machine needs
-instead of the SSH setup; the local path is covered by the suite and has not yet
-driven a real device (BACKLOG item 94, 5.2).
+instead of the SSH setup. The local path has driven a real device once — an
+Android emulator on this machine, 21 Sep 2026, from inside a Claude session,
+which needs item 96's bridge server as well (BACKLOG item 94, 5.2). No local iOS
+simulator has been driven.
 
 Across ssh, everything runs on the Mac and nothing is installed here. Two paths
 reach it:

@@ -5,8 +5,9 @@ swiping, reading the screen and running whole UI journeys — wherever the devic
 is. `TRANSPORT` in the project's conf says which: `ssh` for a Mac across the
 network, which is what this was built for and what most of this page describes,
 or `local` for a device on the machine running the skill, where nothing goes
-over ssh and every URL is `127.0.0.1`. The local path is covered by the test
-suite and has not yet driven a real device.
+over ssh and every URL is `127.0.0.1`. The local path has driven a real device
+once — an Android emulator on this machine, 21 Sep 2026; no local iOS simulator
+yet.
 
 The problem it solves is that the obvious route does not work. Maestro's own MCP
 server compiles the driver port in as a literal `22087` with no override, and

@@ -31,9 +31,13 @@ in the picture:
 
 Nobody is sent through `ssh-copy-id` to drive a device that is already here.
 
-**Not yet run end to end.** Every local path is covered by the test suite and
-none of it has driven a real device (BACKLOG item 94, 5.2). The first person to
-try it should expect to find things, and should write down what they find.
+**Run end to end once, 21 Sep 2026.** `platform.sh boot`, `devices --booted`,
+`install.sh`, `shot.sh`, `prefs.sh`, `net.sh` and `flow.sh` all ran against an
+Android emulator on this machine (BACKLOG item 94, 5.2). That run was from
+inside a Claude session, so it went through item 96's bridge server rather than
+local transport alone. `drivers.sh rig up` was not run, no local iOS simulator
+has been driven, and everything outside that list is covered by the test suite
+and nothing else. Expect to find things, and write down what you find.
 
 Placeholders below, used consistently — substitute your own and nothing else
 needs changing:
