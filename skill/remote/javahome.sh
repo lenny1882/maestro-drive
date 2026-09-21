@@ -50,5 +50,20 @@ if [ -z "$h" ]; then
   _ok "$h" || h=
 fi
 
+# 4. Ask java itself. Any java that can run answers this, which is what makes it
+#    the rung that covers the shim managers: jenv without its export plugin, and
+#    mise or asdf through shims rather than `activate`, put a shell SCRIPT called
+#    java on PATH. Rung 3 resolves that to the shim's own directory, which has no
+#    bin/java under it, so a machine with a perfectly good JDK came back empty.
+#
+#    Last, because it starts a JVM — a fifth of a second against three rungs that
+#    cost nothing — and because a rung above it answering means the answer was
+#    already unambiguous.
+if [ -z "$h" ]; then
+  h=$("${SHELL:-/bin/sh}" -ic 'java -XshowSettings:properties -version' 2>&1 </dev/null |
+      sed -n 's/^ *java\.home = //p' | head -1 | tr -d '[:space:]')
+  _ok "$h" || h=
+fi
+
 [ -n "$h" ] || exit 1
 printf '%s\n' "$h"

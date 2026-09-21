@@ -112,6 +112,15 @@ directory. `remote/javahome.sh` does that, in three rungs:
 2. `/usr/libexec/java_home` — macOS's registry, for an Apple- or cask-installed JDK
 3. the login shell's own `java`, resolved through its symlinks, rejecting
    `/usr/bin/java` because on macOS that is a stub rather than a link into a JDK
+4. `java -XshowSettings:properties -version`, and read `java.home` out of it
+
+**Rung 4 is the one that covers the shim managers, and it was missing at first.**
+jenv without its `export` plugin, and mise or asdf used through shims rather
+than `activate`, put a shell *script* called `java` on `PATH`. Rung 1 has
+nothing to report, and rung 3 resolves the shim to its own directory, which has
+no `bin/java` under it — so a machine with a perfectly good Java came back
+empty. Any `java` that can run will say where it lives. It goes last because it
+starts a JVM, about a fifth of a second, against three rungs that cost nothing.
 
 **Measured on the Mac, 21 Sep.** Rung 1 answers:
 `/Users/lennny/.sdkman/candidates/java/current`, Temurin 21. Rung 2 fails there
@@ -126,6 +135,14 @@ rejected: an interactive shell with no tty hangs — one run in three took the
 full 60s, measured — and `$TMO` would make that a three-minute stall inside
 `_ssh`, on the function all 84 call sites go through.
 
+**A recorded `RJAVA` is checked on the far side before it is used.** A JDK that
+has been upgraded, removed or swapped for a version manager leaves the conf
+naming a directory that is no longer there, and an unguarded export is then
+worse than having recorded nothing: Maestro's CLI is a Gradle start script, so a
+`JAVA_HOME` that is set and wrong aborts it, while an absent one lets the
+fallback find whatever is there now. It says which recorded path is gone and
+carries on looking.
+
 **A conf with no `RJAVA` is not guessed at.** `lib.sh` falls back to rungs 2 and
 3 on the far side, per command, with no interactive shell; when neither answers
 it prints what to run. That is the migration: an existing conf loses `JAVA_HOME`
@@ -134,10 +151,18 @@ says so rather than the package pretending it knows where a JDK is.
 
 **Verified live against the Mac:** `java -version` over `_ssh` returns Temurin
 21 with `JAVA_HOME` from `RJAVA`, and `init.sh --host <alias> --detect` prints
-the path and the version. 500 passed, 0 failed in the skill's suite and 145
-passed, 0 failed in the package's, eight of them new — including a JDK only a
-fake shell init knows about being found, and the fallback never opening an
-interactive shell.
+the path and the version. 503 passed, 0 failed in the skill's suite and 145
+passed, 0 failed in the package's, eleven of them new — a JDK only a fake shell
+init knows about, a JDK reachable only through a shim, a stale `RJAVA` falling
+back to the JDK that is actually there and naming the path that is gone, and the
+fallback never opening an interactive shell.
+
+**What is verified and what is reasoned.** Verified: SDKMAN on the Mac (rung 1,
+live), an apt JDK on the Linux machine (rung 3), a shim manager (rung 4, a
+fake), a shell-init manager (rung 1, a fake), and no JDK at all. Reasoned but
+not run: an Apple or Temurin `.pkg` under `/Library/Java/JavaVirtualMachines`
+(rung 2) — there is no such Mac here — and Homebrew's keg-only `openjdk` reached
+by a `PATH` line, which rung 3 resolves through the keg symlink.
 
 ## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep, Stage 4 on 21 Sep; Stage 5 is the proof and the name**
 
