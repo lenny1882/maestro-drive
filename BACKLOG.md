@@ -89,7 +89,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep, nothing built yet**
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep; Stage 4 started 21 Sep**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -541,12 +541,47 @@ failed.
 **Stage 4 — the six that become unnecessary.** These are deletions from the
 local path, not new code. Each one stays fully wired for `MODE=ssh`.
 
-**4.1 The relay.** `remote/relay.py` exists because the Dart VM Service binds
-the Mac's loopback and the sandbox can only reach its LAN address. Locally the
-loopback is this machine's. `bin/publish.sh`, `bin/driver.sh:197` and
-`bin/viewer.sh:76` all stage and start it. *Files:* `skill/bin/publish.sh`,
-`driver.sh`, `viewer.sh`. *Done when:* a local `publish.sh` returns a
-`127.0.0.1` URL with no relay process started.
+**4.1 DONE 21 Sep — the relay.** `remote/relay.py` exists because the thing
+being read binds the Mac's loopback and the sandbox can only reach the Mac's LAN
+address. Locally that loopback is this machine's, so all three staging sites
+lose it: `publish.sh` writes the debug endpoint's own port into the state file,
+`driver.sh` reads the driver's own port, and `viewer.sh` prints the viewer's.
+`lib.sh` gains `_urlhost` and `_driver_base`; `drivers.sh` prints a driver URL
+rather than a relay one.
+
+**The port changes, not only the host, and that is why swapping `MAC_FQDN` for
+`127.0.0.1` would not have done it.** Every relay is a pair — 22087 is
+republished on 9101, the VM Service's port on 9100, the viewer's on 9999 — and
+the left-hand number exists only because something has to listen on the LAN.
+Locally the right-hand one is the address. A host-only change would have built
+`http://127.0.0.1:9101`, which is a well-formed URL for a port nothing will ever
+listen on, and the failure would read as a dead relay. So the URL is asked for
+(`_driver_base`) rather than built at each call site.
+
+**`lsof` was asking the Mac a question `_up` had already answered.**
+`driver.sh:_start` checks `lsof -nP -iTCP:$DRIVER_PORT` before starting the
+relay, to tell "no driver" from "relay up, nothing behind it". Locally there is
+no second thing to be behind, so `_up` failing IS "nothing is listening on that
+port" — the whole ssh branch collapses to the two retries, which are about the
+driver and not about the transport.
+
+**The viewer's blank picture is an ssh-only fault, and locally the note must not
+print.** Maestro's viewer hands the browser an absolute
+`http://127.0.0.1:<random>/stream.mjpeg`, so the picture is fetched from
+whatever machine the browser is on — the reason `bin/wall.sh` exists. Locally
+that address is this machine, the browser is here, and the stream resolves.
+
+**Three verbs now say they stopped nothing rather than reporting a kill.**
+`driver.sh stop`, `viewer.sh stop` and `publish.sh stop` are `pkill relay.py`
+across ssh. Locally each would have found nothing and said "not running", which
+is true of the relay and reads as true of the driver or the viewer — and those
+are still up. `publish.sh stop` still removes the state file, because that is
+real in both transports.
+
+**Verified:** 461 passed, 0 failed in `skill/test/run-tests.sh`, six of them
+new — both helpers in both transports, a local driver that does not answer
+starting no relay and naming port 22087, and `stop` killing nothing. No live
+local run yet; that is 5.2.
 
 **4.2 `$grpc_proxy` on every curl.** It is the sandbox's egress proxy, needed to
 reach another machine's LAN address. Locally it must not be set, or the request

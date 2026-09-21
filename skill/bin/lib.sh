@@ -217,6 +217,33 @@ _where() {
   fi
 }
 
+# The host a URL built HERE must name to reach a service on the machine with the
+# device (item 94, 4.1).
+#
+# Across ssh that is the Mac, by the name the sandbox can resolve. Locally the
+# service is on this machine's loopback, and MAC_FQDN is neither set nor read —
+# a local conf does not have one, so every URL built from it came out as
+# http://:9101, which curl reports as "URL rejected" rather than as a missing
+# setting.
+_urlhost() {
+  if [ "${TRANSPORT:-ssh}" = local ]; then printf '127.0.0.1'
+  else printf '%s' "$MAC_FQDN"
+  fi
+}
+
+# The base URL of the driver API for the device being driven.
+#
+# Across ssh the driver binds the Mac's own loopback and remote/relay.py
+# republishes it on $DPORT, so this names the relay. Locally that loopback IS
+# this machine's: there is no relay, $DPORT names nothing that will ever listen,
+# and the port to read is the driver's own. Call this rather than building the
+# URL, because the port differs between the two and the host is only half of it.
+_driver_base() {
+  if [ "${TRANSPORT:-ssh}" = local ]; then printf 'http://127.0.0.1:%s' "$DRIVER_PORT"
+  else printf 'http://%s:%s' "$(_urlhost)" "$DPORT"
+  fi
+}
+
 # _push <file>... <destination>   — move files TO the machine holding the device.
 #
 # The destination is a path on that machine, with no host prefix: _push adds the

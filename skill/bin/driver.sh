@@ -89,7 +89,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # goes to that device. Without it, a single running driver is used and several
 # are refused rather than guessed at. bin/drivers.sh brings them up.
 _driver_bind || exit 1
-BASE="http://$MAC_FQDN:$DPORT"
+BASE=$(_driver_base)
 
 _up() { curl -s -o /dev/null -m 5 -w '%{http_code}' "$BASE/status" 2>/dev/null; }
 
@@ -110,7 +110,7 @@ _rebind() {
   local was=$DRIVER_PORT
   _driver_bind --fresh || return 1
   [ "$DRIVER_PORT" = "$was" ] && return 1
-  BASE="http://$MAC_FQDN:$DPORT"
+  BASE=$(_driver_base)
   echo "note: the driver for $DEV moved from $was to $DRIVER_PORT (an MCP call restarts it on ${DRIVER_PORT_BASE})" >&2
   return 0
 }
@@ -193,6 +193,18 @@ _ensure_device() {
 
 _start() {
   [ "$(_up)" = "200" ] && return 0
+  # Locally there is nothing to start. The driver binds this machine's loopback
+  # and $BASE already names it, so the relay, the staging and the pkill all go
+  # (item 94, 4.1) — and so does the lsof check below, because "is anything
+  # listening on $DRIVER_PORT" is the question _up just answered against that
+  # very port. What is left is the retry, which is about the driver and not
+  # about the transport.
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    _rebind && { _start; return $?; }
+    _ensure_device && { _start; return $?; }
+    echo "nothing is listening on $DRIVER_PORT — bin/drivers.sh up ${DEV} (or bin/device.sh up ${DEV} for a phone)" >&2
+    _devdrv_hint; return 1
+  fi
   _ssh "mkdir -p '$RDIR'" >/dev/null
   _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || return 1
   # pkill matches any relay on this DPORT, whatever its target: a stale relay left
@@ -933,7 +945,14 @@ esac
 
 case "${1:-start}" in
   start)  _start && echo "$BASE" ;;
-  stop)   _ssh "pkill -f 'relay.py $DPORT ' && echo stopped || echo 'not running'" ;;
+  stop)   # There is no relay locally, so this verb has nothing to stop — and it
+          # must not read as having stopped the driver, which is still up and is
+          # bin/drivers.sh down's to take away.
+          if [ "${TRANSPORT:-ssh}" = local ]; then
+            echo "no relay in local transport — nothing to stop. The driver itself: bin/drivers.sh down ${DEV}"
+          else
+            _ssh "pkill -f 'relay.py $DPORT ' && echo stopped || echo 'not running'"
+          fi ;;
   info)   _start && curl -s -m 5 "$BASE/deviceInfo"; echo ;;
   hierarchy) _hier ;;
   tree|nodes|text) _tree "$1" ;;
