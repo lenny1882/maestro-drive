@@ -45,7 +45,7 @@ needs changing:
 | `<mac-ip>` | the Mac's address on that network — `ipconfig getifaddr en0` on it |
 | `<mac-user>` | the login account on the Mac |
 | `<key>` | the SSH key file this uses — `mac_rc` unless you chose another |
-| `<java-home>` | wherever step 1 found a JDK |
+| `<java-home>` | wherever step 1 found a JDK — `bin/init.sh` records it as `RJAVA` |
 | `<bundle-id>` | the app under test |
 
 ## 1. On the Mac
@@ -56,7 +56,7 @@ Mac:
 | what | check | if missing |
 | --- | --- | --- |
 | Maestro | `~/.maestro/bin/maestro --version` | `brew install mobile-dev-inc/tap/maestro`, or the install script from `docs/pages/maestro-cli__how-to-install-maestro-cli.md` |
-| Java | `/usr/libexec/java_home` | any JDK. Note the path it prints — that is `<java-home>`, needed in step 7 |
+| Java | `/usr/libexec/java_home`, or `echo $JAVA_HOME` in the Mac's own shell | any JDK, installed however you like. `java_home` finds one macOS knows about and misses one a version manager keeps to itself — either is fine, because step 9 asks the Mac's login shell and records the answer as `RJAVA` |
 | Xcode + simulators | `xcrun simctl list devices booted` | install Xcode, open one simulator |
 | python3 | `python3 -V` | ships with the Command Line Tools |
 | Remote Login | System Settings -> General -> Sharing -> Remote Login **on** | nothing else works without it |
@@ -358,8 +358,11 @@ Three things the launcher handles that the old form had to get right:
 - **`ssh` is the transport.** Maestro is not installed on this machine. The
   server runs on the Mac and speaks stdio down the SSH connection.
 - **`PATH` and `JAVA_HOME` are set** from `lib.sh`'s `REMOTE_ENV`, because the
-  shell SSH gives you has neither. Without them the server exits immediately
-  and the tools appear as "failed to connect" with no further detail.
+  shell SSH gives you has neither — it reads no `.zshrc`, so whatever a version
+  manager sets there is invisible. `JAVA_HOME` is the conf's `RJAVA`, which
+  `bin/init.sh` got by asking the Mac's own login shell. Without these the
+  server exits immediately and the tools appear as "failed to connect" with no
+  further detail.
 - **The keepalives matter.** Without `ServerAliveInterval` the connection dies
   silently during a long think and the next tool call fails.
 

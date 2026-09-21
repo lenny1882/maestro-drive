@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 95.** Items 1–94 are allocated; new items start from 95.
+**Next item number: 96.** Items 1–95 are allocated; new items start from 96.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -88,6 +88,56 @@ work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
 
 ---
+
+## 95. The JDK was one machine's installer path, hardcoded — **DONE 21 Sep 2026**
+
+`lib.sh` set `JAVA_HOME=$HOME/.sdkman/candidates/java/current` in `REMOTE_ENV`,
+and 2.1 copied it into `LOCAL_ENV` as a fallback. It is true of the Mac this
+package was written against and of nothing else: it makes SDKMAN a requirement
+of a package that has no business having one, and a machine using jenv, mise,
+asdf or a plain Homebrew JDK gets a `JAVA_HOME` pointing at a directory that
+does not exist.
+
+**Found while asking what 5.2 needs locally.** This machine has no SDKMAN, so
+`LOCAL_ENV`'s fallback resolves to nothing — and worse than nothing, because
+Maestro's CLI is a Gradle start script and those use `$JAVA_HOME/bin/java`
+whenever `JAVA_HOME` is set.
+
+**What every version manager has in common is the login shell.** sdkman, jenv,
+mise, asdf, jabba and a hand-written export all work by a line in `.zshrc` or
+`.bash_profile`. So ask the machine's own shell rather than any manager's
+directory. `remote/javahome.sh` does that, in three rungs:
+
+1. `$SHELL -ic 'printf %s "$JAVA_HOME"'`, stdin closed — whatever the manager set
+2. `/usr/libexec/java_home` — macOS's registry, for an Apple- or cask-installed JDK
+3. the login shell's own `java`, resolved through its symlinks, rejecting
+   `/usr/bin/java` because on macOS that is a stub rather than a link into a JDK
+
+**Measured on the Mac, 21 Sep.** Rung 1 answers:
+`/Users/lennny/.sdkman/candidates/java/current`, Temurin 21. Rung 2 fails there
+— `Unable to locate a Java Runtime`, because `/Library/Java/JavaVirtualMachines`
+is empty and SDKMAN registers nothing — and rung 3 would return `/usr`. So on
+that machine only the shell knows, which is the whole argument.
+
+**Asked once, at setup, and recorded as `RJAVA` in the conf.** The R family, like
+`$RDIR` and `$RHELP`: the machine with the device. `bin/init.sh --detect` prints
+it and `--write` records it, in both transports. Per-command discovery was
+rejected: an interactive shell with no tty hangs — one run in three took the
+full 60s, measured — and `$TMO` would make that a three-minute stall inside
+`_ssh`, on the function all 84 call sites go through.
+
+**A conf with no `RJAVA` is not guessed at.** `lib.sh` falls back to rungs 2 and
+3 on the far side, per command, with no interactive shell; when neither answers
+it prints what to run. That is the migration: an existing conf loses `JAVA_HOME`
+on the Mac until `bin/init.sh --detect ... --write` records one, and the message
+says so rather than the package pretending it knows where a JDK is.
+
+**Verified live against the Mac:** `java -version` over `_ssh` returns Temurin
+21 with `JAVA_HOME` from `RJAVA`, and `init.sh --host <alias> --detect` prints
+the path and the version. 500 passed, 0 failed in the skill's suite and 145
+passed, 0 failed in the package's, eight of them new — including a JDK only a
+fake shell init knows about being found, and the fallback never opening an
+interactive shell.
 
 ## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep, Stage 4 on 21 Sep; Stage 5 is the proof and the name**
 

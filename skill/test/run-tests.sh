@@ -2790,7 +2790,9 @@ echo "the docs describe both shapes (item 94, 5.4)"
 # A reader whose device is on this machine must not be sent through the SSH
 # setup. The entry point, the README and the setup page each have to say that
 # where the device is is a setting.
-for f in SKILL.md ../README.md reference/setup.md; do
+# README.md is the repository's, not the skill's — it is not installed, so the
+# package's own suite checks that one.
+for f in SKILL.md reference/setup.md; do
   n=$(basename "$f")
   grep -q 'TRANSPORT' "$REPO/$f" 2>/dev/null \
     && ok "$n says where the device is is a setting" \
@@ -2800,6 +2802,72 @@ done
 grep -q 'skip' "$REPO/reference/setup.md" && grep -q 'ssh-copy-id' "$REPO/reference/setup.md" \
   && ok "setup.md names the steps a local machine skips" \
   || no "setup.md names the steps a local machine skips" "no skip table"
+
+echo
+echo "the JDK is asked of the machine, not assumed (item 94)"
+# This package carried $HOME/.sdkman/candidates/java/current for weeks, which is
+# true of one Mac and makes SDKMAN a requirement. What every version manager has
+# in common is the login shell's init, so that is what gets asked — once, at
+# setup, and recorded as RJAVA.
+JH="$TMP/jh"; mkdir -p "$JH/bin" "$JH/empty"
+# A PATH with the three tools the script uses and no java on it. An empty PATH
+# would fail for the wrong reason — env could not find sh to run it with.
+for _t in sh dirname readlink; do ln -sf "$(command -v $_t)" "$JH/bin/$_t"; done
+jh_out=$(sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
+{ [ "$jh_rc" = 0 ] && [ -x "$jh_out/bin/java" ]; } \
+  && ok "javahome.sh finds this machine's JDK and prints its home" \
+  || no "javahome.sh finds this machine's JDK and prints its home" "rc=$jh_rc out='$jh_out'"
+
+# A machine with no java at all must say so rather than name a directory that
+# happens to exist elsewhere. An empty PATH, an empty HOME so no dotfile sets
+# JAVA_HOME, and /bin/sh as the shell.
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" SHELL=/bin/sh PATH="$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
+{ [ "$jh_rc" != 0 ] && [ -z "$jh_out" ]; } \
+  && ok "and exits 1 with nothing when the machine has no JDK" \
+  || no "and exits 1 with nothing when the machine has no JDK" "rc=$jh_rc out='$jh_out'"
+
+# The login shell's answer wins, because that is where every version manager
+# puts it. A fake manager: a shell whose init exports JAVA_HOME.
+mkdir -p "$JH/fake/bin"
+printf '#!/bin/sh\nexit 0\n' > "$JH/fake/bin/java"; chmod +x "$JH/fake/bin/java"
+printf 'export JAVA_HOME=%s\n' "$JH/fake" > "$JH/empty/.shinit"
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" ENV="$JH/empty/.shinit" SHELL=/bin/sh PATH="$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null)
+[ "$jh_out" = "$JH/fake" ] \
+  && ok "a JDK only the login shell knows about is found — any manager, no name" \
+  || no "a JDK only the login shell knows about is found — any manager, no name" "got '$jh_out'"
+
+# What lib.sh builds from a recorded RJAVA, and what it builds without one.
+jh_out=$(RJAVA=/opt/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; printf "%s" "$REMOTE_ENV"')
+case "$jh_out" in
+  *"export JAVA_HOME='/opt/jdk'"*) ok "a recorded RJAVA is what the remote script exports" ;;
+  *) no "a recorded RJAVA is what the remote script exports" "got: $(printf '%s' "$jh_out" | tr '\n' ' ')" ;;
+esac
+jh_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; printf "%s%s" "$REMOTE_ENV" "$LOCAL_ENV"')
+case "$jh_out" in
+  *sdkman*) no "no installer's directory is left in either environment" "sdkman is still in it" ;;
+  *) ok "no installer's directory is left in either environment" ;;
+esac
+case "$jh_out" in
+  *java_home*) ok "without RJAVA the far side is asked, per command" ;;
+  *) no "without RJAVA the far side is asked, per command" "no fallback in the env" ;;
+esac
+# The fallback must NOT use an interactive shell: that is what hangs with no tty.
+case "$jh_out" in
+  *' -ic '*|*'-ic '*) no "and the fallback never opens an interactive shell" "found -ic in the env" ;;
+  *) ok "and the fallback never opens an interactive shell" ;;
+esac
+
+# init.sh records it as a finding.
+JHI="$TMP/jhinit"; mkdir -p "$JHI"
+( cd "$JHI" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
+    --app com.example.app --write >/dev/null 2>&1 )
+grep -q '"${RJAVA:=/' "$JHI/.maestro-mac.conf" 2>/dev/null \
+  && ok "init.sh --local records the JDK it found as RJAVA" \
+  || no "init.sh --local records the JDK it found as RJAVA" "$(grep -n RJAVA "$JHI/.maestro-mac.conf" 2>/dev/null | head -2)"
 
 echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"

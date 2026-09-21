@@ -52,13 +52,63 @@ SSH_OPTS=(
   -o ServerAliveInterval=30
 )
 
+# Where the JDK is, and how that is known.
+#
+# Never an installer's layout. This package ran for weeks with
+# $HOME/.sdkman/candidates/java/current written into it, which is true of one
+# Mac and makes SDKMAN a requirement of a package that has no business having
+# one. Every version manager — sdkman, jenv, mise, asdf, jabba — works by a line
+# in the login shell's init, so remote/javahome.sh asks the machine's own shell
+# once, at setup, and bin/init.sh records the answer as $RJAVA in the conf.
+#
+# $RJAVA is the R family: the machine with the device, the same one $RDIR,
+# $RHELP and $RMODS are on. Override a recorded value with RJAVA=<path> in the
+# environment, not with JAVA_HOME — across ssh, JAVA_HOME here is this machine's
+# and means nothing on the Mac.
+#
+# With no $RJAVA — a conf written before this, or one never detected — the
+# fallback below runs on the far side, per command. It asks macOS's registry and
+# then the shell's own java, and it must NOT do what javahome.sh's first rung
+# does: an interactive shell with no tty can hang, and $TMO would make that a
+# three-minute stall on the function every call site goes through.
+_JAVA_ENV_FALLBACK='
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME:-}/bin/java" ]; then
+  JAVA_HOME=
+  [ -x /usr/libexec/java_home ] && JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null)
+  if [ -z "$JAVA_HOME" ]; then
+    _j=$(command -v java 2>/dev/null)
+    while [ -L "$_j" ]; do
+      _l=$(readlink "$_j")
+      case "$_l" in /*) _j=$_l ;; *) _j=$(dirname "$_j")/$_l ;; esac
+    done
+    case "$_j" in ""|/usr/bin/java) _j= ;; esac
+    [ -n "$_j" ] && JAVA_HOME=${_j%/bin/java}
+  fi
+fi
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  export JAVA_HOME
+  PATH=$JAVA_HOME/bin:$PATH
+  export PATH
+else
+  echo "maestro-remote-mac: no JDK on this machine, and the conf does not say where one is." >&2
+  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-mac.conf)" >&2
+fi
+'
+
+# The JAVA_HOME lines for a script that will run on the machine with the device.
+_java_env() {
+  if [ -n "${RJAVA:-}" ]; then
+    printf "export JAVA_HOME='%s'\nPATH=\$JAVA_HOME/bin:\$PATH\nexport PATH\n" "$RJAVA"
+  else
+    printf '%s\n' "$_JAVA_ENV_FALLBACK"
+  fi
+}
+
 # Environment every remote command needs. A non-interactive SSH shell has
 # neither Java nor Maestro on PATH, and Maestro will not start without both.
 REMOTE_ENV='
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin
-export JAVA_HOME=$HOME/.sdkman/candidates/java/current
-export PATH=$JAVA_HOME/bin:$PATH
-'
+'"$(_java_env)"
 
 # The same job locally, and it is NOT the same script (item 94, 2.1).
 #
@@ -69,14 +119,12 @@ export PATH=$JAVA_HOME/bin:$PATH
 # vanish and every android verb would fail as "command not found" while looking
 # like a broken module.
 #
-# So: add, never replace. An existing JAVA_HOME wins, because a local machine
-# may have Java from somewhere other than sdkman, and a non-existent directory
-# prepended to PATH costs nothing.
+# So: add, never replace. The JDK comes from the same place it does across ssh —
+# $RJAVA if the conf records one, and the fallback if not, which locally keeps an
+# existing JAVA_HOME when it points at a real JDK.
 LOCAL_ENV='
 export PATH=$PATH:$HOME/.maestro/bin
-export JAVA_HOME=${JAVA_HOME:-$HOME/.sdkman/candidates/java/current}
-export PATH=$JAVA_HOME/bin:$PATH
-'
+'"$(_java_env)"
 
 # Which alias to talk to, when MAC_HOST names more than one.
 #
