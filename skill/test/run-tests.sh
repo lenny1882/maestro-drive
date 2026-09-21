@@ -2165,6 +2165,39 @@ if [ -r "$ICONF/.maestro-drive.conf" ]; then
 else
   no "init writes RUNNER" "no conf written"
 fi
+# --host takes several aliases (item 97). A conf naming one makes _pick_host
+# return at its `[ "$n" -le 1 ]` guard without probing, caching or re-picking —
+# so a single-alias conf does not make the mechanism unlucky, it switches the
+# mechanism off, and bin/mcp.sh exits before it speaks a word of MCP when the
+# Mac has moved network. Both spellings are tested because both are natural:
+# the flag repeated, and one quoted list.
+IMH="$TMP/initmulti"; mkdir -p "$IMH"
+( cd "$IMH" && MAESTRO_DRIVE_CONF= bash "$REPO/bin/init.sh" --host mac-x --host mac-y \
+    --fqdn mac-x.local --app com.example.app --write >/dev/null 2>&1 )
+grep -q 'MAC_HOST:=mac-x mac-y}' "$IMH/.maestro-drive.conf" 2>/dev/null \
+  && ok "--host repeated writes both aliases, in the order given" \
+  || no "--host repeated writes both aliases, in the order given" \
+       "$(grep MAC_HOST "$IMH/.maestro-drive.conf" 2>/dev/null || echo 'no conf written')"
+
+IMQ="$TMP/initquoted"; mkdir -p "$IMQ"
+( cd "$IMQ" && MAESTRO_DRIVE_CONF= bash "$REPO/bin/init.sh" --host "mac-x mac-y" \
+    --fqdn mac-x.local --app com.example.app --write >/dev/null 2>&1 )
+grep -q 'MAC_HOST:=mac-x mac-y}' "$IMQ/.maestro-drive.conf" 2>/dev/null \
+  && ok "--host takes one quoted list too" \
+  || no "--host takes one quoted list too" \
+       "$(grep MAC_HOST "$IMQ/.maestro-drive.conf" 2>/dev/null || echo 'no conf written')"
+
+# Neither alias answers here, so nothing was asked of any machine. The danger is
+# asking THIS one: _javahome with no argument answers about the local box, and a
+# Linux JDK path written into a Mac's conf is a finding that is wrong rather
+# than absent.
+# The commented-out `#: "${RJAVA:=}"` placeholder is the WANTED output; what
+# must not appear is a live setting carrying a path.
+grep -q '^: "${RJAVA:=..*}"' "$IMQ/.maestro-drive.conf" 2>/dev/null \
+  && no "an unreachable Mac leaves RJAVA unset rather than answering locally" \
+        "$(grep RJAVA "$IMQ/.maestro-drive.conf")" \
+  || ok "an unreachable Mac leaves RJAVA unset rather than answering locally"
+
 # The gitignore advice it prints in a git tree covers the PROFILE layering too:
 # .maestro-drive.conf.uat is where APP_PIN actually lives in a two-environment
 # project, and an entry that names only the base file leaves it exposed.
