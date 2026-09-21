@@ -24,7 +24,7 @@ RUNNERS=$(cd "$(dirname "$0")/../runners" && pwd)
 
 # A Mac-side verb runs out of $RDIR, where bin/install.sh puts the module. The
 # relative layout is preserved, so a module may refer to its sibling scripts.
-RRUNNERS="$RDIR/runners"
+RRUNNERS="$RMODS"
 
 _module() {  # _module <framework|platform> -> path to the script
   local kind=$1 name
@@ -56,7 +56,7 @@ case "${1:-}" in
   framework|platform)
     kind=$1; shift
     m=$(_module "$kind") || exit $?
-    RDIR="$RDIR" LDIR="$LDIR" exec sh "$m" "$@"
+    RDIR="$RDIR" LDIR="$LDIR" RMODS="$RMODS" RHELP="$RHELP" exec sh "$m" "$@"
     ;;
 
   path)
@@ -82,11 +82,21 @@ case "${1:-}" in
     # More than one claim, or none, is refused with the candidates named — the
     # same standard remote/build.sh holds itself to when two flavours build one
     # bundle id. Guessing here installs the wrong app, silently.
-    [ -n "${REPO:-}" ] || { echo "runner detect: REPO is not set — the checkout on the Mac." >&2; exit 2; }
+    [ -n "${REPO:-}" ] || { echo "runner detect: REPO is not set — the checkout." >&2; exit 2; }
+    # `claim` is the one framework verb that does not need the Mac: every
+    # implementation is a filesystem test on the checkout — flutter reads
+    # pubspec.yaml, react-native reads package.json's dependencies. It goes
+    # through _ssh here only because in ssh transport the checkout is on the
+    # Mac. Locally it is on this machine, so the module runs from $RUNNERS and
+    # nothing leaves the box (item 94).
     claims=$(
       for n in $(_have framework); do
-        out=$(_ssh "sh '$RRUNNERS/$n/framework.sh' claim '$REPO' 2>/dev/null") && \
-          printf '%s\t%s\n' "$n" "$out"
+        if _fs_shared; then
+          out=$(sh "$RUNNERS/$n/framework.sh" claim "$REPO" 2>/dev/null)
+        else
+          out=$(_ssh "sh '$RRUNNERS/$n/framework.sh' claim '$REPO' 2>/dev/null")
+        fi
+        [ $? -eq 0 ] && printf '%s\t%s\n' "$n" "$out"
       done
     )
     n=$(printf '%s\n' "$claims" | grep -c .)

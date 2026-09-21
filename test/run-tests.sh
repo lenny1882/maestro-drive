@@ -1290,6 +1290,34 @@ jq -e '.mcpServers["someone-elses-server"] and .projects["/some/path"]
   && ok "leaves other servers, project records and auth state alone" \
   || no "leaves other servers, project records and auth state alone" "$(jq -c 'keys' "$HOME/.claude.json")"
 
+# The bridge server is optional and asked about (BACKLOG item 96). A scripted
+# install has nobody to ask, so it registers nothing and says how to add it — a
+# capability that appears in an unattended install is one nobody chose.
+jq -e '.mcpServers | has("maestro-bridge") | not' "$HOME/.claude.json" >/dev/null \
+  && ok "an unattended install does not register the bridge server" \
+  || no "an unattended install does not register the bridge server" "$(jq -c '.mcpServers | keys' "$HOME/.claude.json")"
+
+"$REPO/install.sh" --link --yes --with-bridge >/dev/null 2>&1
+jq -e '.mcpServers["maestro-bridge"]
+       | .command == "python3"
+         and (.args[0] | endswith("/skills/maestro-remote-mac/bin/bridge-mcp.py"))
+         and (.args[0] | startswith("/"))' \
+  "$HOME/.claude.json" >/dev/null \
+  && ok "--with-bridge registers it by absolute path, run with python3" \
+  || no "--with-bridge registers it by absolute path, run with python3" "$(jq -c '.mcpServers' "$HOME/.claude.json")"
+
+# An update re-runs the installer with whatever flags it was given, so the
+# choice has to survive one that says nothing.
+"$REPO/install.sh" --link --yes >/dev/null 2>&1
+jq -e '.mcpServers | has("maestro-bridge")' "$HOME/.claude.json" >/dev/null \
+  && ok "and a later install without the flag keeps it, rather than taking it away" \
+  || no "and a later install without the flag keeps it, rather than taking it away" "removed on re-install"
+
+"$REPO/install.sh" --link --yes --no-bridge >/dev/null 2>&1
+jq -e '.mcpServers | has("maestro-bridge")' "$HOME/.claude.json" >/dev/null \
+  && ok "--no-bridge does not remove one that is already registered — uninstall does that" \
+  || no "--no-bridge does not remove one that is already registered — uninstall does that" "removed it"
+
 before=$(jq -S . "$CLAUDE_DIR/settings.json")
 before_cj=$(jq -S . "$HOME/.claude.json")
 "$REPO/install.sh" --link --yes >/dev/null 2>&1
@@ -1320,11 +1348,25 @@ jq -e --arg o "maestro-remote-mac" '[.. | .command? // empty] | any(contains($o)
 jq -e '.mcpServers | has("maestro-mac")' "$HOME/.claude.json" >/dev/null 2>&1 \
   && no "uninstall removes the MCP entry" "still registered" \
   || ok "uninstall removes the MCP entry"
+
+# Both of them: the bridge entry would otherwise point at a script that has
+# just been deleted, which fails at every session start rather than visibly.
+jq -e '.mcpServers | has("maestro-bridge")' "$HOME/.claude.json" >/dev/null 2>&1 \
+  && no "uninstall removes the bridge entry too" "still registered" \
+  || ok "uninstall removes the bridge entry too"
 jq -e '.mcpServers["someone-elses-server"] and .projects["/some/path"]
        and .oauthAccount.accountUuid == "keep-me"' \
   "$HOME/.claude.json" >/dev/null \
   && ok "uninstall leaves other servers and account state alone" \
   || no "uninstall leaves other servers and account state alone" "$(jq -c 'keys' "$HOME/.claude.json")"
+
+echo "the README describes both shapes (item 94, 5.4)"
+# The skill's own documents are checked by its suite. This one is not installed,
+# so it is checked here: a reader whose device is on this machine must not be
+# told the only shape is a Mac across a network.
+grep -q 'TRANSPORT' "$REPO/README.md" \
+  && ok "README.md says where the device is is a setting" \
+  || no "README.md says where the device is is a setting" "no mention of TRANSPORT"
 
 echo "release tarball"
 # Whether the release tarball is enough to install from — the one thing a git

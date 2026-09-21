@@ -41,5 +41,17 @@ DRIVERS="$HERE/../bin/drivers.sh"
 
 # Detached and not waited on: SessionEnd must not hold the terminal open for an
 # SSH round trip, and `rig down` is idempotent if it is cut short.
-( bash "$DRIVERS" rig down ) >/dev/null 2>&1 &
+#
+# The bridge helper goes after the rig and not before it, because under
+# TRANSPORT=bridge `rig down` travels through that helper — stopping it first
+# would leave the very simulators this hook exists to take down (item 96, 2.2).
+# It is a process outside the sandbox with a shell channel into this machine, so
+# ending the session ends it; a helper that outlives the session that asked for
+# it is the thing the item's controls are about.
+BRIDGE_MCP="$HERE/../bin/bridge-mcp.py"
+(
+  bash "$DRIVERS" rig down
+  [ -r "$BRIDGE_MCP" ] && command -v python3 >/dev/null 2>&1 &&
+    python3 "$BRIDGE_MCP" --stop
+) >/dev/null 2>&1 &
 exit 0

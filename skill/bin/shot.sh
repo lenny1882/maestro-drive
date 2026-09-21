@@ -34,8 +34,18 @@ done
 # The platform writes the file on the Mac; base64 back is this side's business,
 # and the module must not do it — an encoder in the verb would make every caller
 # that wants the file on the Mac decode it again.
-_ssh "sleep $S; sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$N.png' && base64 < '$RDIR/$N.png'" \
-  | base64 -d > "$LDIR/$N.png"
+# Across ssh the fetch is folded into the same call, because the alternative is
+# a second connection for a file that is already in hand. Locally that encode
+# and decode is pure cost — and worse than cost: $RDIR and $LDIR are two real
+# directories here too, so the pair would be doing by arithmetic what `cp` does
+# by name. The branch is the point of the unit, not a wart in it.
+if _fs_shared; then
+  _ssh "sleep $S; sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$N.png'" || exit 1
+  _pull "$RDIR/$N.png" "$LDIR/$N.png" || exit 1
+else
+  _ssh "sleep $S; sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$N.png' && base64 < '$RDIR/$N.png'" \
+    | base64 -d > "$LDIR/$N.png"
+fi
 [ -s "$LDIR/$N.png" ] || { echo "shot: no image came back for $d" >&2; exit 1; }
 [ ${#IMG[@]} -eq 0 ] || "$(dirname "$0")/img.sh" "$LDIR/$N.png" "${IMG[@]}" >/dev/null || exit 1
 ls -la "$LDIR/$N.png"

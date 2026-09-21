@@ -44,7 +44,7 @@ _list() {
   local map booted
   map=$(_driver_map --fresh)
   booted=$(_booted)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   printf '%-38s %-9s %-7s %s\n' UDID DRIVER RELAY DEVICE
   printf '%s\n' "$booted" | while read -r u name; do
     local port
@@ -256,7 +256,7 @@ _rig_up() {
 _rig_status() {
   local map booted mine labels rows u name port by
   map=$(_driver_map --fresh); booted=$(_booted); mine=$(_rig_claimed)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   # Every label in ONE call, before the loop. An _ssh inside a loop that is
   # reading from a pipe eats the rest of the pipe — _ssh passes stdin to the
   # remote command — so the first pass of this printed one device out of seven.
@@ -324,7 +324,7 @@ _rig_reap() {  # _rig_reap [--shutdown]
 
   local booted map claimed rows verdicts orphans n
   booted=$(_booted)
-  [ -n "$booted" ] || { echo "no booted simulator on $MAC_HOST"; return 0; }
+  [ -n "$booted" ] || { echo "no booted simulator on $(_where)"; return 0; }
   map=$(_driver_map --fresh)
   claimed=$(_ssh "cat '$RIG_OWNED'/* 2>/dev/null" 2>/dev/null)
 
@@ -403,13 +403,21 @@ _up_one() {  # _up_one <udid> <live-map> <ports-map>
   port=$(_port_for "$udid" "$map" "$pmap")
   echo "$udid  starting on $port (about 30s)"
   _ssh "mkdir -p '$RDIR'" >/dev/null
-  scp "${SSH_OPTS[@]}" "$HERE/../remote/driverup.sh" "$MAC_HOST:$RDIR/driverup.sh" >/dev/null || return 1
-  TMO=180 _ssh "RDIR='$RDIR' sh '$PLATFORM_SH' driver-up '$udid' '$port' '$RDIR/drv'" || return 1
+  _push "$HERE/../remote/driverup.sh" "$RHELP/driverup.sh" || return 1
+  TMO=180 _ssh "RDIR='$RDIR' RHELP='$RHELP' sh '$PLATFORM_SH' driver-up '$udid' '$port' '$RDIR/drv'" || return 1
   # Remember it was us. A driver that disappears from the scan afterwards was
   # taken by something, and the note in _driver_bind can say so.
   _driver_own "$udid" "$port"
   _label_default "$udid" "$map"
-  echo "$udid  relay:  DEV=$udid  ->  http://$MAC_FQDN:$(_dport_for "$port")"
+  # Across ssh the driver is reached through the relay bin/driver.sh starts, so
+  # the URL to print is the relay's. Locally there is no relay and the driver's
+  # own port is the address (item 94, 4.1) — printing a $DPORT here would name a
+  # port nothing will ever listen on.
+  if _ports_here; then
+    echo "$udid  driver:  DEV=$udid  ->  http://127.0.0.1:$port"
+  else
+    echo "$udid  relay:  DEV=$udid  ->  http://$(_urlhost):$(_dport_for "$port")"
+  fi
 }
 
 case "${1:-list}" in
@@ -514,7 +522,7 @@ case "${1:-list}" in
     _driver_scan >/dev/null
     _driver_disown
     _ssh "rm -rf '$RDIR/labels'" >/dev/null 2>&1 || true
-    echo "stopped every driver on $MAC_HOST"
+    echo "stopped every driver on $(_where)"
     ;;
   *) echo "usage: drivers.sh [list|up [udid]|down <udid>|down-all|rig [up|down|status]|ports [list|adopt|forget [udid]]]" >&2; exit 2 ;;
 esac

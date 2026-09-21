@@ -85,14 +85,18 @@ elif [ ! -f "$CLAUDE_JSON" ]; then
 elif ! jq empty "$CLAUDE_JSON" 2>/dev/null; then
   warn "$CLAUDE_JSON is not valid JSON — leaving it untouched."
   warn "Remove the .mcpServers[\"$MCP_NAME\"] entry by hand."
-elif ! jq -e --arg n "$MCP_NAME" 'has("mcpServers") and (.mcpServers | has($n))' \
+elif ! jq -e --arg n "$MCP_NAME" --arg b "$MCP_BRIDGE_NAME" \
+       'has("mcpServers") and ((.mcpServers | has($n)) or (.mcpServers | has($b)))' \
        "$CLAUDE_JSON" >/dev/null 2>&1; then
   ok "no $MCP_NAME entry"
-elif confirm "  Remove the $MCP_NAME MCP server entry?"; then
+elif confirm "  Remove the $MCP_NAME and $MCP_BRIDGE_NAME MCP server entries?"; then
   cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak-uninstall"
   tmp=$(mktemp "$(dirname "$CLAUDE_JSON")/.claude.json.XXXXXX")
-  jq --arg n "$MCP_NAME" '
-    del(.mcpServers[$n])
+  # Both names: the bridge is optional at install time and is this package's
+  # either way, so leaving it behind would leave an entry pointing at a script
+  # that has just been deleted (item 96).
+  jq --arg n "$MCP_NAME" --arg b "$MCP_BRIDGE_NAME" '
+    del(.mcpServers[$n]) | del(.mcpServers[$b])
     | if (.mcpServers // null) == {} then del(.mcpServers) else . end
   ' "$CLAUDE_JSON" > "$tmp" && mv "$tmp" "$CLAUDE_JSON"
   ok "cleaned; previous file saved as $CLAUDE_JSON.bak-uninstall"

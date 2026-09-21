@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 95.** Items 1–94 are allocated; new items start from 95.
+**Next item number: 98.** Items 1–97 are allocated; new items start from 98.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -89,7 +89,495 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep**
+## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **OPEN, raised 21 Sep**
+
+The decision is taken and recorded in 94's 5.5: the package becomes
+**`maestro-drive`**, and the rename covers the repo slug, the installed skill
+directory, `~/.local/share/`'s lib directory, the 14 message prefixes and the
+per-project conf, which becomes `.maestro-drive.conf`. It does not cover the MCP
+entry `maestro-mac`, which is item 97's.
+
+This item is the carrying out, which is not a search and replace:
+
+**The installed directory has to be migrated, not just written elsewhere.**
+Everyone who upgrades has `~/.claude/skills/maestro-remote-mac` and
+`~/.local/share/maestro-remote-mac` already. An installer that creates the new
+pair and leaves the old one leaves a second copy of the skill for Claude to
+find, with its own hooks registered in `settings.json` — two gates on every Bash
+call, and a `SessionEnd` hook pointing at a directory nobody updates.
+`manifest.sh` needs a legacy list that `install.sh` migrates from and
+`uninstall.sh` sweeps.
+
+**`GITHUB_SLUG` is pinned in two installed files.** `update.sh:24` and
+`lib/update-check.sh:41`. GitHub redirects a renamed repository, the API with
+it, so an installed copy keeps updating — but the redirect is the only thing
+holding it, and it lasts exactly as long as nobody creates a new repository
+under the old name.
+
+**`.github/workflows/release.yml` names the package five times**, and the
+release tarball's name is what `update.sh` downloads. A release cut during the
+rename has to be one or the other, not half of each.
+
+**The three documents and the frontmatter.** `SKILL.md`'s `name:` is what Claude
+matches on, so it and the directory have to change in the same commit or the
+skill stops loading.
+
+**The conf is 96 occurrences and NO compatibility read**, which 5.5 settled:
+exactly one `.maestro-mac.conf` exists, this repo's, so `config.sh` looks for
+`.maestro-drive.conf` and nothing else. The one file in existence gets renamed
+by hand.
+
+**`flutter-hot-reload-mac` reads that conf and is a separate repository.** Nine
+references, in its `SKILL.md` and its `bin/lib.sh`. Its rename has to land in
+the same release or it stops finding any settings — which is why this item is a
+release and not a commit, and it is worth doing while item 93 is open against
+that skill anyway.
+
+**Gated on:** nothing. Better done in one release rather than spread over
+several, and better not at the same time as 97.
+
+## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep**
+
+`maestro-mac` failed to connect for this entire session — `CONNECTION_CLOSED`,
+every time, including after `/mcp` reconnects. Nothing else was wrong: the Mac
+answered ssh on `mac-senseguest` throughout, and every `bin/` script worked
+against it.
+
+**The cause is the conf, and the symptom names none of it.** `bin/mcp.sh`
+sources `config.sh`, which loads this project's conf — `MAC_HOST=mac-home`, an
+alias for 192.168.4.250. The Mac is on the senseguest network. `_pick_host` has
+one candidate, cannot reach it, and the server exits before it speaks a word of
+MCP; Claude Code reports that a server closed the connection, which reads as a
+broken install.
+
+**Three things to decide, not one to fix.**
+
+**Where the aliases live.** `MAC_HOST` may name several, and `_pick_host` walks
+them — but this conf names one. A conf listing all three would have found the
+Mac by itself, which is what item 18 built the list for.
+
+**What the server should do when it cannot reach the Mac.** Exiting is honest
+and unreadable. A server that starts, answers `tools/list`, and returns "the Mac
+is not reachable on any alias in this conf" from every call would put the
+diagnosis where somebody sees it.
+
+**Whether it should be reading the project conf at all.** The MCP server is
+spawned once per session, before any project is in view, and `config.sh`'s
+search walks up from `$PWD` — which for a server Claude Code spawns is wherever
+the session started. The `maestro-bridge` server takes no conf at all and starts
+a helper the conf then points at; `mcp.sh` could work the same way.
+
+**A fourth, added 21 Sep by item 94's 5.5: whether it is still called
+`maestro-mac`.** The package is becoming `maestro-drive` (item 98), and this
+server's name is wrong in the same way — under local or bridge transport it
+never touches a Mac. It is here rather than in 98 because the three decisions
+above may restructure or retire the server, and because renaming it is not just
+the entry: the tool names become `mcp__maestro-drive__*`, and
+`MAESTRO-REVIEW-TRACKER.md` counts `mcp__maestro-mac__*` in transcripts to
+decide whether a session drove Maestro, so its matcher has to take both prefixes
+first. `uninstall.sh` deletes `.mcpServers[$MCP_NAME]` and knows only the
+current name, so a rename without a legacy sweep in `manifest.sh` leaves the old
+entry in `~/.claude.json` pointing at a script that is gone.
+
+**Gated on:** nothing. Found while proving item 96.
+
+## 96. A device on this machine is on the other side of the sandbox — **DONE 21 Sep 2026; all three stages, and the live run in 3.2 drove a real emulator**
+
+Item 94 made the package drive a device on the machine it runs on. It works —
+Stages 1 to 4, 500 tests — and inside a Claude session on THIS machine it
+cannot reach the device at all. Measured 21 Sep, from the Bash tool:
+
+```
+/dev/kvm       absent          an x86 emulator cannot start
+processes      4               its own PID namespace
+interfaces     lo              its own network namespace
+writes         cwd and $TMPDIR only
+```
+
+**The SSH transport works from in here for a reason that local transport
+removes.** The sandbox permits egress to the Mac, and the Mac is outside it
+doing the work. Locally there is no other machine, so the work lands in the one
+place that cannot do it.
+
+**An MCP server is outside the sandbox.** Measured the same day, with a throwaway
+server registered and called: `/dev/kvm present, opened read-write`, the AVD
+directory writable, 483 processes, the host's interfaces, parent
+`/home/james/.local/bin/claude`. So a process Claude Code spawns can do what the
+Bash tool cannot.
+
+**And the scratch is shared.** `/tmp/claude-1000` is a real host directory both
+sides see. A FIFO created in the sandbox and written by a host process delivered
+its bytes. A TCP listener on the host was also reachable, through the egress
+proxy, once its address was declared — but `ssh` to the same machine was refused
+as *Containment Escape*, so that route rests on a per-command judgement rather
+than a rule.
+
+### The shape, and why not the others
+
+**Four shapes were considered.** One MCP tool per `bin/` script (ten typed
+tools); one per runner-module verb; one per intent; or a generic channel that
+carries what `_ssh` already carries. The first three add a second way to drive
+to a package whose whole design is one way to drive — written, tested and kept
+in step per platform and per transport, forever, for one machine's testing
+problem. The fourth adds a third value to a setting that already exists.
+
+**It is chosen for sharing, and the cost is stated plainly.** The bridge carries
+arbitrary shell to this machine — the same capability the ssh transport has
+against the Mac, pointed at the machine the sandbox exists to protect, and
+nothing reviews the traffic. It is the boundary removed rather than narrowed.
+The controls are that it is started deliberately rather than running in every
+session, that it logs every script it executes, and that it stops at session
+end.
+
+**A Mac never uses it.** On macOS there is no KVM in the picture and seatbelt has
+no PID or network namespace, so local transport as 94 built it should reach a
+simulator directly. This item exists for this Linux machine's sandbox.
+
+**Local versus remote is three things, and the bridge answers each from an
+existing answer:**
+
+| | ssh | local | bridge |
+| --- | --- | --- | --- |
+| a shell script reaches the device host | `ssh` | `sh -c` | the channel |
+| a file reaches it | `scp` | `cp`, one filesystem | `cp`, one filesystem |
+| an HTTP client here reaches a port there | relay + proxy + `$MAC_FQDN` | `127.0.0.1` | relay + proxy + the host's address |
+
+That third row is the one that would otherwise bite: `driver.sh` curls
+`$BASE/status` **from the sandbox**, and under the bridge the driver is bound to
+the host's loopback, which the sandbox cannot reach. `_urlhost` and
+`_driver_base` already have the branch point.
+
+### The plan, in stages
+
+**Stage 1 — the channel.**
+
+**1.1 DONE 21 Sep — `remote/bridge.sh`, the host-side helper.** Reads a request id from a
+control FIFO, runs the script that request carries, streams stdout and stderr
+back down two FIFOs the client made, writes the exit status to a file. One
+directory per session under the shared scratch, with a random component in its
+name. Every script it runs is appended to a log beside it. *Done when:* a script
+sent from the sandbox runs on the host and its output comes back, and the log
+shows what ran.
+
+**One request, one set of files, so concurrent calls cannot collide.** The
+control FIFO is a doorbell carrying an id; everything else is `<id>.cmd`,
+`<id>.in`, `<id>.out`, `<id>.err`, `<id>.rc`. `out` and `err` are FIFOs the
+client makes, which is what keeps the streaming real — opening them blocks until
+the client is reading, so output arrives as the script produces it rather than
+as a file read at the end. Measured in the suite: the first line of
+`echo first; sleep 2; echo second` arrives in under a second.
+
+**The starting is what the harness objects to, not the mechanism.** Running the
+helper detached from the Bash tool was refused as *Containment Escape*, which is
+a fair reading of what it is. Started inside a single call and stopped at the
+end it is permitted — which is how the suite exercises it, and how the MCP
+server will start it for real (2.1).
+
+**Four repairs to item 95's cases came with this unit**, because the machine
+changed underneath them: the apt JDK was removed and its replacement is a
+version manager sourced from `.bashrc`, which a non-interactive shell does not
+read. The suite now keeps `REAL_HOME` from before it redirects `HOME` — rung 1
+asks the login shell, and the login shell's init is in the user's own home —
+skips rather than fails when a machine has no JDK on any rung, and builds a
+findable JDK for the two cases that need the fallback to succeed.
+
+**Verified:** 512 passed, 0 failed, nine new — stdout and stderr on separate
+channels, the script's own exit status, stdin forwarded, the first line arriving
+before the script has finished, the log carrying every script, and a directory
+owned by somebody else being refused.
+
+**1.2 DONE 21 Sep — `_ssh` gains the bridge branch, and the payload assembly is factored out.**
+The message is the same three parts in every transport — environment prefix,
+`cd $REPO`, the caller's script — and it is currently written out twice. A third
+copy is not the answer. *Done when:* a given call produces byte-identical script
+text in all three transports, and the bridge branch streams stdout, forwards
+stdin and returns the real exit status.
+
+**`_payload` is the assembly, and the suite asserts local and bridge produce the
+same bytes.** ssh's differs in one thing only, and deliberately: `REMOTE_ENV`
+replaces `PATH` where `LOCAL_ENV` adds to it (2.1's reason — replacing it here
+would lose the Android SDK under `/mnt/sda`).
+
+**Stdin is a channel, not a file read up front, and getting that wrong hung the
+suite.** The first version drained stdin into a file before ringing, which
+stalls every call whose caller leaves stdin open and sends nothing — most of
+them. It is a FIFO with a background writer now, which is what ssh does.
+
+**A background command in a non-interactive shell gets `/dev/null` for stdin
+unless it is told otherwise**, so that writer delivered an empty stdin and said
+nothing about it. It names the call's own stdin explicitly through fd 9. The
+case that catches it pipes text into `_ssh "cat"` and reads it back.
+
+**A helper that is not serving is like a host that is not answering:** it says
+so, runs nothing and returns 1. No retry — the same reasoning that keeps the
+local branch retry-free, because half of what goes through `_ssh` taps a screen.
+
+**Verified:** 520 passed, 0 failed, eight new; 145 passed, 0 failed in the
+package's suite.
+
+**1.3 DONE 21 Sep — the values follow the table.** `_push`/`_pull` take local's answer;
+`_urlhost`, `_driver_base` and `$grpc_proxy` take ssh's. *Done when:* a bridge
+conf builds a driver URL naming the host's address and a relay port, and a push
+is a copy rather than an scp.
+
+**Two predicates replace thirty scattered "is this local" tests.** `_fs_shared`
+is true when the machine with the device shares this filesystem — ssh no, local
+yes, bridge yes. `_ports_here` is true when a port on that machine is reachable
+from this process without a relay and without the proxy — ssh no, local yes,
+bridge **no**. Every branch in `bin/` was asking one of those two questions
+while appearing to ask about the transport, which is why a third transport would
+otherwise have meant editing all of them and getting some wrong.
+
+**The split is not cosmetic.** `_urlhost` and `_driver_base` follow
+`_ports_here`, so the bridge reads the driver through `relay.py` exactly as the
+Mac is read, and `$grpc_proxy` stays set for the same reason. `_push`, `_pull`,
+`$RHELP`, `$RMODS`, `mcp.sh` and `install.sh` follow `_fs_shared`, so a push is
+a copy onto itself. `_macip` gains a third answer — the conf's `BRIDGE_HOST` —
+because under the bridge the question is real again.
+
+**The four stub `lib.sh` files in the suite carry the predicates**, since a stub
+that replaces `lib.sh` replaces `config.sh` with it.
+
+**1.4 DONE 21 Sep — what a failure means.** ssh re-picks a host on 255 and 124; local
+deliberately does not retry. The bridge needs its own rule: a helper that is not
+running is like a host that is not answering, and a timeout on a live helper is
+the command's own. *Done when:* a stopped helper says so and does not retry a
+command that may have tapped a screen.
+
+**Three failures, three answers.** No helper serving: say so, run nothing,
+return 1. A command that outruns `$TMO`: the far side's own `timeout` ends it
+and 124 comes back, once — the log shows one invocation, not two. No status
+file after the channels close: report that rather than invent a zero.
+
+**Verified:** 529 passed, 0 failed, nine new across 1.3 and 1.4; 145 passed, 0
+failed in the package's suite.
+
+**Stage 2 — starting it.**
+
+**2.1 DONE 21 Sep — the MCP server, one verb.** `bridge start|stop|status`, and nothing else.
+No `boot`, no AVD names, nothing platform-shaped — booting a device is
+`platform.sh boot` sent over the bridge like everything else, which is what
+keeps android and ios sharing the same path. *Done when:* the server starts the
+helper, reports where its directory is, and stops it.
+
+**`bin/bridge-mcp.py`, and the verb list is the whole design.** One tool called
+`bridge`, one argument, an enum of three. No paths, no device, no AVD name, and
+nothing it can run but `remote/bridge.sh`. The suite asserts the tool takes
+exactly one property and that a fourth action is refused by name.
+
+**It prints the conf rather than writing one.** `start` returns the three lines
+to paste — `TRANSPORT`, `BRIDGE_DIR`, `BRIDGE_HOST` — and says where the log is.
+`BRIDGE_HOST` comes from `hostname -I`; when that is empty the reply says the
+server is not running where it should be, because a server with no network
+interface is one that got spawned inside the sandbox.
+
+**Proved end to end, in one call:** start, then `_ssh` over the bridge running
+`hostname; ls /dev/kvm; nproc` on the far side, then stop. Started from a Bash
+tool the far side is still the sandbox — no `/dev/kvm` — which is exactly what
+the probe measured and what registering the server fixes.
+
+**Verified:** 536 passed, 0 failed, seven new; 145 passed, 0 failed in the
+package's suite.
+
+**2.2 DONE 21 Sep — it stops when the session does.** `rig-down-on-end.sh` is already the
+SessionEnd hook; the helper hangs off the same idea rather than inventing one.
+
+**The rig goes down first, and the order is the unit's one real decision.**
+Under `TRANSPORT=bridge` a `rig down` travels through the helper, so stopping
+the helper first would strand the very simulators the hook exists to take down.
+Both run in one detached subshell, in that order, so SessionEnd still never
+holds the terminal open.
+
+**Two entry points, one implementation.** A hook is not a Claude session and
+cannot call an MCP tool, so `bridge-mcp.py` answers `--stop`, `--status` and
+`--start` on the command line as well.
+
+**The log is left behind.** A teardown that takes the record of what ran on this
+machine with it would be worse than one that leaves a directory.
+
+**Stage 2 is complete.** The helper is started when asked, by one verb that
+takes no paths, and it ends with the session.
+
+**Verified:** 540 passed, 0 failed, four new; 145 passed, 0 failed in the
+package's suite.
+
+**2.3 DONE 21 Sep — the installer asks.** Registering the server is not the same
+as opening the channel — it idles until a session calls `start` — but it does put
+the tool in every session on that machine, so `install.sh` asks rather than
+decides: a `[Y/n]` with the honest description beside it.
+
+**Three answers, and a fourth that is nobody's.** `--with-bridge` and
+`--no-bridge` answer in advance; an unattended install — `--yes`, or no terminal
+— registers nothing and prints the flag to add it, because a capability that
+appears in a scripted install is one nobody chose.
+
+**An install never removes it.** Already registered means keep it and do not
+ask, so `update.sh` — which re-runs the installer with whatever flags it was
+given — cannot quietly take it away. `--no-bridge` on a machine that has it
+leaves it alone too. `uninstall.sh` removes both names, because the entry would
+otherwise point at a script that has just been deleted, which fails at every
+session start rather than visibly.
+
+**One thing it does not do yet.** `install.sh` decides whether to ask with
+`[ -t 0 ]` and reads with a plain `read`, while `update.sh` and `uninstall.sh`
+both read from `</dev/tty`. An update run the usual way — `curl … | bash` —
+leaves stdin a pipe, so `update.sh` can ask its own question and `install.sh`
+cannot: it falls through to printing the flag. Its existing wizard prompt has
+had the same shape all along. One line each, and both prompts should read from
+`/dev/tty` when there is one.
+
+**Verified:** 150 passed, 0 failed in the package's suite, five new.
+
+**Stage 3 — proof.**
+
+**3.1 DONE 21 Sep — the suite runs three transports.** 5.1's block gains a column. The helper
+can be started in-process, so it still needs no Mac and no device.
+
+**Thirty-four bridge cases in all, across 1.1 to 3.1**, and the helper is
+started inside the run every time — so the suite still needs no Mac, no device
+and nothing registered. 94's 5.1 block now covers `install.sh`, `_pull` and
+`mcp.sh` under the bridge as well, which is where the two columns show: the
+checkout is left byte-identical and nothing is copied, exactly as locally,
+while the `mkdir` that makes the scratch has to travel through the helper to
+happen at all.
+
+**`mcp.sh` execs the server here under the bridge too**, and for a reason worth
+writing down: it is spawned by Claude Code, so it is already outside the
+sandbox. It has no need of the bridge, and routing it through one would put a
+channel between a process and the machine it is already standing on.
+
+**Verified:** 544 passed, 0 failed; 145 passed, 0 failed in the package's suite.
+
+**3.2 DONE 21 Sep — the live run — this is item 94's 5.2.** `rig up`, a flow, a screenshot,
+`net.sh`, `prefs.sh`, against `Pixel_6_Pro_API_34` and
+`com.prodirectsport.consumer.dev`, with the result recorded verb by verb. 94's
+5.3 and item 87's 4.4 follow it.
+
+**It ran.** A sandboxed Claude session booted an emulator on this machine,
+launched the app, drove it with Maestro and read the screen back — through the
+helper, with every script it ran in the log.
+
+| verb | result |
+| --- | --- |
+| `platform.sh boot Pixel_6_Pro_API_34` | `emulator-5554`, written for this run |
+| `platform.sh devices --booted` | `emulator-5554  device  sdk_gphone64_x86_64` |
+| `bin/install.sh` | nothing copied, `/tmp/maestro-mac` made |
+| `bin/shot.sh` | 24KB and 47KB PNGs, pulled back and read |
+| `bin/prefs.sh` | the app's shared preferences, Flutter keys and all |
+| `bin/net.sh` | no VM service — correct, the app was not under `flutter run` |
+| `bin/flow.sh` | `Launch app "com.prodirectsport.consumer.dev"... COMPLETED`, then the hierarchy and a screenshot |
+| `drivers.sh rig up` | not run: `driver-up` is still 87's 4.4 |
+
+**Three faults, each of them found by running it.**
+
+**`nohup` is not detached enough.** The first boot died a few calls later, and
+its own log said why: *Wait for emulator (pid 718350) 20 seconds to shutdown
+gracefully*. `nohup` blocks SIGHUP and leaves the process in the caller's
+process group, and every bridge request runs under `timeout`, which manages a
+group of its own. `setsid` gives the emulator its own session. A device that
+dies when the call that booted it finishes is no boot at all.
+
+**The bridge drains stdin when the call is made, and ssh is laxer.**
+`bin/flow.sh` resolved the device before reading its flow, so `_dev`'s round
+trip ate the heredoc and Maestro reported *Commands Section Required* against a
+file with `appId:` and nothing under it. The flow is read first now. This was a
+latent bug on the ssh path too — ssh just happened not to consume it.
+
+**Maestro was not on the far side's PATH**, which became item 95's third unit.
+
+**What the far side is:** `/dev/kvm` present, 8 CPUs, `hostname` `oi-jamesl`,
+Java 17 from `$RJAVA`. Not the sandbox — the machine.
+
+**Gated on:** nothing. Item 94's Stage 4 is done and this builds on it.
+
+## 95. The JDK was one machine's installer path, hardcoded — **DONE 21 Sep 2026**
+
+**Maestro's own directory is the same question, and 96's live run found it.**
+`REMOTE_ENV` put `$HOME/.maestro/bin` on `PATH`, which is where Maestro's
+installer puts it and nowhere else. This machine keeps it under
+`/mnt/sda/User/Programs/maestro/bin`, exported from `~/.bashrc` — so the process
+running the package could not see it, and a flow could not run. `remote/whereis.sh`
+asks the login shell where an executable lives, `bin/init.sh` records the answer
+as `RMAESTRO`, and the env prefix appends it rather than replacing the default,
+so a conf written before this setting keeps working.
+
+**Appended, not substituted, and only recorded when it differs.** A setting that
+repeats the default is noise and would go stale if Maestro were reinstalled.
+
+`lib.sh` set `JAVA_HOME=$HOME/.sdkman/candidates/java/current` in `REMOTE_ENV`,
+and 2.1 copied it into `LOCAL_ENV` as a fallback. It is true of the Mac this
+package was written against and of nothing else: it makes SDKMAN a requirement
+of a package that has no business having one, and a machine using jenv, mise,
+asdf or a plain Homebrew JDK gets a `JAVA_HOME` pointing at a directory that
+does not exist.
+
+**Found while asking what 5.2 needs locally.** This machine has no SDKMAN, so
+`LOCAL_ENV`'s fallback resolves to nothing — and worse than nothing, because
+Maestro's CLI is a Gradle start script and those use `$JAVA_HOME/bin/java`
+whenever `JAVA_HOME` is set.
+
+**What every version manager has in common is the login shell.** sdkman, jenv,
+mise, asdf, jabba and a hand-written export all work by a line in `.zshrc` or
+`.bash_profile`. So ask the machine's own shell rather than any manager's
+directory. `remote/javahome.sh` does that, in three rungs:
+
+1. `$SHELL -ic 'printf %s "$JAVA_HOME"'`, stdin closed — whatever the manager set
+2. `/usr/libexec/java_home` — macOS's registry, for an Apple- or cask-installed JDK
+3. the login shell's own `java`, resolved through its symlinks, rejecting
+   `/usr/bin/java` because on macOS that is a stub rather than a link into a JDK
+4. `java -XshowSettings:properties -version`, and read `java.home` out of it
+
+**Rung 4 is the one that covers the shim managers, and it was missing at first.**
+jenv without its `export` plugin, and mise or asdf used through shims rather
+than `activate`, put a shell *script* called `java` on `PATH`. Rung 1 has
+nothing to report, and rung 3 resolves the shim to its own directory, which has
+no `bin/java` under it — so a machine with a perfectly good Java came back
+empty. Any `java` that can run will say where it lives. It goes last because it
+starts a JVM, about a fifth of a second, against three rungs that cost nothing.
+
+**Measured on the Mac, 21 Sep.** Rung 1 answers:
+`/Users/lennny/.sdkman/candidates/java/current`, Temurin 21. Rung 2 fails there
+— `Unable to locate a Java Runtime`, because `/Library/Java/JavaVirtualMachines`
+is empty and SDKMAN registers nothing — and rung 3 would return `/usr`. So on
+that machine only the shell knows, which is the whole argument.
+
+**Asked once, at setup, and recorded as `RJAVA` in the conf.** The R family, like
+`$RDIR` and `$RHELP`: the machine with the device. `bin/init.sh --detect` prints
+it and `--write` records it, in both transports. Per-command discovery was
+rejected: an interactive shell with no tty hangs — one run in three took the
+full 60s, measured — and `$TMO` would make that a three-minute stall inside
+`_ssh`, on the function all 84 call sites go through.
+
+**A recorded `RJAVA` is checked on the far side before it is used.** A JDK that
+has been upgraded, removed or swapped for a version manager leaves the conf
+naming a directory that is no longer there, and an unguarded export is then
+worse than having recorded nothing: Maestro's CLI is a Gradle start script, so a
+`JAVA_HOME` that is set and wrong aborts it, while an absent one lets the
+fallback find whatever is there now. It says which recorded path is gone and
+carries on looking.
+
+**A conf with no `RJAVA` is not guessed at.** `lib.sh` falls back to rungs 2 and
+3 on the far side, per command, with no interactive shell; when neither answers
+it prints what to run. That is the migration: an existing conf loses `JAVA_HOME`
+on the Mac until `bin/init.sh --detect ... --write` records one, and the message
+says so rather than the package pretending it knows where a JDK is.
+
+**Verified live against the Mac:** `java -version` over `_ssh` returns Temurin
+21 with `JAVA_HOME` from `RJAVA`, and `init.sh --host <alias> --detect` prints
+the path and the version. 503 passed, 0 failed in the skill's suite and 145
+passed, 0 failed in the package's, eleven of them new — a JDK only a fake shell
+init knows about, a JDK reachable only through a shim, a stale `RJAVA` falling
+back to the JDK that is actually there and naming the path that is gone, and the
+fallback never opening an interactive shell.
+
+**What is verified and what is reasoned.** Verified: SDKMAN on the Mac (rung 1,
+live), an apt JDK on the Linux machine (rung 3), a shim manager (rung 4, a
+fake), a shell-init manager (rung 1, a fake), and no JDK at all. Reasoned but
+not run: an Apple or Temurin `.pkg` under `/Library/Java/JavaVirtualMachines`
+(rung 2) — there is no such Mac here — and Homebrew's keg-only `openjdk` reached
+by a `PATH` line, which rung 3 resolves through the keg symlink.
+
+## 94. Everything goes over SSH, including when the device is on this machine — **DONE 21 Sep 2026; five stages, the live run in 5.2 drove a real emulator, and 5.5 named the package `maestro-drive`**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -150,6 +638,751 @@ directory, an MCP server entry and a repo — so decide it deliberately rather
 than discovering it at the end.
 
 **Gated on:** nothing. Item 87 touches `_ssh` only as a caller.
+
+**Item 87's 4.4 is gated on THIS item's Stage 2**, which is the reverse
+direction and was not seen when either was raised. 4.4 — the Android driver
+trio, and whether Maestro's Android client lets its port be chosen per device —
+is the one unit of 87 whose note reads *needs an Android SDK and a booted
+emulator*. There are emulators on the Linux machine this package is driven
+from, and none on the Mac it drives. So the hardware 87 is waiting for is here
+already and unreachable: every verb gets to a device by SSH to a Mac with no
+Android SDK on it. Stage 2.1 is what turns this machine into a device host, and
+87's last hardware-blocked unit falls out of it.
+
+### The plan, in stages
+
+Each unit is one commit. Stage 1 decides the shape; Stages 2 and 3 are
+mechanical once it is right, and doing them first would mean doing them twice.
+Every stage keeps the SSH path working — there is no cut-over commit.
+
+**Stage 1 — the switch, and what a local project must set.** All four units are
+`bin/config.sh` and `bin/init.sh`. Nothing else knows the mode exists yet.
+
+**1.1 DONE 18 Sep — one setting names the transport.** `.maestro-mac.conf`
+gains `TRANSPORT`, defaulting to `ssh`, read in `bin/config.sh` above
+`MAC_HOST` and exported. Nothing reads it yet. It is an explicit setting rather
+than "`MAC_HOST` is empty, so we must be local", because a conf with a misspelt
+`MAC_HOST` has to keep failing as a broken remote conf — if emptiness meant
+local, the typo would instead start hunting for a device on this machine and
+report it missing, which is a true statement about the wrong machine.
+
+**Named `TRANSPORT`, not `MODE`.** It sits beside `RUNNER`, `PLATFORM` and
+`PROFILE`, each of which selects one thing and says which in its name. `MODE`
+says only that there is more than one of something.
+
+*Files:* `skill/bin/config.sh`. *Verified:* an unset value reads `ssh`;
+`TRANSPORT=local` survives and is exported; `TRANSPORT=sssh` is refused by name
+with exit 1; and the unconfigured-project message is byte-identical to the one
+`git stash` produces, diffed rather than eyeballed.
+
+**1.2 DONE 18 Sep — the required-settings check is per transport.**
+`config.sh` demanded `MAC_HOST`, `MAC_FQDN` and `APP_ID` together. Local mode
+needs `APP_ID` alone; the other two have no answer on this machine. Two
+messages, not one with a conditional clause: the unconfigured-project message is
+one of the more useful things this package prints, and it stays that good for
+both shapes rather than degrading into a list with `(unset)` against settings
+the reader was never meant to fill — and a `--detect` line offering to list ssh
+aliases they do not have.
+
+The searched-paths and detached-process paragraphs are duplicated deliberately,
+not factored out: the conf search is genuinely the same in both, and a shared
+fragment would be one more thing that has to stay true of two messages.
+
+The local message pointed at the two lines that are the whole of a local conf
+until 1.4 gave `bin/init.sh` a `--local`; it now names that instead.
+
+*Files:* `skill/bin/config.sh`. *Verified:* `TRANSPORT=local` with no `APP_ID`
+names `APP_ID` and nothing else; with `APP_ID` set it loads and leaves
+`MAC_HOST` empty; the ssh message diffs byte-identical to the captured
+pre-change output; suite 144 passed, 0 failed.
+
+**1.3 DONE 18 Sep — the permission warning has nothing to warn about
+locally.** The block matches `permissions.allow` against the real `ssh <host>`
+and `scp <host>` strings and suggests `Bash(ssh <prefix>*:*)`. Local transport
+runs neither command, so the block is guarded off.
+
+**The reason it was planned for was wrong, and the measurement is the record.**
+This item expected an empty `MAC_HOST` to produce `Bash(ssh *:*)` — every host
+on the machine, offered to a session that needs none. Removing the guard and
+running local mode prints nothing at all: the command list is built from the
+alias list, and an empty list has nothing uncovered. So the guard is one
+python3 subprocess saved per local session and a statement in the file, not a
+behaviour change. It still earns its place — the day `MAC_HOST` gains a local
+default is the day that derivation stops holding, silently.
+
+*Files:* `skill/bin/config.sh`. *Verified:* ssh mode with two aliases and no
+allows warns and writes `perm-warned`; local mode prints nothing and writes no
+marker.
+
+**1.4 DONE 18 Sep — `bin/init.sh --local` writes a local conf.** `--detect`
+listed `~/.ssh` aliases and probed each one; `--local --detect` instead reports
+this machine's toolchains, attached devices, defined AVDs and checkout, and
+`--local --app <id> --write` writes a conf with `TRANSPORT`, `APP_ID` and a
+detected `PLATFORM` and nothing else.
+
+**`init.sh` is the one script Stage 2.1 will not reach.** `_ssh` sources
+`config.sh`, and `init.sh` exists to write the conf `config.sh` reads — so it
+takes `--host` and calls `ssh` directly, and the local path here is a second
+path beside those four calls rather than a reuse of them. The questions carry
+over even though the code does not.
+
+**`PLATFORM` is detected now, where the ssh path still defaults it.** The ssh
+path writes `ios` with *nothing is booted yet to ask about*, which is true at
+first-run time across a network. Locally the machine is right here, so: no
+`xcrun` and `adb` present gives `android`; `xcrun` and no `adb` gives `ios`;
+both present is refused with `--platform ios|android` rather than guessed;
+neither is refused naming the missing SDK. The evidence is written above the
+setting — a booted device where there is one, otherwise the AVD names, because
+those are different facts and the weaker one has to say so. The list is given
+whole, with its count: a truncated list in a conf comment reads as the whole
+answer and the reader cannot tell that it is not.
+
+**`--host` with `--local` is refused, not ignored.** A silently dropped flag
+leaves someone believing they configured something they did not.
+
+**`RUNNER` is detected locally too, and 2.1 is not needed for it.** The first
+cut of this unit guarded `runner.sh detect` off locally on the grounds that it
+reaches the checkout through `_ssh`. Wrong: `claim` is the one framework verb
+that needs no Mac. Every implementation is a filesystem test on the checkout —
+`flutter` reads `pubspec.yaml` for a `flutter:` dependency, `react-native`
+reads `package.json`'s `dependencies` — and it goes through `_ssh` only because
+in ssh transport the checkout is on the Mac. `runner.sh detect` now runs the
+module out of `$RUNNERS` when `TRANSPORT=local`, and `runners/README.md` already
+said so: *Runs ON THE MAC, except `claim`*.
+
+Caught by the question a local React Native project asks: why would it default
+to flutter? It no longer does.
+
+*Files:* `skill/bin/init.sh`, `skill/bin/config.sh` (the 1.2 message now names
+`--local`). *Verified:* `--local --detect` on this machine reports `android`
+from four defined AVDs with none booted; the written conf loads through
+`config.sh` with `MAC_HOST` empty; `--platform ios` overrides and records that
+it was given; `--local --host` and a missing `--app` both exit 2 by name; a
+local checkout with a react-native dependency writes `RUNNER=react-native` and
+one with a flutter dependency writes `flutter`, both marked detected, while a
+checkout neither claims writes the default and says so; the ssh path's conf
+diffs byte-identical against the pre-change script; suite 144 passed, 0 failed.
+
+**1.5 DONE 18 Sep — an AVD that exists is not an AVD Maestro can drive.**
+Raised by 3.3's docs read rather than planned. `--local --detect` and the
+`PLATFORM` evidence listed every AVD as though each were a candidate. Two of the
+four on this machine are not:
+
+```
+Maestro can drive:  Pixel_6_Pro_API_34 (34) Pixel_Tablet (34)
+API unsupported:    Medium_Phone (36.1) Small_Phone (36)
+```
+
+The supported set is quoted, not inferred, from the mirror at `skill/docs`
+(Maestro 2.8.0, mirrored 11 Aug 2026): *"Maestro currently supports API Levels
+29, 30, 31, 33, and 34. API 35 and 36 support is arriving in Q2 2026."* 32 is
+absent from that sentence and so it is absent here. Hard-coded because the
+answer moves on Maestro's release schedule and not on anything this machine can
+be asked — when it moves, this list and the mirrored page move together.
+
+The level comes from each AVD's own `config.ini`, whose `image.sysdir.1` carries
+it as `system-images/android-<level>/`. An unreadable config reads `(?)` and
+sorts as unsupported, because a level that cannot be established is not one that
+has been checked.
+
+*Files:* `skill/bin/init.sh`. *Verified:* the detect output and the written
+conf both split the four AVDs correctly and the conf comment still wraps inside
+80 columns; suite 144 passed, 0 failed.
+
+**Stage 2 — `_ssh` runs the script instead of sending it.** The 84 call sites do
+not change in any unit of this stage. That is the whole bet; if a call site has
+to change, the bet was wrong and the shape goes back to Stage 1.
+
+**2.1 DONE 18 Sep — `_ssh` gains a local branch.** In local transport it runs
+the same script through `sh -c` on this machine. `_pick_host` returns at the
+top, `_probe_host` is never reached, `SSH_OPTS` is never expanded, and the
+retry-and-re-pick path is skipped: it exists because ssh failed to reach a
+host, and locally there is no host to re-pick — a local 124 is the command
+itself running long, and half of what goes through here taps a screen. `$TMO`
+still bounds it, because a local command hangs as readily as a remote one and a
+caller that set a timeout meant it.
+
+**`$REMOTE_ENV` could not be reused, and the reason is the unit's one real
+finding.** It *replaces* `PATH` with `/usr/bin:/bin:/usr/sbin:/sbin` plus
+Maestro and sdkman's Java — correct for a machine reached by ssh, where the
+non-interactive shell's `PATH` is whatever sshd hands it. Run it locally and it
+drops every directory the caller's `PATH` carries: on this machine the Android
+SDK is under `/mnt/sda`, so `adb` would vanish and every android verb would
+fail as `command not found` while reading like a broken module. `LOCAL_ENV`
+adds instead of replacing, and an existing `JAVA_HOME` wins.
+
+**Not enough on its own, and 2.2 is why.** The call sites ask for
+`$PLATFORM_SH`, which is `$RDIR/runners/…` — `/tmp/maestro-mac/...` locally,
+which nothing populates. Verified: the module runs through `_ssh` when called by
+its checkout path and exits 127 when called by its `$RDIR` path. That split is
+2.2's whole subject.
+
+*Files:* `skill/bin/lib.sh`. *Verified:* `_ssh 'echo hello'` prints it; `exit 3`
+comes back as 3; stdin passes through to `cat`; `adb` is still on `PATH` inside
+the call; with a poisoned `ssh` on `PATH` that exits 99 and shouts, a local call
+runs and never touches it; `runners/android/platform.sh devices` runs from the
+checkout with nothing booted; suite 144 passed, 0 failed.
+
+**2.2 DONE 18 Sep — `$RDIR` is two jobs and only one of them collapses.** It
+was where the Mac-side code is staged and where the scratch goes. `RDIR` keeps
+the scratch; the code is now `RMODS` and `RHELP`.
+
+**Two code names, not one, because the layouts differ.** Pushed across ssh, the
+helpers land flat beside the scratch — `$RDIR/hier.py`, `$RDIR/relay.py`,
+`$RDIR/wall.py`, `$RDIR/driverup.sh` — while in the checkout they are under
+`remote/`. The modules keep their `runners/<name>/` shape in both. So:
+
+```
+ssh    RMODS=$RDIR/runners        RHELP=$RDIR
+local  RMODS=<checkout>/runners   RHELP=<checkout>/remote
+```
+
+Both resolve across ssh to exactly what `$RDIR` resolved to before the split.
+
+**The scratch does not collapse onto `$LDIR` here, and 3.2 is why.**
+`bin/shot.sh` runs `base64 < '$RDIR/$N.png'` and redirects the decode to
+`$LDIR/$N.png`. Make those one directory before that round trip is converted
+and the redirect truncates the file the read is still coming from. The two
+scratch names stay distinct until 3.2 removes the copies between them.
+
+**A test caught it, which is the point of the test.** `driver.sh`'s stub
+`lib.sh` in `test/run-tests.sh` models the real one and set `RDIR` but not
+`RHELP`, so the item-46 recovery died on an unbound variable before reaching
+the path under test. Two failures, both real: the split does reach `driver.sh`.
+The stubs gained the names rather than the code gaining a `${RHELP:-$RDIR}`
+default, which would have hidden exactly this.
+
+*Files:* `skill/bin/config.sh`, `lib.sh`, `runner.sh`, `install.sh`, `build.sh`,
+`device.sh`, `driver.sh`, `viewer.sh`, `publish.sh`, `drivers.sh`, `wall.sh`,
+`flow.sh`, `hier.sh`, `runners/ios/platform.sh`, `test/run-tests.sh`.
+*Verified:* in ssh transport `RMODS` and `RHELP` resolve to `/tmp/maestro-mac/runners`
+and `/tmp/maestro-mac`; locally to the checkout's `runners/` and `remote/`;
+`PLATFORM_SH` now names the checkout's `runners/android/platform.sh` and its
+`devices` and `claim` verbs run through `_ssh` and exit 0, where before the
+split the same call exited 127; suite 144 passed, 0 failed.
+
+**2.3 DONE 18 Sep — `bin/install.sh` has nothing to push.** After 2.2 the
+helpers and the runner modules are already where a local verb looks for them.
+The unit is the skip, the scratch directory, and a message naming the three
+paths in play.
+
+**Two ways it would have damaged the checkout, not one.** `$RHELP` and `$RMODS`
+in local transport ARE the checkout's `remote/` and `runners/`, so every copy in
+this script is a file onto itself — and the form here is `cat > dst < src`,
+which truncates `dst` before the read begins. Run converted rather than skipped,
+it empties `hier.py` and every runner module in the working tree. The `chmod +x`
+on the last line is the second: `hier.py`, `relay.py` and `wall.py` are `100644`
+in git and the `.sh` files are already `100755`, so the only thing it achieves
+locally is three mode changes in `git status`.
+
+**The scratch directory stays this script's to make.** `$RDIR` is the scratch in
+both transports and nothing else creates it, so the local branch still runs the
+`mkdir -p` before returning.
+
+*Files:* `skill/bin/install.sh`. *Verified:* a local run copies nothing, creates
+`$RDIR` and `$RDIR/flows`, exits 0, and names the modules directory, the helpers
+directory and the scratch; `git status` over `skill/` afterwards shows only the
+edit to `install.sh` itself; suite 144 passed, 0 failed.
+
+**Stage 2 is complete.** A local conf now loads, `_ssh` runs the script here,
+and the module paths resolve to the checkout. What a local session still cannot
+do is anything that moves a file — Stage 3.
+
+**Stage 3 — the sixteen raw calls, by shape.** Four shapes, not sixteen
+problems. Each unit does every call site of its shape, because a half-converted
+shape is the state that hides the next bug.
+
+**3.1 DONE 18 Sep — push a file to the machine with the device → `_push`.**
+Eleven sites, one helper in `lib.sh` beside `_ssh`. It takes files and a
+destination path with no host prefix, adds the host across ssh, and copies
+locally. A destination ending in `/` or naming an existing directory takes the
+file's own basename, as `scp` does.
+
+**Nine of the eleven are a file onto itself locally, and the tenth and eleventh
+are not.** Every source is `$HERE/../remote/x` or `$HERE/../runners/y`, and
+after 2.2 the destinations ARE those directories. `mac.sh --send` and `img.sh`
+are the exceptions: they put a file the user named into the scratch directory,
+which is a real copy in both transports.
+
+**The same-path test is load-bearing, not tidiness.** `cp a a` exits 1 with
+*are the same file*, and every call site ends in `|| exit 1` or `|| return 1`.
+A bare `cp` would fail every local run of `rig up`, the wall, the viewer and a
+build.
+
+**Three `cat >` forms stay, and they are not pushes.** `drivers.sh:196`,
+`flow.sh:89` and `wall.sh:112` write a label or a flow body from a pipe through
+`_ssh`, which already carries stdin. `docs-refresh.sh:45` is the one remaining
+`scp` and it runs the other way — that is 3.2's.
+
+*Files:* `skill/bin/lib.sh`, `install.sh`, `drivers.sh`, `wall.sh`, `device.sh`,
+`driver.sh`, `viewer.sh`, `build.sh`, `mac.sh`, `img.sh`, `test/run-tests.sh`.
+*Verified:* a self-push exits 0 and leaves the file intact; a push into a
+directory, to a new path whose parent does not exist, and of several files at
+once all land; the two driver stubs needed `_push` defined the same way they
+needed `RHELP`, which is the modelled-lib.sh lesson landing twice; suite 144
+passed, 0 failed.
+
+**3.2 DONE 18 Sep — pull a file back → `_pull`, and the base64 round-trips go.**
+`_pull` sits beside `_push`: source on the device machine, destination here, one
+`scp` across ssh and a `cp` locally.
+
+**`$RDIR` does NOT collapse onto `$LDIR`, and this unit is where that was
+settled.** The item and this plan both said the two scratch directories become
+one locally. They must not. `$RDIR` is shared, machine-wide state — `PORTS_MAP`,
+the driver labels `drivers.sh` reclaims between sessions, the rig record — and
+`$LDIR` is `$TMPDIR`, which is per session. Collapsing them makes the ports map
+and every peer label invisible to the next session, which is the failure
+`drivers.map` already taught this package once. So both stay, the local `_pull`
+is a genuine `cp` between two real paths, and nothing can truncate itself.
+
+**`shot.sh` branches, and the branch is the unit rather than a wart in it.**
+Across ssh the fetch is folded into the same `_ssh` as the screenshot, because
+the alternative is a second connection for a file already in hand. Locally that
+encode and decode is pure cost, so the screenshot verb runs alone and `_pull`
+moves the file.
+
+**`flow.sh` cost nothing to convert.** Its fetch was already a raw `ssh` of its
+own — a second connection either way — so `scp` is neutral across ssh and drops
+the encode locally.
+
+**`img.sh`'s `mac` backend is refused locally instead of converted.** It means
+"send it to the machine that has `sips`". Locally that machine is this one, and
+it has not got `sips` or the `auto` chain would have chosen it two branches
+earlier — so the honest answer is to say no image tool is installed, not to fail
+inside a `sips` that is not there.
+
+**Still on base64, and not this unit's:** `preflight.sh:16-17` encodes
+`appcheck.sh` and `gitstate.sh` into the command string to avoid a push. Locally
+that is an encode and a decode of a checkout file into the scratch directory —
+correct, and wasted.
+
+*Files:* `skill/bin/lib.sh`, `shot.sh`, `flow.sh`, `img.sh`, `docs-refresh.sh`.
+*Verified:* a local `_pull` between two scratch paths copies; the same path is a
+no-op leaving the file intact; a missing source fails with `cp`'s own message
+and exit 1; `IMG_BACKEND=mac` on this machine now names the missing tool;
+suite 144 passed, 0 failed.
+
+**3.3 DONE 18 Sep — `bin/mcp.sh` execs the server here.** It was `exec ssh …`:
+the MCP server process itself, not a command sent through `_ssh`.
+
+**It cannot use `_ssh`, and the reason is structural.** `_ssh` wraps its command
+in `timeout $TMO` and returns. An MCP server holds stdio open for the life of
+the Claude session, so at the default `$TMO` it would be killed three minutes
+in and the session would lose every device tool with no error a reader could
+act on. `exec` replaces this process, which is what the config entry already
+expects — so the registered entry in `.claude.json` needs no change to follow
+the conf between transports.
+
+**Maestro is not installed on this machine.** `LOCAL_ENV` puts
+`$HOME/.maestro/bin` on `PATH` and there is no such directory here, so a real
+local MCP server cannot start yet. That is Stage 5.2's to fix, and it is the
+first hard prerequisite this item has turned up.
+
+*Files:* `skill/bin/mcp.sh`. *Verified:* with a stub `maestro` on `PATH` and a
+poisoned `ssh` that exits 99 and shouts, a local run execs `maestro mcp` and
+never touches ssh; suite 144 passed, 0 failed.
+
+**3.4 DONE 18 Sep — the two that measure or resolve the boundary.** `bench.sh`
+timed an `ssh <host> true` round trip; `publish.sh` read the Mac's address out
+of `ssh -G`.
+
+**`bench.sh` says there is no round trip rather than printing three small
+numbers.** Timing a local fork and exec would produce real figures, but they
+measure the shell, and a reader comparing them against the Mac's 0.30-0.44s
+would be comparing two quantities that share a heading. The second heading
+follows the transport too — "on this machine" rather than "on the Mac".
+
+**`publish.sh` resolves to `127.0.0.1` without asking ssh.** The endpoint, the
+relay and whatever reads the published URL are all here, and `ssh -G` for a host
+that is not in the conf would fail on a question with no reason to be asked.
+The relay itself is 4.1's.
+
+*Files:* `skill/bin/bench.sh`, `skill/bin/publish.sh`. *Verified:* a local
+`bench.sh` reaches `_dev` without touching ssh; suite 144 passed, 0 failed.
+
+**Stage 3 is complete, and running it turned up 3.5.** `bench.sh` stopped with
+`no booted device on  (platform: android)` — `lib.sh:302` interpolating an empty
+`$MAC_HOST`. Thirteen user-facing messages across nine files do the same.
+
+**3.5 DONE 18 Sep — eleven messages said "on " and nothing.** `lib.sh` gains
+`_where`: the alias across ssh, `this machine` locally.
+
+```
+before   no booted device on  (platform: android)
+after    no booted device on this machine (platform: android)
+```
+
+**A function, not a variable set once.** `_pick_host` narrows `MAC_HOST` from a
+list to the alias that answered, so a message printed after that has to name the
+one alias rather than all of them. Verified both ways round.
+
+**Eleven, not the thirteen counted in 3.4.** `publish.sh:79` and `lib.sh:194`
+are inside branches that only ssh reaches — the `ssh -G` failure and the
+re-pick after a 255 — so locally they never print and naming them `this machine`
+would be wrong rather than better.
+
+*Files:* `skill/bin/lib.sh`, `drivers.sh`, `viewer.sh`, `build.sh`, `wall.sh`,
+`docs-refresh.sh`. *Verified:* a local `bench.sh` now names this machine; a
+single alias and a narrowed list both print the alias; suite 144 passed, 0
+failed.
+
+**Stage 4 — the six that become unnecessary.** These are deletions from the
+local path, not new code. Each one stays fully wired for `MODE=ssh`.
+
+**4.1 DONE 21 Sep — the relay.** `remote/relay.py` exists because the thing
+being read binds the Mac's loopback and the sandbox can only reach the Mac's LAN
+address. Locally that loopback is this machine's, so all three staging sites
+lose it: `publish.sh` writes the debug endpoint's own port into the state file,
+`driver.sh` reads the driver's own port, and `viewer.sh` prints the viewer's.
+`lib.sh` gains `_urlhost` and `_driver_base`; `drivers.sh` prints a driver URL
+rather than a relay one.
+
+**The port changes, not only the host, and that is why swapping `MAC_FQDN` for
+`127.0.0.1` would not have done it.** Every relay is a pair — 22087 is
+republished on 9101, the VM Service's port on 9100, the viewer's on 9999 — and
+the left-hand number exists only because something has to listen on the LAN.
+Locally the right-hand one is the address. A host-only change would have built
+`http://127.0.0.1:9101`, which is a well-formed URL for a port nothing will ever
+listen on, and the failure would read as a dead relay. So the URL is asked for
+(`_driver_base`) rather than built at each call site.
+
+**`lsof` was asking the Mac a question `_up` had already answered.**
+`driver.sh:_start` checks `lsof -nP -iTCP:$DRIVER_PORT` before starting the
+relay, to tell "no driver" from "relay up, nothing behind it". Locally there is
+no second thing to be behind, so `_up` failing IS "nothing is listening on that
+port" — the whole ssh branch collapses to the two retries, which are about the
+driver and not about the transport.
+
+**The viewer's blank picture is an ssh-only fault, and locally the note must not
+print.** Maestro's viewer hands the browser an absolute
+`http://127.0.0.1:<random>/stream.mjpeg`, so the picture is fetched from
+whatever machine the browser is on — the reason `bin/wall.sh` exists. Locally
+that address is this machine, the browser is here, and the stream resolves.
+
+**Three verbs now say they stopped nothing rather than reporting a kill.**
+`driver.sh stop`, `viewer.sh stop` and `publish.sh stop` are `pkill relay.py`
+across ssh. Locally each would have found nothing and said "not running", which
+is true of the relay and reads as true of the driver or the viewer — and those
+are still up. `publish.sh stop` still removes the state file, because that is
+real in both transports.
+
+**Verified:** 461 passed, 0 failed in `skill/test/run-tests.sh`, six of them
+new — both helpers in both transports, a local driver that does not answer
+starting no relay and naming port 22087, and `stop` killing nothing. No live
+local run yet; that is 5.2.
+
+**4.2 DONE 21 Sep — `$grpc_proxy` on every curl.** It is the sandbox's egress
+proxy, the only route to another machine's LAN address. Locally the target is
+this machine's loopback, which a proxy refuses — and the refusal reads as the
+service being down. `lib.sh` empties the variable in local transport and
+exports it; `curl -x ""` is curl's own spelling of no proxy.
+
+**Emptied in one place rather than branched at four, because one call site is
+not in this package.** `publish.sh` and `net.sh` curl directly, but the third
+reader is `runners/flutter/framework.sh:25`, which chooses with
+`[ -n "${grpc_proxy:-}" ]` in a process those scripts spawn. It inherits the
+environment, so an exported empty value answers all three — and the module
+needed no edit, which matters because every runner module carries that same
+line from the TEMPLATE.
+
+**It was wrong locally in a way ssh hid.** Across ssh the Mac-side verbs never
+see the proxy, because ssh does not forward the environment. 2.1 made `_ssh`
+run the same script through `sh -c` here, where it inherits everything — so a
+local `net.sh` fallback would have sent its loopback read to the sandbox proxy
+while its remote twin went direct.
+
+**Defaulted in both transports, which fixes a crash that was never about the
+transport.** Every caller runs under `set -u`, and `curl -x "$grpc_proxy"` with
+the variable unset is an unbound-variable abort rather than a direct request —
+that is the state outside a Claude sandbox, where the ssh path also runs.
+
+**Verified:** 464 passed, 0 failed, three new — a set proxy emptied locally and
+seen empty by a child process, left alone across ssh, and empty rather than
+unbound when nothing set it.
+
+**4.3 DONE 21 Sep — the wall.** `WALL_URL` was not the answer, and the bind was
+not fine as it was. `wall.sh:_url` takes `_urlhost`, and the wall is started
+with the interface to serve on as a second argument.
+
+**The URL was one host substitution, as expected.** `$WALLPORT` is ours and
+never moves — that is the whole point of the wall, the URL you bookmark once —
+so the only thing that differed between the transports was which host to name.
+`WALL_URL` overrides both, unchanged.
+
+**The bind is the part that was not free.** `wall.py` bound `0.0.0.0` because
+the browser is on another machine and has to reach it. Locally the browser is on
+this one, and the same bind would put every app screen on whatever network this
+machine is sitting on — a café, a client's office. It now binds `127.0.0.1`
+locally, and `WALL_URL` takes the open bind with it, because a tunnel or a
+reverse proxy means the wall is deliberately reached from somewhere else.
+
+**One thing was found rather than planned: the wall refused to start on
+Android.** `_check_simulatorkit` was the first thing `start` and `status` did,
+and it asks whether Apple's private SimulatorKit is where Apple's capture binary
+expects it. That is a question about iOS, not about the wall, and on this Linux
+machine — where `PLATFORM` is android — it blocked the unit's own "done when".
+Gated on `PLATFORM=ios`. It would have blocked any Android wall, in either
+transport; there was simply never an Android device to find out with.
+
+**Verified:** 470 passed, 0 failed, six new — the loopback URL with the port
+unchanged, the loopback bind, the open bind across ssh, `WALL_URL` overriding
+both the URL and the bind, and an Android wall not being asked about
+SimulatorKit. Not yet run against a booted device; that is 5.2.
+
+**4.4 DONE 21 Sep — `MACIP` and `MAC_FQDN` leave the local path.** 4.1 and 4.3
+took the callers, which is what this unit was waiting for: `_urlhost` stands
+where `$MAC_FQDN` did in `driver.sh`, `drivers.sh`, `viewer.sh` and `wall.sh`,
+and `publish.sh` no longer resolves an address it does not use. What is left
+here is `_macip` itself.
+
+**Refused locally rather than converted.** `_macip` runs
+`ipconfig getifaddr en0` — a macOS command against a macOS interface name. Run
+on this machine it fails, and the failure says "could not determine the Mac's
+LAN address", which is a true sentence about a machine that is not in this
+configuration. It now says there is no Mac to ask and that every URL built here
+is `127.0.0.1`. Same decision as `img.sh`'s `mac` backend in 3.2: a question
+with no local twin is answered by saying so.
+
+**`bin/macip.sh` inherits that and exits 1**, which is right — it exists to
+print an address nothing may hardcode, and locally there is no address to print.
+
+**The five remaining reads are all in ssh-only branches**: `_urlhost`'s `else`,
+and in `publish.sh` the `ssh -G` resolution and the state line beside it.
+
+**Verified:** 473 passed, 0 failed in the skill's suite and 144 passed, 0
+failed in the package's, three new — `_macip` refusing locally with the right
+message, not printing the old one, and `macip.sh` exiting 1.
+
+**Stage 4 is complete.** Nothing in the local path starts a relay, carries a
+proxy, or reads an address belonging to a machine that is not there. All of it
+is still verified by the suite alone — no local run has happened yet, and 5.2
+is where that is paid for.
+
+**Stage 5 — proof, docs, and the name.**
+
+**5.1 DONE 21 Sep — the suite runs both modes.** Sixteen cases, in one block:
+the conf shapes from 1.2, what `init.sh --local` writes from 1.4, the three
+copies from 3.1 and 3.2, `_ssh` from 2.1, `install.sh` from 2.3 and `mcp.sh`
+from 3.3. With the eighteen Stage 4 carried, the suite is 489 passed, 0 failed
+and still needs no Mac.
+
+**Two of them are about a failure staying wrong in the right way.** An ssh conf
+with no `MAC_HOST` must keep failing as a broken remote conf — that is 1.1's
+whole argument for an explicit `TRANSPORT` — and a local project must not be
+handed the ssh diagnostic, which names `MAC_HOST` and `MAC_FQDN` as missing
+values when locally they are not settings at all.
+
+**`install.sh` is checked by checksum, not by what it prints.** The risk in 2.3
+was never a needless copy: `$RHELP` and `$RMODS` ARE the checkout locally, the
+`cat > dst` form truncates before it reads, and the chmod leaves mode changes in
+`git status`. The case md5s `remote/` and `runners/` either side of the run.
+
+**`_push` is tested on the trap rather than the happy path.** `cp a a` exits 1
+with "are the same file", and every call site ends in `|| exit 1` — so the
+self-copy, the self-copy through a directory destination and a real copy are
+three separate cases.
+
+**What the suite still cannot reach:** anything needing a booted device. Every
+Stage 4 unit is verified by stub and inventory only. 5.2 is where that is paid
+for.
+
+**5.2 DONE 21 Sep — one live run, end to end, against an emulator on this machine.** The
+lesson item 87 paid for twice: a contract verified only on empty and error paths
+is not verified. `rig up`, a flow, a screenshot, `net.sh`, `prefs.sh`. The
+device is an Android emulator here rather than a simulator — this is a Linux
+machine and there is no local iOS — so this unit runs `PLATFORM=android` and is
+the first caller `runners/android` has ever had. *Done when:* each has run
+locally and the result is recorded here, verb by verb.
+
+**It ran, and not as this unit expected: through item 96's bridge.** Local
+transport as Stages 1 to 4 built it cannot reach a device from inside a Claude
+session on this machine — no `/dev/kvm`, its own PID and network namespaces —
+which is what item 96 exists for and what the run therefore exercised. On a Mac
+none of that applies and this unit's own transport is the one that runs.
+
+| verb | result |
+| --- | --- |
+| `platform.sh boot Pixel_6_Pro_API_34` | `emulator-5554` — the verb had to be written first |
+| `platform.sh devices --booted` | `emulator-5554  device  sdk_gphone64_x86_64` |
+| `bin/install.sh` | nothing copied, `/tmp/maestro-mac` made |
+| `bin/shot.sh` | 24KB and 47KB PNGs, pulled back and read |
+| `bin/prefs.sh` | the app's shared preferences, Flutter keys and all |
+| `bin/net.sh` | no VM service, correctly — the app was launched, not run under `flutter run` |
+| `bin/flow.sh` | `Launch app "com.prodirectsport.consumer.dev"... COMPLETED`, then the hierarchy and a screenshot |
+| `drivers.sh rig up` | not run: `driver-up` is item 87's 4.4, still unanswered |
+
+**The app was `com.prodirectsport.consumer.dev`**, the dev flavour of
+`pro-direct-flutter-consumer`, already installed on the emulator.
+
+**Three faults came out of it** — `nohup` where `setsid` was needed, `flow.sh`
+reading its flow after a round trip that ate it, and Maestro missing from the
+far side's PATH. Item 96's 3.2 has them in full; the third became item 95's
+third unit.
+
+**5.3 DONE 21 Sep — `runners/android` stops being a stub, and 87's 4.4 is
+answered.** Every verb in the module has now run against `Pixel_6_Pro_API_34` —
+`sdk_gphone64_x86_64`, API 34 — over item 96's bridge, against Maestro 2.10.0
+and the SDK at `/mnt/sda/User/Programs/android-sdk`. The banner said *NOTHING IN
+THIS FILE HAS BEEN RUN*; it now says what ran and when.
+
+| verb | what running it showed |
+| --- | --- |
+| `claim` | `emulator-5554` claimed, `00008020-0011` refused |
+| `devices`, `--booted` | `emulator-5554  device  sdk_gphone64_x86_64` — the model key is the system image's name, never an id |
+| `boot` | 27s from kill to serial, the AVD name in and `emulator-5554` out |
+| `shutdown` | returns in 0.00s and the serial is still in `adb devices` 3s later |
+| `install` | `-r` over a 114MB APK in 1.1s; a wrong app-id exits 1 with the right sentence |
+| `installed-info` | `build=100`, `version=3.0.6-dev`, `when=2026-04-02 16:55:14` — dumpsys's order, not the awk's |
+| `container` | refuses, and now says why with the path it read |
+| `data-container` | **was unreachable**, see below |
+| `prefs-read` | 28 XML files concatenated, not one store |
+| `prefs-flush` | exit 0; nothing was pending, so it proves the keyevent and no more |
+| `orientations` | refuses: the answer is `aapt2 dump xmltree`, and it needs the APK |
+| `screenshot` | 1440x3120 8-bit RGBA PNG, 1.6MB |
+| `uninstall` | exit 0 whether the package was there or not |
+| `locked` | now implemented — 1 asleep, 1 awake, 2 for a serial that is not attached |
+| `last-used` | refuses; the qcow2 mtime answers a different question |
+| `capture-cmd` | prints a command whose binary is zero bytes on this machine |
+| driver trio | refuses; the port question is answered, in 87's 4.4 |
+
+**Three faults, each found by running the contract rather than reading it.**
+
+**Both platform modules had `container)` twice.** `case` takes the first arm, so
+the second was dead code — and the second was `data-container`, which
+`runners/README.md` names and which `bin/prefs.sh` will call in 87's unit 6. It
+answered *unknown verb* in `runners/ios` and `runners/android` alike. Beside it
+in both sat `data-installed-info`, a verb the contract does not have, holding a
+second copy of `installed-info`'s body. One line each to fix, and invisible to
+every reading either file has had.
+
+**`runners/ios-device` had no `uninstall` at all**, and `bin/driver.sh
+clearstate` calls it — against a phone that call was answering *unknown verb*
+rather than removing anything. Added from `devicectl`, marked not measured,
+because there is no phone on this machine.
+
+**`install` printed adb's chatter on stdout.** `adb install` says *Performing
+Streamed Install* and *Success*; `simctl install` says nothing. A caller reading
+this verb's stdout has to get the same thing from both, so adb's goes to stderr
+and the one line at the end stays.
+
+**Four verbs still refuse, and each refusal is now a measurement.** `container`
+— `pm path` returns a path with two hashed segments that every install
+regenerates, so it cannot stand in for a bundle identity, and
+`installed-info`'s `lastUpdateTime` is what appcheck is really asking for.
+`orientations` — `aapt dump badging` gives `supports-screens` and no
+orientation at all; `aapt2 dump xmltree --file AndroidManifest.xml` gives
+`android:screenOrientation=1`, so it needs aapt2 and the artifact, not aapt and
+a container path. `last-used` — a wrong answer would keep a forgotten emulator
+alive forever. The driver trio — 87's 4.4 to write, now that its question has an
+answer.
+
+**`locked` stopped refusing.** API 34 has no `mShowingLockscreen`; the keyguard's
+own state is `mIsShowing` under `KeyguardStateMonitor`, and `mDreamingLockscreen`
+is the screensaver. `mAwake` tracks the screen and not the lock — `KEYCODE_SLEEP`
+took `mAwake` false with `mIsShowing` still false — so reading `mAwake` would
+call a sleeping unlocked emulator locked, which is the mistake the verb exists to
+prevent. The true path is unmeasured and says so: this AVD has no secure lock.
+
+**Two tests, both regression guards for what was found.** No platform module may
+carry a duplicate case label, and `runners/ios`, `runners/ios-device` and
+`runners/android` must each answer every verb in the contract's table. Refusing
+with exit 2 counts; *unknown verb* does not.
+
+**Verified:** 555 passed, 0 failed in the skill's suite and 150 passed, 0 failed
+in the package's. *Files:* `skill/runners/android/platform.sh`,
+`skill/runners/ios/platform.sh`, `skill/runners/ios-device/platform.sh`,
+`skill/test/run-tests.sh`.
+
+**5.4 DONE 21 Sep — the docs stop describing a Mac across a network as the only
+shape.** A section in each of the three, not a rewrite.
+
+**`setup.md` gets a table of the ten steps and what each one is locally.** Six
+are about a machine that is not in the picture: the SSH key, `~/.ssh/config`
+and `/etc/hosts` are skipped outright, step 1's checks move to this machine, and
+step 9 becomes `init.sh --local`. `ssh-copy-id` now appears only inside step 2,
+which the table sends a local reader past.
+
+**`SKILL.md` says it once, at the top, and then says how to read the rest.**
+Thirteen lines below it say "on the Mac", and rewriting them would be thirteen
+chances to get one wrong; the entry says `TRANSPORT` decides which machine has
+the device and that "on the Mac" means "on the machine with the device".
+
+**The frontmatter description changed, which is how the skill is found.** It
+said "an already-running iOS simulator app on the remote Mac". Every trigger
+phrase is kept; what it now covers is a simulator or an emulator, on a remote
+Mac or on this machine.
+
+**All three said the local path has not driven a real device.** It was covered
+by the suite and nothing else, and a reader who hit something should expect to
+be the first. That line was to come out when 5.2 did.
+
+**It came out 21 Sep, after 5.2.** Each document now says what ran and what did
+not. `setup.md` lists the seven verbs of 5.2's run — `boot`, `devices --booted`,
+`install.sh`, `shot.sh`, `prefs.sh`, `net.sh`, `flow.sh` — and keeps
+`drivers.sh rig up` on the not-run side, since `driver-up` is still item 87's
+4.4. `SKILL.md` and `README.md` carry the one-sentence version. All three keep
+the caveat 5.2 turned up: the run was from inside a Claude session, so it went
+through item 96's bridge server rather than local transport on its own, and no
+local iOS simulator has been driven.
+
+**Verified:** 493 passed, 0 failed, four new — each of the three documents
+naming `TRANSPORT`, and `setup.md` carrying the skip table. After the line came
+out, 548 passed, 0 failed in the skill's suite and 150 passed, 0 failed in the
+package's.
+
+**5.5 DECIDED 21 Sep — the name is `maestro-drive`, and the rename stops at the
+repo and the skill.** The unit was to take the decision rather than to carry it
+out; carrying it out is item 98.
+
+**`maestro-drive`**, because it names the verb the package exists for. "DRIVE
+the app" is the first line of the skill's own description and "drive the app" is
+its main trigger phrase, so what a user types and what the thing is called
+finally match — and it separates cleanly from the sibling, where
+`flutter-hot-reload-mac` builds and launches and this one drives. The cost,
+stated rather than discovered: *driver* already means Maestro's XCUITest driver
+inside `bin/drivers.sh`. That collision is between a skill name and a script
+name, which nobody types in the same breath.
+
+`maestro-devices` was the runner-up — it names what the package addresses, which
+is the genuinely unusual part — but `bin/device.sh` and the contract verb
+`devices` already exist, so it moves the collision instead of avoiding it.
+`maestro-anywhere` names the thing that changed and ages badly: once local is
+the ordinary case it is a claim nobody needs made.
+
+**Measured before deciding the scope.** The name appears 141 times in 25 files,
+and four things carry it: the repo slug (pinned as `GITHUB_SLUG` in `update.sh`
+and `lib/update-check.sh`, and GitHub redirects the old one, API included), the
+installed skill directory (`SKILL.md`'s frontmatter, `manifest.sh`'s `PKG` and
+`OWNS`, the hook paths, both MCP script paths), `~/.local/share/`'s lib
+directory, and 14 `maestro-remote-mac:` message prefixes.
+
+**`.maestro-mac.conf` CHANGES TOO, and there is no compatibility read.** 96
+occurrences. The argument for leaving it was that the file lives in other
+people's repositories, so renaming it would break every configured project
+unless `config.sh` read both names for a release or two — and that kind of
+compatibility read outlives everyone's intention to remove it. The argument does
+not hold: a search of this machine finds exactly one `.maestro-mac.conf`, this
+repo's. Nobody else has one to break. So it becomes `.maestro-drive.conf`,
+`config.sh` looks for that name and no other, and the dual read is never
+written.
+
+**`flutter-hot-reload-mac` reads the same file and has to move with it.** Nine
+references, in its `SKILL.md` and its `bin/lib.sh`. It is a separate skill in a
+separate repository, so the two renames have to land together or it stops
+finding any settings at all — recorded in item 98 as part of the work, and it is
+the reason that item is a release rather than a commit.
+
+**The MCP entry `maestro-mac` does not change here either — it goes to item
+97.** It is wrong in the same way, but it cannot move on its own: renaming it
+changes the tool names to `mcp__maestro-drive__*`, and `MAESTRO-REVIEW-TRACKER.md`
+counts `mcp__maestro-mac__*` in transcripts to decide whether a session drove
+Maestro, so its matcher has to take both prefixes first. `uninstall.sh` deletes
+`.mcpServers[$MCP_NAME]` and knows only the current name, so a rename leaves the
+old entry in `~/.claude.json` pointing at a skill directory that is gone —
+`manifest.sh` needs a legacy-names sweep. And 97 may restructure or retire that
+server, which would make the rename work done twice. `maestro-bridge` needs
+nothing either way; it already says what it is.
+
 
 ## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **OPEN, raised 18 Sep**
 
@@ -1317,12 +2550,44 @@ answers `version`, `build` AND a timestamp through `dumpsys package`, which is
 more than a phone gives — so `container` being unanswerable there costs the
 check nothing. Written and unmeasured, like the rest of that module.
 
-**4.4 The Android driver trio.** Maestro's Android driver is an instrumented
-APK behind `adb forward`, sharing nothing with XCUITest. The question that
-decides the shape: **can its port be chosen per device?** `bin/drivers.sh`
-exists only because Maestro's iOS client hardcodes 22087, so if the Android
-client does the same, several-devices-at-once does not cross. *Needs an Android
-SDK and a booted emulator.*
+**4.4 The Android driver trio. THE QUESTION IS ANSWERED — 21 Sep 2026 — and the
+answer is yes.** Measured against Maestro 2.10.0 and `Pixel_6_Pro_API_34` over
+item 96's bridge, in item 94's 5.3. The three verbs are still to write; what
+follows is what they can be written against.
+
+**The port can be chosen, per run.** `maestro --driver-host-port <n>` is a
+global option — absent from `maestro --help`, present in `App.class` beside
+`--host` and `--port`. The default is `DEFAULT_DRIVER_HOST_PORT = 7001` in
+`maestro/android/AndroidDeviceConnection`, where `driverHostPort` is a
+constructor parameter rather than a literal at the call site, and it is
+validated at startup:
+
+```
+$ maestro --device emulator-5554 --driver-host-port 1 test flow.yaml
+Requested driver host port 1 is not available          # exit 1
+$ maestro --device emulator-5554 --driver-host-port 7099 test flow.yaml
+Launch app "com.prodirectsport.consumer.dev"... COMPLETED   # exit 0
+```
+
+So Android does **not** repeat the iOS client's hardcoded 22087, and several
+devices at once crosses platforms. `bin/drivers.sh`'s ports map has an Android
+half to allocate into.
+
+**The APKs are inside Maestro's own jar, not `~/.maestro/deps`.**
+`maestro-client.jar` carries `maestro-app.apk` (11.7MB) and `maestro-server.apk`
+(0.9MB). They install as `dev.mobile.maestro` and `dev.mobile.maestro.test` for
+the length of a run and are gone from `pm list packages` afterwards — so a scan
+for a resident package finds nothing between runs.
+
+**`adb forward --list` is not the `driver-scan` analogue.** It stayed empty for
+the whole of a flow, and no host socket appeared on 7001 or 7099 either:
+Maestro reaches the device through dadb, its own ADB client, so there is no
+forward registered with the adb server to scan for. Whatever `driver-scan`
+becomes on Android, it is not the iOS shape and it is not `adb forward`.
+
+**What is still unmeasured:** whether one emulator can hold one driver as one
+simulator does. There is a single emulator on this machine, so two at once could
+not be tried.
 
 **Stage 5 — what falls out once a second runner works.**
 

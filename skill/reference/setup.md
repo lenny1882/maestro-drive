@@ -1,10 +1,43 @@
 # Setting this up on a new machine
 
+This page is about the Mac across a network, which is one of the two shapes this
+package drives. If the simulator or emulator is on the machine you are sitting
+at, read **A device on this machine** below and skip most of what follows.
+
 Everything the skill does happens on the Mac, so a new Linux box needs four
 things wired up before any of it runs: a way to reach the Mac over SSH, a way
 to reach it over HTTP, an `maestro-mac` MCP server registered with Claude Code,
 and the skill itself on disk. `bin/init.sh` covers only the last step —
 per-project settings — and assumes all of this already works.
+
+## A device on this machine
+
+`TRANSPORT=local` in `.maestro-mac.conf` means the device is here and nothing
+goes over ssh. Six of the ten steps below are then about a machine that is not
+in the picture:
+
+| step | locally |
+| --- | --- |
+| 1. On the Mac | the same checks, on **this** machine: Maestro, Java, python3, and the platform's own toolchain — Xcode for iOS, the Android SDK for an emulator. Remote Login and the firewall exception are not needed |
+| 2. The SSH key | **skip.** Nothing connects to anything |
+| 3. `~/.ssh/config` | **skip** |
+| 4. `/etc/hosts` | **skip.** Every URL the skill builds is `127.0.0.1` |
+| 5. Claude Code global settings | the `ssh`/`scp` permission entries are not used; the hooks are |
+| 6. Project settings | the same |
+| 7. Register the MCP server | the same entry. `bin/mcp.sh` reads the conf and execs `maestro mcp` here instead of over ssh |
+| 8. Install the skill | the same |
+| 9. Per project | `bin/init.sh --local --detect`, then `--local --app <id> --write`. `bin/install.sh` has nothing to copy and says so |
+| 10. Prove it | `bin/preflight.sh`, `bin/wall.sh`, `bin/drivers.sh up` — the ssh and `$grpc_proxy` lines do not apply |
+
+Nobody is sent through `ssh-copy-id` to drive a device that is already here.
+
+**Run end to end once, 21 Sep 2026.** `platform.sh boot`, `devices --booted`,
+`install.sh`, `shot.sh`, `prefs.sh`, `net.sh` and `flow.sh` all ran against an
+Android emulator on this machine (BACKLOG item 94, 5.2). That run was from
+inside a Claude session, so it went through item 96's bridge server rather than
+local transport alone. `drivers.sh rig up` was not run, no local iOS simulator
+has been driven, and everything outside that list is covered by the test suite
+and nothing else. Expect to find things, and write down what you find.
 
 Placeholders below, used consistently — substitute your own and nothing else
 needs changing:
@@ -16,7 +49,7 @@ needs changing:
 | `<mac-ip>` | the Mac's address on that network — `ipconfig getifaddr en0` on it |
 | `<mac-user>` | the login account on the Mac |
 | `<key>` | the SSH key file this uses — `mac_rc` unless you chose another |
-| `<java-home>` | wherever step 1 found a JDK |
+| `<java-home>` | wherever step 1 found a JDK — `bin/init.sh` records it as `RJAVA` |
 | `<bundle-id>` | the app under test |
 
 ## 1. On the Mac
@@ -27,7 +60,7 @@ Mac:
 | what | check | if missing |
 | --- | --- | --- |
 | Maestro | `~/.maestro/bin/maestro --version` | `brew install mobile-dev-inc/tap/maestro`, or the install script from `docs/pages/maestro-cli__how-to-install-maestro-cli.md` |
-| Java | `/usr/libexec/java_home` | any JDK. Note the path it prints — that is `<java-home>`, needed in step 7 |
+| Java | `/usr/libexec/java_home`, or `echo $JAVA_HOME` in the Mac's own shell | any JDK, installed however you like. `java_home` finds one macOS knows about and misses one a version manager keeps to itself — either is fine, because step 9 asks the Mac's login shell and records the answer as `RJAVA` |
 | Xcode + simulators | `xcrun simctl list devices booted` | install Xcode, open one simulator |
 | python3 | `python3 -V` | ships with the Command Line Tools |
 | Remote Login | System Settings -> General -> Sharing -> Remote Login **on** | nothing else works without it |
@@ -329,8 +362,11 @@ Three things the launcher handles that the old form had to get right:
 - **`ssh` is the transport.** Maestro is not installed on this machine. The
   server runs on the Mac and speaks stdio down the SSH connection.
 - **`PATH` and `JAVA_HOME` are set** from `lib.sh`'s `REMOTE_ENV`, because the
-  shell SSH gives you has neither. Without them the server exits immediately
-  and the tools appear as "failed to connect" with no further detail.
+  shell SSH gives you has neither — it reads no `.zshrc`, so whatever a version
+  manager sets there is invisible. `JAVA_HOME` is the conf's `RJAVA`, which
+  `bin/init.sh` got by asking the Mac's own login shell. Without these the
+  server exits immediately and the tools appear as "failed to connect" with no
+  further detail.
 - **The keepalives matter.** Without `ServerAliveInterval` the connection dies
   silently during a long think and the next tool call fails.
 
@@ -369,7 +405,18 @@ newest release and re-runs it for you.
 
 ## 9. Per project
 
-Only now does `bin/init.sh` apply:
+Only now does `bin/init.sh` apply. For a device on this machine it is
+`--local` instead, and the two flags that name a Mac are refused rather than
+ignored:
+
+```sh
+cd <the project you drive from>
+~/.claude/skills/maestro-remote-mac/bin/init.sh --local --detect
+~/.claude/skills/maestro-remote-mac/bin/init.sh --local --app <bundle-id or applicationId> \
+    --repo <checkout here> --write
+```
+
+Across a network:
 
 ```sh
 cd <the project you drive from>

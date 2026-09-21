@@ -92,7 +92,7 @@ if [ "$detect" = 0 ] && [ "$no_install" = 0 ]; then
     while IFS=$'\t' read -r u _rest; do
       [ -n "$u" ] && targets+=("$u")
     done < <(_ssh "sh '$PL' devices --booted")
-    [ ${#targets[@]} -gt 0 ] || { echo "build: --all, but no booted device on $MAC_HOST" >&2; exit 2; }
+    [ ${#targets[@]} -gt 0 ] || { echo "build: --all, but no booted device on $(_where)" >&2; exit 2; }
   elif [ -n "${DEV:-}" ]; then
     "$HERE/runner.sh" platform claim "$DEV" || {
       echo "build: DEV=$DEV is not a device PLATFORM=${PLATFORM:-ios} recognises.
@@ -110,10 +110,10 @@ fi
 # The framework module's own build script, refreshed beside the module rather
 # than dropped at the top of $RDIR. Sent here as well as by bin/install.sh so a
 # build never depends on install.sh having been run.
-_ssh "mkdir -p '$RDIR/runners/${RUNNER:-flutter}'" >/dev/null
+_ssh "mkdir -p '$RMODS/${RUNNER:-flutter}'" >/dev/null
 if [ -r "$HERE/../runners/${RUNNER:-flutter}/build.sh" ]; then
-  scp "${SSH_OPTS[@]}" "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
-      "$MAC_HOST:$RDIR/runners/${RUNNER:-flutter}/build.sh" >/dev/null || exit 1
+  _push "$HERE/../runners/${RUNNER:-flutter}/build.sh" \
+        "$RMODS/${RUNNER:-flutter}/build.sh" || exit 1
 fi
 
 # --- detect: the framework reports, and nothing is built --------------------
