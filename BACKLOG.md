@@ -89,6 +89,53 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
+## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **OPEN, raised 21 Sep**
+
+The decision is taken and recorded in 94's 5.5: the package becomes
+**`maestro-drive`**, and the rename covers the repo slug, the installed skill
+directory, `~/.local/share/`'s lib directory, the 14 message prefixes and the
+per-project conf, which becomes `.maestro-drive.conf`. It does not cover the MCP
+entry `maestro-mac`, which is item 97's.
+
+This item is the carrying out, which is not a search and replace:
+
+**The installed directory has to be migrated, not just written elsewhere.**
+Everyone who upgrades has `~/.claude/skills/maestro-remote-mac` and
+`~/.local/share/maestro-remote-mac` already. An installer that creates the new
+pair and leaves the old one leaves a second copy of the skill for Claude to
+find, with its own hooks registered in `settings.json` — two gates on every Bash
+call, and a `SessionEnd` hook pointing at a directory nobody updates.
+`manifest.sh` needs a legacy list that `install.sh` migrates from and
+`uninstall.sh` sweeps.
+
+**`GITHUB_SLUG` is pinned in two installed files.** `update.sh:24` and
+`lib/update-check.sh:41`. GitHub redirects a renamed repository, the API with
+it, so an installed copy keeps updating — but the redirect is the only thing
+holding it, and it lasts exactly as long as nobody creates a new repository
+under the old name.
+
+**`.github/workflows/release.yml` names the package five times**, and the
+release tarball's name is what `update.sh` downloads. A release cut during the
+rename has to be one or the other, not half of each.
+
+**The three documents and the frontmatter.** `SKILL.md`'s `name:` is what Claude
+matches on, so it and the directory have to change in the same commit or the
+skill stops loading.
+
+**The conf is 96 occurrences and NO compatibility read**, which 5.5 settled:
+exactly one `.maestro-mac.conf` exists, this repo's, so `config.sh` looks for
+`.maestro-drive.conf` and nothing else. The one file in existence gets renamed
+by hand.
+
+**`flutter-hot-reload-mac` reads that conf and is a separate repository.** Nine
+references, in its `SKILL.md` and its `bin/lib.sh`. Its rename has to land in
+the same release or it stops finding any settings — which is why this item is a
+release and not a commit, and it is worth doing while item 93 is open against
+that skill anyway.
+
+**Gated on:** nothing. Better done in one release rather than spread over
+several, and better not at the same time as 97.
+
 ## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep**
 
 `maestro-mac` failed to connect for this entire session — `CONNECTION_CLOSED`,
@@ -119,6 +166,18 @@ spawned once per session, before any project is in view, and `config.sh`'s
 search walks up from `$PWD` — which for a server Claude Code spawns is wherever
 the session started. The `maestro-bridge` server takes no conf at all and starts
 a helper the conf then points at; `mcp.sh` could work the same way.
+
+**A fourth, added 21 Sep by item 94's 5.5: whether it is still called
+`maestro-mac`.** The package is becoming `maestro-drive` (item 98), and this
+server's name is wrong in the same way — under local or bridge transport it
+never touches a Mac. It is here rather than in 98 because the three decisions
+above may restructure or retire the server, and because renaming it is not just
+the entry: the tool names become `mcp__maestro-drive__*`, and
+`MAESTRO-REVIEW-TRACKER.md` counts `mcp__maestro-mac__*` in transcripts to
+decide whether a session drove Maestro, so its matcher has to take both prefixes
+first. `uninstall.sh` deletes `.mcpServers[$MCP_NAME]` and knows only the
+current name, so a rename without a legacy sweep in `manifest.sh` leaves the old
+entry in `~/.claude.json` pointing at a script that is gone.
 
 **Gated on:** nothing. Found while proving item 96.
 
@@ -518,7 +577,7 @@ not run: an Apple or Temurin `.pkg` under `/Library/Java/JavaVirtualMachines`
 (rung 2) — there is no such Mac here — and Homebrew's keg-only `openjdk` reached
 by a `PATH` line, which rung 3 resolves through the keg symlink.
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep. Stages 1-3 built 18 Sep; Stage 4 and all of Stage 5 but the name on 21 Sep. 5.5, the name, is the only unit left**
+## 94. Everything goes over SSH, including when the device is on this machine — **DONE 21 Sep 2026; five stages, the live run in 5.2 drove a real emulator, and 5.5 named the package `maestro-drive`**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -1271,10 +1330,58 @@ naming `TRANSPORT`, and `setup.md` carrying the skip table. After the line came
 out, 548 passed, 0 failed in the skill's suite and 150 passed, 0 failed in the
 package's.
 
-**5.5 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
-describes one of two shapes once this lands. A rename is the repo, the installed
-skill directory, the MCP server entry and every path in every doc. Decide it
-here; do not discover it at the end.
+**5.5 DECIDED 21 Sep — the name is `maestro-drive`, and the rename stops at the
+repo and the skill.** The unit was to take the decision rather than to carry it
+out; carrying it out is item 98.
+
+**`maestro-drive`**, because it names the verb the package exists for. "DRIVE
+the app" is the first line of the skill's own description and "drive the app" is
+its main trigger phrase, so what a user types and what the thing is called
+finally match — and it separates cleanly from the sibling, where
+`flutter-hot-reload-mac` builds and launches and this one drives. The cost,
+stated rather than discovered: *driver* already means Maestro's XCUITest driver
+inside `bin/drivers.sh`. That collision is between a skill name and a script
+name, which nobody types in the same breath.
+
+`maestro-devices` was the runner-up — it names what the package addresses, which
+is the genuinely unusual part — but `bin/device.sh` and the contract verb
+`devices` already exist, so it moves the collision instead of avoiding it.
+`maestro-anywhere` names the thing that changed and ages badly: once local is
+the ordinary case it is a claim nobody needs made.
+
+**Measured before deciding the scope.** The name appears 141 times in 25 files,
+and four things carry it: the repo slug (pinned as `GITHUB_SLUG` in `update.sh`
+and `lib/update-check.sh`, and GitHub redirects the old one, API included), the
+installed skill directory (`SKILL.md`'s frontmatter, `manifest.sh`'s `PKG` and
+`OWNS`, the hook paths, both MCP script paths), `~/.local/share/`'s lib
+directory, and 14 `maestro-remote-mac:` message prefixes.
+
+**`.maestro-mac.conf` CHANGES TOO, and there is no compatibility read.** 96
+occurrences. The argument for leaving it was that the file lives in other
+people's repositories, so renaming it would break every configured project
+unless `config.sh` read both names for a release or two — and that kind of
+compatibility read outlives everyone's intention to remove it. The argument does
+not hold: a search of this machine finds exactly one `.maestro-mac.conf`, this
+repo's. Nobody else has one to break. So it becomes `.maestro-drive.conf`,
+`config.sh` looks for that name and no other, and the dual read is never
+written.
+
+**`flutter-hot-reload-mac` reads the same file and has to move with it.** Nine
+references, in its `SKILL.md` and its `bin/lib.sh`. It is a separate skill in a
+separate repository, so the two renames have to land together or it stops
+finding any settings at all — recorded in item 98 as part of the work, and it is
+the reason that item is a release rather than a commit.
+
+**The MCP entry `maestro-mac` does not change here either — it goes to item
+97.** It is wrong in the same way, but it cannot move on its own: renaming it
+changes the tool names to `mcp__maestro-drive__*`, and `MAESTRO-REVIEW-TRACKER.md`
+counts `mcp__maestro-mac__*` in transcripts to decide whether a session drove
+Maestro, so its matcher has to take both prefixes first. `uninstall.sh` deletes
+`.mcpServers[$MCP_NAME]` and knows only the current name, so a rename leaves the
+old entry in `~/.claude.json` pointing at a skill directory that is gone —
+`manifest.sh` needs a legacy-names sweep. And 97 may restructure or retire that
+server, which would make the rename work done twice. `maestro-bridge` needs
+nothing either way; it already says what it is.
 
 
 ## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **OPEN, raised 18 Sep**
