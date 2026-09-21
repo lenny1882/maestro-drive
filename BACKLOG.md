@@ -309,6 +309,25 @@ takes no paths, and it ends with the session.
 **Verified:** 540 passed, 0 failed, four new; 145 passed, 0 failed in the
 package's suite.
 
+**2.3 DONE 21 Sep — the installer asks.** Registering the server is not the same
+as opening the channel — it idles until a session calls `start` — but it does put
+the tool in every session on that machine, so `install.sh` asks rather than
+decides: a `[Y/n]` with the honest description beside it.
+
+**Three answers, and a fourth that is nobody's.** `--with-bridge` and
+`--no-bridge` answer in advance; an unattended install — `--yes`, or no terminal
+— registers nothing and prints the flag to add it, because a capability that
+appears in a scripted install is one nobody chose.
+
+**An install never removes it.** Already registered means keep it and do not
+ask, so `update.sh` — which re-runs the installer with whatever flags it was
+given — cannot quietly take it away. `--no-bridge` on a machine that has it
+leaves it alone too. `uninstall.sh` removes both names, because the entry would
+otherwise point at a script that has just been deleted, which fails at every
+session start rather than visibly.
+
+**Verified:** 150 passed, 0 failed in the package's suite, five new.
+
 **Stage 3 — proof.**
 
 **3.1 DONE 21 Sep — the suite runs three transports.** 5.1's block gains a column. The helper

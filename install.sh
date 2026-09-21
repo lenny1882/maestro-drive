@@ -4,6 +4,8 @@
 #   ./install.sh           install
 #   ./install.sh --link    symlink instead of copying, for working on the repo
 #   ./install.sh --yes     no prompts
+#   ./install.sh --with-bridge   register the bridge MCP server without asking
+#   ./install.sh --no-bridge     do not, and do not ask
 #   ./install.sh --dry-run show what would change in settings.json and
 #                          ~/.claude.json, write nothing
 #
@@ -23,12 +25,14 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 CLAUDE_JSON="$HOME/.claude.json"
 LIB_DIR="$HOME/.local/share/maestro-remote-mac"
 
-LINK=0; ASSUME_YES=0; DRY=0
+LINK=0; ASSUME_YES=0; DRY=0; BRIDGE_FLAG=ask
 for a in "$@"; do
   case "$a" in
     --link)    LINK=1 ;;
     --yes|-y)  ASSUME_YES=1 ;;
     --dry-run) DRY=1 ;;
+    --with-bridge) BRIDGE_FLAG=yes ;;
+    --no-bridge)   BRIDGE_FLAG=no ;;
     -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
@@ -135,8 +139,41 @@ if declare -F claude_json_merge >/dev/null; then
     exit 1
   fi
 
+  # The bridge server is optional, and the question is asked rather than
+  # decided here (item 96). Already registered means keep it and do not ask —
+  # an update must not quietly take away a capability, or quietly add one.
+  BRIDGE=0
+  if jq -e --arg n "$MCP_BRIDGE_NAME" '(.mcpServers // {}) | has($n)' "$CLAUDE_JSON" >/dev/null 2>&1; then
+    BRIDGE=1
+    ok "$MCP_BRIDGE_NAME already registered — keeping it"
+  else
+    case "$BRIDGE_FLAG" in
+      yes) BRIDGE=1 ;;
+      no)  BRIDGE=0 ;;
+      *)
+        if [ "$ASSUME_YES" -eq 1 ] || [ ! -t 0 ]; then
+          # Nobody to ask, so nothing is added. A capability that appears in a
+          # scripted install is one nobody chose.
+          say "  The optional bridge server was not registered — add it with:"
+          say "    $0 --with-bridge"
+        else
+          say
+          say "  The bridge server lets a sandboxed Claude session drive a device on THIS"
+          say "  machine: it runs this package's scripts outside the sandbox, because the"
+          say "  sandbox has no /dev/kvm and its own network. It idles until a session asks"
+          say "  it to start; when it does, that helper carries shell to this machine and"
+          say "  logs everything it runs. A Mac does not need it — local transport already"
+          say "  reaches its own simulator."
+          printf '  Register %s? [Y/n]: ' "$MCP_BRIDGE_NAME"
+          read -r reply
+          case "${reply:-y}" in [Yy]*) BRIDGE=1 ;; *) BRIDGE=0 ;; esac
+        fi
+        ;;
+    esac
+  fi
+
   ctmp=$(mktemp "$(dirname "$CLAUDE_JSON")/.claude.json.XXXXXX")
-  claude_json_merge < "$CLAUDE_JSON" > "$ctmp"
+  claude_json_merge "$BRIDGE" < "$CLAUDE_JSON" > "$ctmp"
 
   if [ "$DRY" -eq 1 ]; then
     diff <(jq -S . "$CLAUDE_JSON") <(jq -S . "$ctmp") || true
@@ -147,6 +184,7 @@ if declare -F claude_json_merge >/dev/null; then
     cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak-$PKG"
     mv "$ctmp" "$CLAUDE_JSON"
     ok "mcpServers.$MCP_NAME -> $MCP_SCRIPT"
+    [ "$BRIDGE" -eq 1 ] && ok "mcpServers.$MCP_BRIDGE_NAME -> $MCP_BRIDGE_SCRIPT"
     ok "previous file kept at $CLAUDE_JSON.bak-$PKG"
   fi
 fi
