@@ -262,11 +262,30 @@ failed in the package's suite.
 
 **Stage 2 — starting it.**
 
-**2.1 The MCP server, one verb.** `bridge start|stop|status`, and nothing else.
+**2.1 DONE 21 Sep — the MCP server, one verb.** `bridge start|stop|status`, and nothing else.
 No `boot`, no AVD names, nothing platform-shaped — booting a device is
 `platform.sh boot` sent over the bridge like everything else, which is what
 keeps android and ios sharing the same path. *Done when:* the server starts the
 helper, reports where its directory is, and stops it.
+
+**`bin/bridge-mcp.py`, and the verb list is the whole design.** One tool called
+`bridge`, one argument, an enum of three. No paths, no device, no AVD name, and
+nothing it can run but `remote/bridge.sh`. The suite asserts the tool takes
+exactly one property and that a fourth action is refused by name.
+
+**It prints the conf rather than writing one.** `start` returns the three lines
+to paste — `TRANSPORT`, `BRIDGE_DIR`, `BRIDGE_HOST` — and says where the log is.
+`BRIDGE_HOST` comes from `hostname -I`; when that is empty the reply says the
+server is not running where it should be, because a server with no network
+interface is one that got spawned inside the sandbox.
+
+**Proved end to end, in one call:** start, then `_ssh` over the bridge running
+`hostname; ls /dev/kvm; nproc` on the far side, then stop. Started from a Bash
+tool the far side is still the sandbox — no `/dev/kvm` — which is exactly what
+the probe measured and what registering the server fixes.
+
+**Verified:** 536 passed, 0 failed, seven new; 145 passed, 0 failed in the
+package's suite.
 
 **2.2 It stops when the session does.** `rig-down-on-end.sh` is already the
 SessionEnd hook; the helper hangs off the same idea rather than inventing one.

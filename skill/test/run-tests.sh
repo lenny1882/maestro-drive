@@ -3148,6 +3148,71 @@ bx_rc=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR3" BRIDGE_HOST=10.0.0.9 MAESTRO
 kill $BR3_PID 2>/dev/null; wait $BR3_PID 2>/dev/null
 
 echo
+echo "the bridge server starts a helper and nothing else (item 96, 2.1)"
+# The whole point of the verb list is what is NOT in it: no boot, no device, no
+# paths. Booting is platform.sh boot, which travels over the bridge like every
+# other verb, so an Android answer and an iOS answer never end up in a server.
+_mcp() {  # _mcp <json-rpc line>... -- returns the text of the last result
+  { printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+    printf '%s\n' "$@"; } | timeout 60 python3 "$REPO/bin/bridge-mcp.py" |
+  python3 -c '
+import sys, json
+last = ""
+for line in sys.stdin:
+    m = json.loads(line)
+    r = m.get("result", {})
+    if "content" in r:
+        last = r["content"][0]["text"]
+    elif "tools" in r:
+        t = r["tools"]
+        last = "TOOLS %d %s %s" % (
+            len(t), t[0]["name"],
+            ",".join(sorted(t[0]["inputSchema"]["properties"])))
+print(last)'
+}
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+[ "$mc_out" = "TOOLS 1 bridge action" ] \
+  && ok "one tool, named bridge, taking one argument and no path" \
+  || no "one tool, named bridge, taking one argument and no path" "got '$mc_out'"
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"boot"}}}')
+case "$mc_out" in
+  *"unknown action"*) ok "an action outside the three is refused by name" ;;
+  *) no "an action outside the three is refused by name" "said: $mc_out" ;;
+esac
+
+# start, drive a script over it, stop — the round trip the server exists for.
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
+mc_dir=$(printf '%s' "$mc_out" | sed -n 's/^serving //p' | head -1)
+{ [ -n "$mc_dir" ] && [ -p "$mc_dir/control" ]; } \
+  && ok "start leaves a helper serving a directory of its own" \
+  || no "start leaves a helper serving a directory of its own" "said: $(printf '%s' "$mc_out" | head -2)"
+case "$mc_out" in
+  *'TRANSPORT:=bridge'*'BRIDGE_DIR:='*) ok "and prints the conf lines that point at it" ;;
+  *) no "and prints the conf lines that point at it" "no conf in the reply" ;;
+esac
+
+if [ -n "$mc_dir" ]; then
+  mc_ran=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$mc_dir" BRIDGE_HOST=10.0.0.9 \
+    MAESTRO_MAC_CONF=/dev/null bash -c ". $REPO/bin/lib.sh 2>/dev/null; _ssh 'echo through'" 2>/dev/null)
+  [ "$mc_ran" = "through" ] \
+    && ok "and _ssh runs a script through the helper it started" \
+    || no "and _ssh runs a script through the helper it started" "got '$mc_ran'"
+fi
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"stop"}}}')
+case "$mc_out" in
+  *"to stop"*) ok "stop tells the helper to stop between requests" ;;
+  *) no "stop tells the helper to stop between requests" "said: $mc_out" ;;
+esac
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"stop"}}}')
+case "$mc_out" in
+  *"no helper of mine"*) ok "and stopping twice says so rather than pretending" ;;
+  *) no "and stopping twice says so rather than pretending" "said: $mc_out" ;;
+esac
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
