@@ -1199,12 +1199,23 @@ said "an already-running iOS simulator app on the remote Mac". Every trigger
 phrase is kept; what it now covers is a simulator or an emulator, on a remote
 Mac or on this machine.
 
-**All three say the local path has not driven a real device.** It is covered by
-the suite and nothing else, and a reader who hits something should expect to be
-the first. That line comes out when 5.2 does.
+**All three said the local path has not driven a real device.** It was covered
+by the suite and nothing else, and a reader who hit something should expect to
+be the first. That line was to come out when 5.2 did.
+
+**It came out 21 Sep, after 5.2.** Each document now says what ran and what did
+not. `setup.md` lists the seven verbs of 5.2's run — `boot`, `devices --booted`,
+`install.sh`, `shot.sh`, `prefs.sh`, `net.sh`, `flow.sh` — and keeps
+`drivers.sh rig up` on the not-run side, since `driver-up` is still item 87's
+4.4. `SKILL.md` and `README.md` carry the one-sentence version. All three keep
+the caveat 5.2 turned up: the run was from inside a Claude session, so it went
+through item 96's bridge server rather than local transport on its own, and no
+local iOS simulator has been driven.
 
 **Verified:** 493 passed, 0 failed, four new — each of the three documents
-naming `TRANSPORT`, and `setup.md` carrying the skip table.
+naming `TRANSPORT`, and `setup.md` carrying the skip table. After the line came
+out, 548 passed, 0 failed in the skill's suite and 150 passed, 0 failed in the
+package's.
 
 **5.5 The name — a paper decision, taken deliberately.** `maestro-remote-mac`
 describes one of two shapes once this lands. A rename is the repo, the installed
