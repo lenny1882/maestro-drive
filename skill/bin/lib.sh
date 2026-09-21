@@ -240,6 +240,83 @@ _ssh_aliases() {
 # Output streams, it is not captured: shot.sh pipes a base64 image through here
 # and journeys read line by line, so buffering would change how every caller
 # behaves.
+# What every transport sends, assembled once (item 96, 1.2).
+#
+# Three parts, always: the environment the far side needs, a cd into the
+# checkout, and the caller's script verbatim. Only the environment differs, and
+# only because REMOTE_ENV replaces PATH where LOCAL_ENV adds to it. Written out
+# once so a third transport cannot drift from the first two — the test asserts
+# all three produce byte-identical text.
+_payload() {  # _payload <script>
+  local env
+  if [ "${TRANSPORT:-ssh}" = ssh ]; then env=$REMOTE_ENV; else env=$LOCAL_ENV; fi
+  printf '%s\ncd %s 2>/dev/null || true\n%s' "$env" "'$REPO'" "$1"
+}
+
+# A request id, unique per call so concurrent requests cannot collide.
+_bridge_id() { printf '%s-%s-%s' "$$" "${RANDOM:-0}" "$(date +%s%N 2>/dev/null || date +%s)"; }
+
+# The client half of the bridge. remote/bridge.sh is the other half, and its
+# header has the protocol (item 96).
+#
+# The helper not running is like a host not answering, so it says so and returns
+# without running anything. It does NOT retry: a timeout here is the command's
+# own, the same reasoning that keeps the local branch retry-free — half of what
+# goes through this function taps a screen.
+_bridge_send() {  # _bridge_send <assembled script>
+  local d=${BRIDGE_DIR:-} id rcv i
+  [ -n "$d" ] || {
+    echo "maestro-remote-mac: TRANSPORT=bridge needs BRIDGE_DIR in the conf." >&2
+    echo "  It is the directory the helper serves — start one and set it." >&2
+    return 1; }
+  [ -p "$d/control" ] || {
+    echo "maestro-remote-mac: no bridge helper is serving $d." >&2
+    echo "  Nothing was run. Start it, then retry." >&2
+    return 1; }
+
+  id=$(_bridge_id)
+  printf '%s' "$1" > "$d/$id.cmd" || return 1
+  printf '%s\n' "$TMO" > "$d/$id.tmo"
+  rm -f "$d/$id.in" "$d/$id.out" "$d/$id.err" "$d/$id.rc"
+  mkfifo "$d/$id.in" "$d/$id.out" "$d/$id.err" || return 1
+
+  # stdin is forwarded as ssh forwards it: a channel, not a file read up front.
+  # Draining it first would stall every call whose caller leaves stdin open and
+  # sends nothing — which is most of them, and which hung the suite when this
+  # was a `cat` into a file.
+  # fd 9 is this call's stdin, named explicitly because a background command in
+  # a non-interactive shell gets /dev/null for stdin unless it is told otherwise
+  # — which silently delivered an empty stdin to the far side.
+  local inpid
+  exec 9<&0
+  if [ -t 0 ]; then : > "$d/$id.in" & else cat <&9 > "$d/$id.in" & fi
+  inpid=$!
+  exec 9<&-
+
+  # Both channels need a reader before the far side can open them for writing,
+  # and stderr must stay separate from stdout — half the callers parse stdout.
+  cat "$d/$id.err" >&2 &
+  local errpid=$!
+  printf '%s\n' "$id" > "$d/control"
+  cat "$d/$id.out"
+  wait "$errpid" 2>/dev/null
+
+  # The status file is written last, just after the channels close.
+  for i in $(seq 1 250); do
+    [ -f "$d/$id.rc" ] && break
+    sleep 0.02
+  done
+  rcv=$(cat "$d/$id.rc" 2>/dev/null)
+  kill "$inpid" 2>/dev/null; wait "$inpid" 2>/dev/null
+  rm -f "$d/$id.cmd" "$d/$id.in" "$d/$id.tmo" "$d/$id.out" "$d/$id.err" "$d/$id.rc"
+  case "$rcv" in
+    ''|*[!0-9]*)
+      echo "maestro-remote-mac: the bridge helper returned no exit status." >&2
+      return 1 ;;
+  esac
+  return "$rcv"
+}
+
 _ssh() {
   # Local transport runs the very same script, through sh -c, on this machine.
   # The 84 call sites do not change: they already hand over a shell script and
@@ -252,17 +329,21 @@ _ssh() {
   # is no host to re-pick. A local 124 is the command itself running long, and
   # half of what goes through here taps a screen.
   if [ "${TRANSPORT:-ssh}" = local ]; then
-    timeout "$TMO" sh -c "$LOCAL_ENV
-cd '$REPO' 2>/dev/null || true
-$1"
+    timeout "$TMO" sh -c "$(_payload "$1")"
+    return $?
+  fi
+
+  # The bridge is local for the script's destination and remote for everything
+  # about reaching it: the device is on this machine, on the other side of the
+  # sandbox (item 96).
+  if [ "${TRANSPORT:-ssh}" = bridge ]; then
+    _bridge_send "$(_payload "$1")"
     return $?
   fi
 
   _pick_host || return 1
   local rc
-  timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$REMOTE_ENV
-cd '$REPO' 2>/dev/null || true
-$1"
+  timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$(_payload "$1")"
   rc=$?
   # 255 is ssh's own "could not connect", 124 is the timeout — in both the
   # remote command never ran, so re-running is safe. Any other non-zero is the
@@ -273,9 +354,7 @@ $1"
     rm -f "$HOST_CACHE"; unset _HOST_PICKED
     echo "maestro-remote-mac: $MAC_HOST stopped answering — re-picking" >&2
     _pick_host || return 1
-    timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$REMOTE_ENV
-cd '$REPO' 2>/dev/null || true
-$1"
+    timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$(_payload "$1")"
     rc=$?
   fi
   return "$rc"

@@ -86,6 +86,13 @@ fi
 #           default, so an existing conf is unchanged by this setting's arrival.
 #   local   a simulator or emulator on the machine running the skill. MAC_HOST
 #           and MAC_FQDN are then neither needed nor used.
+#   bridge  the device is on this machine, and this process cannot reach it —
+#           a Claude session's sandbox has no /dev/kvm, its own PID and network
+#           namespaces, and writes confined to two directories. Scripts go to a
+#           helper outside it through the shared scratch, and the screen's port
+#           is reached the way the ssh transport reaches the Mac's, because the
+#           sandbox really is a different machine from the device host
+#           (BACKLOG item 96). BRIDGE_DIR says where the helper serves.
 #
 # An explicit setting rather than inferring it from an empty MAC_HOST. A conf
 # with a misspelt MAC_HOST has to keep failing as a broken remote conf; if
@@ -97,9 +104,9 @@ fi
 # PROFILE, which each select one thing and say which in their name.
 : "${TRANSPORT:=ssh}"
 case "$TRANSPORT" in
-  ssh | local) ;;
+  ssh | local | bridge) ;;
   *)
-    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh or local." >&2
+    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac
@@ -196,6 +203,16 @@ fi
 
 # Local scratch. Must be writable inside the sandbox.
 : "${LDIR:=${TMPDIR:-/tmp}}"
+
+# Where the bridge helper serves, for TRANSPORT=bridge (BACKLOG item 96).
+#
+# A directory both sides can see — the session scratch — holding the control
+# FIFO and one set of files per request. It is the capability: anything that can
+# write in it can run anything on the machine with the device, which is why the
+# helper refuses a directory that is not its own user's, logs every script it
+# runs beside the FIFO, and is started deliberately rather than living in every
+# session.
+: "${BRIDGE_DIR:=}"
 
 # Where the JDK is on the machine with the device — the R family, like $RDIR and
 # $RHELP. Written by `bin/init.sh --detect ... --write`, which asks that machine
@@ -309,7 +326,22 @@ unset _n
 #
 # The searched-paths and detached-process paragraphs are the same in both,
 # because the conf search is the same in both.
-if [ "$TRANSPORT" = local ]; then
+if [ "$TRANSPORT" = bridge ] && [ -n "$APP_ID" ] && [ -z "$BRIDGE_DIR" ]; then
+  cat >&2 <<MSG
+maestro-remote-mac: TRANSPORT=bridge with no BRIDGE_DIR.
+
+The device is on this machine and this process cannot reach it, so scripts go
+to a helper through a directory both sides can see. Nothing says where that is.
+
+  BRIDGE_DIR=<directory the helper serves>   in .maestro-mac.conf
+
+The helper is remote/bridge.sh and it is started deliberately — it is not
+running in every session, by design.
+MSG
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ "$TRANSPORT" = local ] || [ "$TRANSPORT" = bridge ]; then
   if [ -z "$APP_ID" ]; then
     cat >&2 <<MSG
 maestro-remote-mac: not configured for this project.

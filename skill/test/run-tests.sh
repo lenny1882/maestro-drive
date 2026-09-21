@@ -3004,6 +3004,75 @@ kill $BR_PID 2>/dev/null
 wait $BR_PID 2>/dev/null
 
 echo
+echo "_ssh over the bridge, and one payload for all three (item 96, 1.2)"
+# The message every transport sends is the same three parts — the environment,
+# a cd into the checkout, the caller's script. It was written out twice; a third
+# copy is how transports drift, so it is assembled once and this asserts the
+# three produce identical text.
+bx_a=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; TRANSPORT=local _payload "SCRIPT-BODY"')
+bx_b=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _payload "SCRIPT-BODY"')
+[ "$bx_a" = "$bx_b" ] && [ -n "$bx_a" ] \
+  && ok "local and bridge assemble byte-identical script text" \
+  || no "local and bridge assemble byte-identical script text" "differ"
+bx_c=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _payload "SCRIPT-BODY"')
+case "$bx_c" in
+  *"cd '"*"' 2>/dev/null || true"*"SCRIPT-BODY") ok "and ssh's differs only in the environment it prefixes" ;;
+  *) no "and ssh's differs only in the environment it prefixes" "got: $(printf '%s' "$bx_c" | tr '\n' '|')" ;;
+esac
+
+BR2="$TMP/bridge2"; mkdir -p "$BR2"
+sh "$REPO/remote/bridge.sh" "$BR2" > "$BR2/serve.log" 2>&1 &
+BR2_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR2"
+
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "echo over-the-bridge; echo noise >&2; exit 3"' 2>/dev/null)
+bx_rc=$?
+[ "$bx_out" = "over-the-bridge" ] \
+  && ok "_ssh over the bridge returns stdout, and only stdout" \
+  || no "_ssh over the bridge returns stdout, and only stdout" "got '$bx_out'"
+
+bx_rc=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "exit 3" >/dev/null 2>&1; echo $?')
+[ "$bx_rc" = "3" ] \
+  && ok "and the caller sees the script's own exit status" \
+  || no "and the caller sees the script's own exit status" "got '$bx_rc'"
+
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  'echo piped | { . '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "cat"; }' 2>/dev/null)
+[ "$bx_out" = "piped" ] \
+  && ok "and stdin reaches the far side" \
+  || no "and stdin reaches the far side" "got '$bx_out'"
+
+kill $BR2_PID 2>/dev/null; wait $BR2_PID 2>/dev/null
+
+# A helper that is not running is like a host that is not answering: say so,
+# run nothing, and do not retry — half of what goes through _ssh taps a screen.
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$TMP/no-such-bridge" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "echo SHOULD-NOT-RUN"' 2>&1); bx_rc=$?
+{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no bridge helper is serving' \
+  && ! printf '%s' "$bx_out" | grep -q 'SHOULD-NOT-RUN'; } \
+  && ok "no helper: it says so, runs nothing, and fails" \
+  || no "no helper: it says so, runs nothing, and fails" "rc=$bx_rc: $bx_out"
+
+# The conf has to say where the helper serves; there is no sensible default.
+bx_out=$(TRANSPORT=bridge APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1); bx_rc=$?
+{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no BRIDGE_DIR'; } \
+  && ok "a bridge conf without BRIDGE_DIR is refused, and says what to set" \
+  || no "a bridge conf without BRIDGE_DIR is refused, and says what to set" "rc=$bx_rc: $(printf '%s' "$bx_out" | head -1)"
+
+bx_out=$(TRANSPORT=carrier-pigeon APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$bx_out" in
+  *"use ssh, local or bridge"*) ok "an unknown transport is refused, naming the three" ;;
+  *) no "an unknown transport is refused, naming the three" "said: $(printf '%s' "$bx_out" | head -1)" ;;
+esac
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
