@@ -25,6 +25,28 @@
 PKG="maestro-drive"
 OWNS="maestro-drive"
 
+# EVERY NAME THIS PACKAGE HAS HAD. It was maestro-remote-mac until 21 Sep 2026
+# (BACKLOG item 98), and an upgrade across a rename is the one case where the
+# OWNS strip above is not enough: the entries already in settings.json carry the
+# old name, so a strip that knows only the current one leaves them behind and
+# the user ends up with two gates on every Bash call and a SessionEnd hook
+# pointing into a directory that is no longer updated. install.sh and
+# uninstall.sh match a hook command against this list as well as against OWNS.
+LEGACY_OWNS=(
+  "maestro-remote-mac"
+)
+
+# Directories a previous name installed into. install.sh takes the skill
+# directory out once the new one is in place, and moves what the lib directory
+# held — the install record and the phase-A marker — across rather than losing
+# it. uninstall.sh sweeps both.
+LEGACY_SKILL_DIRS=(
+  "$CLAUDE_DIR/skills/maestro-remote-mac"
+)
+LEGACY_LIB_DIRS=(
+  "$HOME/.local/share/maestro-remote-mac"
+)
+
 # A skill installs as a whole directory. install.sh copies or symlinks it.
 DIRS=(
   "skill:$CLAUDE_DIR/skills/maestro-drive"
