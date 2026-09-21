@@ -89,7 +89,53 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **OPEN, raised 21 Sep**
+## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **OPEN, raised 21 Sep; the repository is renamed throughout on 21 Sep, and three things outside it are not**
+
+**Done 21 Sep, in three commits.** The conf is `.maestro-drive.conf` and the
+override is `$MAESTRO_DRIVE_CONF`; the package is `maestro-drive` in the
+installer, the uninstaller, the update path, the manifest, the release workflow,
+the skill's frontmatter and directory, the hooks, the wizard, both suites and
+the docs; and an upgrade from the old name now leaves nothing behind.
+
+**The release publishes two asset names, which was not in the plan.** An
+installed copy runs the `update.sh` it was installed with, and every copy from
+before the rename asks for `maestro-remote-mac.tar.gz`. GitHub redirects a
+renamed repository so the URL resolves, but an asset that is not there is a 404
+— those installs would have stopped updating at the last release under the old
+name. `release.yml` uploads a byte-for-byte copy under the old name, and
+`update.sh` extracts with `--strip-components=1`, so the prefix inside the
+tarball never mattered. The second asset comes out once nobody is on a
+pre-rename install.
+
+**The legacy sweep is the part that had a bug in it.** `manifest.sh` now carries
+`LEGACY_OWNS`, `LEGACY_SKILL_DIRS` and `LEGACY_LIB_DIRS`, and both scripts match
+against every name the package has had. The first version of the jq predicate
+read `any($names[]; $c | contains(.))` — the pipe rebinds `.`, so it asked
+whether the command contains itself, which is always true, and the strip took
+every other package's hooks with it. The suite caught it; it reads `. as $n`
+before the pipe now.
+
+**THREE THINGS ARE NOT DONE, and none of them can be done from a session.**
+
+**The repository has not been renamed on GitHub.** `GITHUB_SLUG` says
+`lenny1882/maestro-drive` in `update.sh` and `lib/update-check.sh`, and until the
+rename happens those two point at a slug that does not exist. Nothing else
+depends on it — the redirect covers old installs either way — but a release cut
+before the rename publishes to the old repository under the new asset name.
+
+**`.claude/skills/release/SKILL.md` still says `maestro-remote-mac` three
+times.** The sandbox mounts this repository's `.claude/skills` read-only, so the
+release skill cannot be edited from a session. Three lines: its description, its
+title, and the `git tag -m` template.
+
+**`flutter-hot-reload-mac` still reads `.maestro-mac.conf`.** Nine references,
+in its `SKILL.md` and its `bin/lib.sh`, and `~/.claude/skills` is read-only to
+the sandbox as well. It has no source checkout on this machine — the installed
+copy is all there is — so this is a hand edit or a lifted restriction. Until it
+happens that skill finds no settings at all, because the file it looks for has
+been renamed out from under it.
+
+### The plan, as raised — what the three commits above were working from
 
 The decision is taken and recorded in 94's 5.5: the package becomes
 **`maestro-drive`**, and the rename covers the repo slug, the installed skill
