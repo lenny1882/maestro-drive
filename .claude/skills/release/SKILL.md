@@ -1,9 +1,9 @@
 ---
 name: release
-description: Cut a new maestro-remote-mac release — bump VERSION on main, merge main into the matching release/vX.x branch, and tag there so the GitHub Actions release workflow publishes it. Use when the user asks to cut, ship, or publish a new release/version of this repo.
+description: Cut a new maestro-drive release — bump VERSION on main, merge main into the matching release/vX.x branch, and tag there so the GitHub Actions release workflow publishes it. Use when the user asks to cut, ship, or publish a new release/version of this repo.
 ---
 
-# Cutting a maestro-remote-mac release
+# Cutting a maestro-drive release
 
 [`.github/workflows/release.yml`](../../../.github/workflows/release.yml)
 turns any pushed `vX.Y.Z` tag into a GitHub Release. It does **not** check
@@ -70,7 +70,7 @@ output of each; don't chain them or pipe them through anything that hides it.
 
 ## 4. Tag on the release branch
 
-- `git tag -a vX.Y.Z release/vX.x -m "maestro-remote-mac vX.Y.Z"` — annotated,
+- `git tag -a vX.Y.Z release/vX.x -m "maestro-drive vX.Y.Z"` — annotated,
   and naming the branch explicitly so the tag can't attach to whatever happens
   to be checked out. Match the message convention of the existing tags; a repo
   with none yet has its convention set by the first one.
