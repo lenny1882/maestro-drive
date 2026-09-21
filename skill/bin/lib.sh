@@ -118,10 +118,15 @@ _java_env() {
   fi
 }
 
+# Maestro's own directory, when the conf records one. Appended rather than
+# replacing $HOME/.maestro/bin, so a machine with the default install and a
+# conf written before this setting existed both keep working.
+_MAESTRO_PATH=${RMAESTRO:+:$RMAESTRO}
+
 # Environment every remote command needs. A non-interactive SSH shell has
 # neither Java nor Maestro on PATH, and Maestro will not start without both.
 REMOTE_ENV='
-export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
 '"$(_java_env)"
 
 # The same job locally, and it is NOT the same script (item 94, 2.1).
@@ -137,7 +142,7 @@ export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin
 # $RJAVA if the conf records one, and the fallback if not, which locally keeps an
 # existing JAVA_HOME when it points at a real JDK.
 LOCAL_ENV='
-export PATH=$PATH:$HOME/.maestro/bin
+export PATH=$PATH:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
 '"$(_java_env)"
 
 # Which alias to talk to, when MAC_HOST names more than one.
@@ -284,6 +289,9 @@ _bridge_send() {  # _bridge_send <assembled script>
   mkfifo "$d/$id.in" "$d/$id.out" "$d/$id.err" || return 1
 
   # stdin is forwarded as ssh forwards it: a channel, not a file read up front.
+  # It IS drained when the call is made, though, which ssh is laxer about — so a
+  # caller that reads its own stdin must do so before it makes an unrelated call
+  # (bin/flow.sh, which resolved the device first and lost its flow).
   # Draining it first would stall every call whose caller leaves stdin open and
   # sends nothing — which is most of them, and which hung the suite when this
   # was a `cat` into a file.

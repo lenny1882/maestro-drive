@@ -231,6 +231,17 @@ fi
 # session.
 : "${BRIDGE_DIR:=}"
 
+# Where the maestro binary is on the machine with the device — the directory, not
+# the file, because it goes on PATH. The R family again, like $RJAVA.
+#
+# Left empty, $HOME/.maestro/bin is assumed, which is where Maestro's own
+# installer puts it. Recorded by `bin/init.sh --detect ... --write`, which asks
+# that machine's login shell: an install anywhere else lives on a PATH set in a
+# shell init file, and neither ssh nor a launcher without a terminal reads one.
+# Measured 21 Sep 2026 on this machine, where it is under /mnt/sda and the
+# process running the package could not see it.
+: "${RMAESTRO:=}"
+
 # Where the JDK is on the machine with the device — the R family, like $RDIR and
 # $RHELP. Written by `bin/init.sh --detect ... --write`, which asks that machine
 # rather than assuming an installer's layout: sdkman, jenv, mise, asdf and a

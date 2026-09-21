@@ -357,6 +357,18 @@ channel between a process and the machine it is already standing on.
 
 ## 95. The JDK was one machine's installer path, hardcoded — **DONE 21 Sep 2026**
 
+**Maestro's own directory is the same question, and 96's live run found it.**
+`REMOTE_ENV` put `$HOME/.maestro/bin` on `PATH`, which is where Maestro's
+installer puts it and nowhere else. This machine keeps it under
+`/mnt/sda/User/Programs/maestro/bin`, exported from `~/.bashrc` — so the process
+running the package could not see it, and a flow could not run. `remote/whereis.sh`
+asks the login shell where an executable lives, `bin/init.sh` records the answer
+as `RMAESTRO`, and the env prefix appends it rather than replacing the default,
+so a conf written before this setting keeps working.
+
+**Appended, not substituted, and only recorded when it differs.** A setting that
+repeats the default is noise and would go stale if Maestro were reinstalled.
+
 `lib.sh` set `JAVA_HOME=$HOME/.sdkman/candidates/java/current` in `REMOTE_ENV`,
 and 2.1 copied it into `LOCAL_ENV` as a fallback. It is true of the Mac this
 package was written against and of nothing else: it makes SDKMAN a requirement

@@ -144,6 +144,19 @@ _javahome() {  # _javahome [ssh alias]   -- prints the path, or nothing
   fi
 }
 
+# Where an executable lives on the machine that will run it, asked of that
+# machine's own login shell. Same reason as _javahome: an install anywhere but
+# the default is on a PATH set in a shell init file, which neither ssh nor a
+# launcher without a terminal reads (item 96).
+_whereis() {  # _whereis <name> [ssh alias]   -- prints the directory, or nothing
+  local ws="$(dirname "$0")/../remote/whereis.sh"
+  if [ -n "${2:-}" ]; then
+    ssh "${SSH_OPTS[@]}" "$2" "sh -s $1" < "$ws" 2>/dev/null
+  else
+    sh "$ws" "$1" 2>/dev/null
+  fi
+}
+
 # Two URLs for one repository barely look alike:
 #   git@bitbucket.org:acme/thing.git
 #   https://bitbucket.org/acme/thing
@@ -203,6 +216,14 @@ if [ "$DETECT" = 1 ] && [ "$LOCAL" = 1 ]; then
     echo "  nothing booted to ask"
   fi
 
+  echo "== maestro"
+  _mb=$(_whereis maestro)
+  if [ -n "$_mb" ]; then
+    echo "  $_mb"
+  else
+    echo "  not found — Maestro drives the device, so nothing will run without it."
+  fi
+
   echo "== java"
   _jh=$(_javahome)
   if [ -n "$_jh" ]; then
@@ -243,6 +264,14 @@ if [ "$DETECT" = 1 ]; then
   ssh "${SSH_OPTS[@]}" "$HOST" 'xcrun simctl listapps booted 2>/dev/null |
     grep -o "CFBundleIdentifier = \"[^\"]*\"" | sed "s/.*= \"/  /;s/\"//" |
     grep -v "^  com\.apple\." | sort -u'
+
+  echo "== maestro on the Mac"
+  _mb=$(_whereis maestro "$HOST")
+  if [ -n "$_mb" ]; then
+    echo "  $_mb"
+  else
+    echo "  not found on its login shell's PATH — check with:  ssh $HOST 'bash -ic \"command -v maestro\"'"
+  fi
 
   echo "== java on the Mac"
   _jh=$(_javahome "$HOST")
@@ -412,6 +441,17 @@ VALS
   # Written as a finding or not at all: a guess here is a path that exists on
   # somebody else's machine, and the fallback in bin/lib.sh is better than that.
   _jh=$([ "$LOCAL" = 1 ] && _javahome || _javahome "$HOST")
+  _mb=$([ "$LOCAL" = 1 ] && _whereis maestro || _whereis maestro "$HOST")
+  # Only when it is somewhere other than the default. A setting that repeats the
+  # default is noise, and it would go stale if Maestro were reinstalled.
+  if [ -n "$_mb" ] && [ "$_mb" != "$HOME/.maestro/bin" ]; then
+    {
+      printf '\n# Where maestro is on the machine with the device. Asked of that\n'
+      printf '# machine: an install anywhere but ~/.maestro/bin lives on a PATH set in a\n'
+      printf '# shell init file, which a non-interactive shell does not read.\n'
+      printf ': "${RMAESTRO:=%s}"\n' "$_mb"
+    } >> "$OUT"
+  fi
   {
     printf '\n# Where the JDK is on the machine with the device. Asked of that machine by\n'
     printf '# bin/init.sh: every Java version manager works through the login shell, so the\n'
