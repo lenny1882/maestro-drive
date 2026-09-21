@@ -1326,6 +1326,14 @@ jq -e '.mcpServers["someone-elses-server"] and .projects["/some/path"]
   && ok "uninstall leaves other servers and account state alone" \
   || no "uninstall leaves other servers and account state alone" "$(jq -c 'keys' "$HOME/.claude.json")"
 
+echo "the README describes both shapes (item 94, 5.4)"
+# The skill's own documents are checked by its suite. This one is not installed,
+# so it is checked here: a reader whose device is on this machine must not be
+# told the only shape is a Mac across a network.
+grep -q 'TRANSPORT' "$REPO/README.md" \
+  && ok "README.md says where the device is is a setting" \
+  || no "README.md says where the device is is a setting" "no mention of TRANSPORT"
+
 echo "release tarball"
 # Whether the release tarball is enough to install from — the one thing a git
 # checkout can never tell you, because everything is present either way. CI

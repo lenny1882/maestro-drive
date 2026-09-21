@@ -197,6 +197,17 @@ fi
 # Local scratch. Must be writable inside the sandbox.
 : "${LDIR:=${TMPDIR:-/tmp}}"
 
+# Where the JDK is on the machine with the device — the R family, like $RDIR and
+# $RHELP. Written by `bin/init.sh --detect ... --write`, which asks that machine
+# rather than assuming an installer's layout: sdkman, jenv, mise, asdf and a
+# plain Homebrew install all put it somewhere different, and every one of them
+# works by a line in the login shell's init, which is what gets asked.
+#
+# Left empty, bin/lib.sh falls back to asking the far side per command. Record
+# it instead: the fallback cannot use the login shell, so it only finds a JDK
+# macOS itself knows about or one on the non-interactive PATH.
+: "${RJAVA:=}"
+
 # Default timeout (seconds) for a remote command.
 : "${TMO:=180}"
 

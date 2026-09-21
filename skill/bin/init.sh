@@ -129,6 +129,21 @@ _local_platform() {
   fi
 }
 
+# Where the JDK is on the machine that will run Maestro, asked of that machine.
+#
+# One call, at setup. remote/javahome.sh explains what it asks and why the first
+# question is the login shell's own environment: that is the one thing every
+# version manager has in common, and naming any manager's directory here would
+# make it a requirement of the package (item 94).
+_javahome() {  # _javahome [ssh alias]   -- prints the path, or nothing
+  local js="$(dirname "$0")/../remote/javahome.sh"
+  if [ -n "${1:-}" ]; then
+    ssh "${SSH_OPTS[@]}" "$1" 'sh -s' < "$js" 2>/dev/null
+  else
+    sh "$js" 2>/dev/null
+  fi
+}
+
 # Two URLs for one repository barely look alike:
 #   git@bitbucket.org:acme/thing.git
 #   https://bitbucket.org/acme/thing
@@ -188,6 +203,16 @@ if [ "$DETECT" = 1 ] && [ "$LOCAL" = 1 ]; then
     echo "  nothing booted to ask"
   fi
 
+  echo "== java"
+  _jh=$(_javahome)
+  if [ -n "$_jh" ]; then
+    echo "  $_jh"
+    echo "  $("$_jh/bin/java" -version 2>&1 | head -1)"
+  else
+    echo "  no JDK found — Maestro will not start without one."
+    echo "  Install one however you like; --write asks this machine again."
+  fi
+
   echo "== this checkout"
   if git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
     echo "  $(git -C "$PWD" rev-parse --show-toplevel)  <- pass as --repo if the app is built from it"
@@ -218,6 +243,17 @@ if [ "$DETECT" = 1 ]; then
   ssh "${SSH_OPTS[@]}" "$HOST" 'xcrun simctl listapps booted 2>/dev/null |
     grep -o "CFBundleIdentifier = \"[^\"]*\"" | sed "s/.*= \"/  /;s/\"//" |
     grep -v "^  com\.apple\." | sort -u'
+
+  echo "== java on the Mac"
+  _jh=$(_javahome "$HOST")
+  if [ -n "$_jh" ]; then
+    echo "  $_jh"
+    ssh "${SSH_OPTS[@]}" "$HOST" "'$_jh/bin/java' -version 2>&1 | head -1" | sed 's/^/  /'
+  else
+    echo "  no JDK found, and a non-interactive ssh shell reads no .zshrc — so a"
+    echo "  version manager's JDK is invisible unless its shell init sets JAVA_HOME."
+    echo "  Check on the Mac:  echo \$JAVA_HOME  and  /usr/libexec/java_home"
+  fi
 
   # The checkout, matched on the remote rather than the name. Session B spent
   # three SSH calls hunting for it by hand; this is one, and it says which
@@ -370,6 +406,23 @@ VALS
       printf ': "${PLATFORM:=%s}"\n' "$_PLAT"
     else
       printf ': "${PLATFORM:=ios}"      # not detected: nothing is booted yet to ask about\n'
+    fi
+  } >> "$OUT"
+  # The JDK, asked of the machine that will run Maestro rather than assumed.
+  # Written as a finding or not at all: a guess here is a path that exists on
+  # somebody else's machine, and the fallback in bin/lib.sh is better than that.
+  _jh=$([ "$LOCAL" = 1 ] && _javahome || _javahome "$HOST")
+  {
+    printf '\n# Where the JDK is on the machine with the device. Asked of that machine by\n'
+    printf '# bin/init.sh: every Java version manager works through the login shell, so the\n'
+    printf '# shell was asked rather than an installer directory assumed.\n'
+    if [ -n "$_jh" ]; then
+      printf ': "${RJAVA:=%s}"\n' "$_jh"
+    else
+      printf '# Nothing answered when this was written. bin/lib.sh will ask the far side\n'
+      printf '# per command, which cannot see a version manager. Re-run --detect once a\n'
+      printf '# JDK is installed, or set it by hand.\n'
+      printf '#: "${RJAVA:=}"\n'
     fi
   } >> "$OUT"
   [ -n "$DEVU" ] && printf '\n# Pin a simulator. Empty means the first booted one.\n: "${DEV:=%s}"\n' "$DEVU" >> "$OUT"
