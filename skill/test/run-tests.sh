@@ -2861,6 +2861,39 @@ case "$jh_out" in
   *) ok "and the fallback never opens an interactive shell" ;;
 esac
 
+# A shim manager: jenv without its export plugin, or mise and asdf through
+# shims, put a shell SCRIPT called java on PATH. It is not a symlink into a JDK,
+# so resolving it lands on the shim's own directory and a machine with a working
+# Java came back empty. Asking java itself is what covers them.
+mkdir -p "$JH/real/bin" "$JH/shim"
+printf '#!/bin/sh\nexit 0\n' > "$JH/real/bin/java"; chmod +x "$JH/real/bin/java"
+printf '#!/bin/sh\necho "    java.home = %s" >&2\n' "$JH/real" > "$JH/shim/java"
+chmod +x "$JH/shim/java"
+for _t in sed head tr; do ln -sf "$(command -v $_t)" "$JH/bin/$_t"; done
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" SHELL=/bin/sh PATH="$JH/shim:$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null)
+[ "$jh_out" = "$JH/real" ] \
+  && ok "a JDK reachable only through a shim is found by asking java itself" \
+  || no "a JDK reachable only through a shim is found by asking java itself" "got '$jh_out'"
+
+# A recorded RJAVA that no longer exists must not be exported. Maestro's CLI is
+# a Gradle start script: a JAVA_HOME that is set and wrong aborts it, where an
+# absent one lets the fallback find whatever is there now.
+jh_out=$(RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; sh -c "$LOCAL_ENV
+printf JH=%s \"\$JAVA_HOME\"" 2>/dev/null' 2>/dev/null)
+case "$jh_out" in
+  JH=/*) ok "a stale RJAVA falls back to the JDK that is actually there" ;;
+  *) no "a stale RJAVA falls back to the JDK that is actually there" "got '$jh_out'" ;;
+esac
+jh_out=$(RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; sh -c "$LOCAL_ENV
+true" 2>&1 >/dev/null')
+case "$jh_out" in
+  *"records RJAVA=/nonexistent/jdk"*) ok "and says which recorded path is gone, rather than failing quietly" ;;
+  *) no "and says which recorded path is gone, rather than failing quietly" "said: $jh_out" ;;
+esac
+
 # init.sh records it as a finding.
 JHI="$TMP/jhinit"; mkdir -p "$JHI"
 ( cd "$JHI" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \

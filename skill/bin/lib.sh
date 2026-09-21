@@ -96,9 +96,20 @@ fi
 '
 
 # The JAVA_HOME lines for a script that will run on the machine with the device.
+#
+# A recorded $RJAVA is checked on that machine before it is used. A JDK that has
+# been upgraded, removed or swapped for a version manager leaves the conf naming
+# a directory that is no longer there, and an unguarded export would then be
+# WORSE than having recorded nothing: Maestro's CLI is a Gradle start script, so
+# a JAVA_HOME that is set and wrong aborts it, while a JAVA_HOME that is absent
+# lets the fallback find whatever is there now.
 _java_env() {
   if [ -n "${RJAVA:-}" ]; then
-    printf "export JAVA_HOME='%s'\nPATH=\$JAVA_HOME/bin:\$PATH\nexport PATH\n" "$RJAVA"
+    printf "if [ -x '%s/bin/java' ]; then\n" "$RJAVA"
+    printf "  export JAVA_HOME='%s'\n  PATH=\$JAVA_HOME/bin:\$PATH\n  export PATH\nelse\n" "$RJAVA"
+    printf "  echo 'maestro-remote-mac: the conf records RJAVA=%s and there is no JDK there.' >&2\n" "$RJAVA"
+    printf "  echo '  Looking for another one. Re-record it:  bin/init.sh --detect' >&2\n"
+    printf '%s\nfi\n' "$_JAVA_ENV_FALLBACK"
   else
     printf '%s\n' "$_JAVA_ENV_FALLBACK"
   fi
