@@ -55,10 +55,15 @@ while read -r _v; do
 done < <(_app_vars)
 [ "${#_conf_envs[@]}" -gt 0 ] && ENVS=("${_conf_envs[@]}" ${ENVS[@]+"${ENVS[@]}"})
 
-d=$(_dev) || exit 1
-
 # Flow body: from -f, else from stdin. appId header is prepended for stdin
 # flows so ad-hoc snippets stay to the point.
+#
+# READ BEFORE ANY ROUND TRIP. _dev makes an _ssh call, and _ssh forwards this
+# process's stdin to the far side — so resolving the device first ate the flow
+# and left `appId:` with no commands under it, which Maestro reports as
+# "Commands Section Required" (measured 21 Sep 2026, over the bridge). ssh is
+# laxer about this than the bridge is, which made it a latent bug rather than a
+# harmless ordering.
 if [ -n "$FILE" ]; then
   BODY=$(cat "$FILE")
 else
@@ -66,6 +71,8 @@ else
 ---
 $(cat)"
 fi
+
+d=$(_dev) || exit 1
 
 POST=""
 [ "$QUIET" -eq 0 ] && POST="

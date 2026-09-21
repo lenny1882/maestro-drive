@@ -2959,6 +2959,36 @@ case "$jh_out" in
   *) no "and says which recorded path is gone, rather than failing quietly" "said: $jh_out" ;;
 esac
 
+# Maestro's own directory is the same class of question as the JDK's, and was
+# found the same way — by it not being there. This machine keeps Maestro under
+# /mnt/sda, exported from ~/.bashrc, which no non-interactive shell reads
+# (item 96, measured 21 Sep).
+wi_out=$(HOME="$REAL_HOME" sh "$REPO/remote/whereis.sh" maestro 2>/dev/null); wi_rc=$?
+if [ "$wi_rc" = 0 ]; then
+  [ -x "$wi_out/maestro" ] \
+    && ok "whereis.sh finds maestro's directory by asking the login shell" \
+    || no "whereis.sh finds maestro's directory by asking the login shell" "no maestro under '$wi_out'"
+else
+  echo "  skip  whereis.sh finds maestro — this machine has none"
+fi
+wi_out=$(sh "$REPO/remote/whereis.sh" definitely-not-a-real-binary 2>/dev/null); wi_rc=$?
+{ [ "$wi_rc" != 0 ] && [ -z "$wi_out" ]; } \
+  && ok "and exits 1 with nothing when there is no such executable" \
+  || no "and exits 1 with nothing when there is no such executable" "rc=$wi_rc out='$wi_out'"
+
+wi_out=$(RMAESTRO=/opt/m/bin MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$REMOTE_ENV\"" 2>/dev/null)
+case "$wi_out" in
+  *".maestro/bin:/opt/m/bin"*) ok "a recorded RMAESTRO is appended to PATH, not substituted for the default" ;;
+  *) no "a recorded RMAESTRO is appended to PATH, not substituted for the default" "got: $(printf '%s' "$wi_out" | head -2 | tr '\n' ' ')" ;;
+esac
+wi_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$REMOTE_ENV\"" 2>/dev/null)
+case "$wi_out" in
+  *'.maestro/bin'*) ok "and a conf without one keeps the default, so an old conf is unchanged" ;;
+  *) no "and a conf without one keeps the default, so an old conf is unchanged" "no default in PATH" ;;
+esac
+
 # init.sh records it as a finding.
 JHI="$TMP/jhinit"; mkdir -p "$JHI"
 ( cd "$JHI" && PATH="$JH_PATH" MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \

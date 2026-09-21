@@ -60,15 +60,62 @@ boot)
   # waiting for the device to appear in `adb devices` and working out which of
   # them is new, since the serial comes from the port the emulator took.
   #
-  # Still unwritten because nothing here has an emulator to write it against,
-  # but the CONTRACT question is answered and this is now only work.
+  # MEASURED 21 Sep 2026 against Pixel_6_Pro_API_34 on this machine, over the
+  # bridge (item 96). Three things the writing had to get right:
   #
-  #   "$HOME/Library/Android/sdk/emulator/emulator" -avd "$1" &
-  #   then poll `adb devices` for a serial that was not there before,
-  #   then `adb -s <serial> wait-for-device`, then echo the serial
-  echo "runners/android boot: not written — needs an emulator to write against." >&2
-  echo "  The contract question is settled: print the serial you landed on." >&2
-  exit 2
+  #   the serial is not knowable in advance, so the new one is found by
+  #   difference against the serials that were there before;
+  #   `adb wait-for-device` returns while Android is still starting, so
+  #   sys.boot_completed is polled after it;
+  #   the emulator has to outlive this script, so it is detached — a caller
+  #   that returns and takes the device with it would be no boot at all.
+  #
+  # DETACHED MEANS setsid, NOT nohup, and the difference cost a booted emulator
+  # on 21 Sep. nohup blocks SIGHUP and leaves the process in the caller's
+  # process group; every request over the bridge runs under `timeout`, which
+  # manages a group of its own, so the emulator went down with the group a
+  # couple of calls later — "Wait for emulator (pid …) 20 seconds to shutdown
+  # gracefully", in its own log. setsid gives it its own session and group.
+  _avd=${1:?boot <avd name>}
+  _emu=${EMULATOR:-}
+  [ -n "$_emu" ] || _emu=$(command -v emulator 2>/dev/null)
+  [ -n "$_emu" ] || _emu="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/emulator/emulator"
+  [ -x "$_emu" ] || { echo "no emulator binary — set ANDROID_HOME or EMULATOR" >&2; exit 1; }
+
+  _before=$("$ADB" devices 2>/dev/null | sed -n 's/[[:space:]]*device$//p' | tr '\n' ' ')
+  _log=${RDIR:-/tmp}/emulator-$_avd.log
+  mkdir -p "$(dirname "$_log")" 2>/dev/null || true
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "$_emu" -avd "$_avd" -no-boot-anim >"$_log" 2>&1 &
+  else
+    nohup "$_emu" -avd "$_avd" -no-boot-anim >"$_log" 2>&1 &
+  fi
+  _pid=$!
+
+  _new=
+  _i=0
+  while [ "$_i" -lt 180 ]; do
+    kill -0 "$_pid" 2>/dev/null || {
+      echo "the emulator exited while starting. Its log:" >&2
+      tail -5 "$_log" >&2
+      exit 1; }
+    for _s in $("$ADB" devices 2>/dev/null | sed -n 's/[[:space:]]*device$//p'); do
+      case " $_before " in *" $_s "*) ;; *) _new=$_s; break ;; esac
+    done
+    [ -n "$_new" ] && break
+    sleep 1
+    _i=$((_i + 1))
+  done
+  [ -n "$_new" ] || { echo "no new device appeared within 180s. Its log:" >&2; tail -5 "$_log" >&2; exit 1; }
+
+  "$ADB" -s "$_new" wait-for-device
+  _i=0
+  while [ "$_i" -lt 180 ]; do
+    [ "$("$ADB" -s "$_new" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')" = 1 ] && break
+    sleep 1
+    _i=$((_i + 1))
+  done
+  echo "$_new"
   ;;
 
 shutdown)
