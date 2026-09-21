@@ -348,10 +348,45 @@ channel between a process and the machine it is already standing on.
 
 **Verified:** 544 passed, 0 failed; 145 passed, 0 failed in the package's suite.
 
-**3.2 The live run — this is item 94's 5.2.** `rig up`, a flow, a screenshot,
+**3.2 DONE 21 Sep — the live run — this is item 94's 5.2.** `rig up`, a flow, a screenshot,
 `net.sh`, `prefs.sh`, against `Pixel_6_Pro_API_34` and
 `com.prodirectsport.consumer.dev`, with the result recorded verb by verb. 94's
 5.3 and item 87's 4.4 follow it.
+
+**It ran.** A sandboxed Claude session booted an emulator on this machine,
+launched the app, drove it with Maestro and read the screen back — through the
+helper, with every script it ran in the log.
+
+| verb | result |
+| --- | --- |
+| `platform.sh boot Pixel_6_Pro_API_34` | `emulator-5554`, written for this run |
+| `platform.sh devices --booted` | `emulator-5554  device  sdk_gphone64_x86_64` |
+| `bin/install.sh` | nothing copied, `/tmp/maestro-mac` made |
+| `bin/shot.sh` | 24KB and 47KB PNGs, pulled back and read |
+| `bin/prefs.sh` | the app's shared preferences, Flutter keys and all |
+| `bin/net.sh` | no VM service — correct, the app was not under `flutter run` |
+| `bin/flow.sh` | `Launch app "com.prodirectsport.consumer.dev"... COMPLETED`, then the hierarchy and a screenshot |
+| `drivers.sh rig up` | not run: `driver-up` is still 87's 4.4 |
+
+**Three faults, each of them found by running it.**
+
+**`nohup` is not detached enough.** The first boot died a few calls later, and
+its own log said why: *Wait for emulator (pid 718350) 20 seconds to shutdown
+gracefully*. `nohup` blocks SIGHUP and leaves the process in the caller's
+process group, and every bridge request runs under `timeout`, which manages a
+group of its own. `setsid` gives the emulator its own session. A device that
+dies when the call that booted it finishes is no boot at all.
+
+**The bridge drains stdin when the call is made, and ssh is laxer.**
+`bin/flow.sh` resolved the device before reading its flow, so `_dev`'s round
+trip ate the heredoc and Maestro reported *Commands Section Required* against a
+file with `appId:` and nothing under it. The flow is read first now. This was a
+latent bug on the ssh path too — ssh just happened not to consume it.
+
+**Maestro was not on the far side's PATH**, which became item 95's third unit.
+
+**What the far side is:** `/dev/kvm` present, 8 CPUs, `hostname` `oi-jamesl`,
+Java 17 from `$RJAVA`. Not the sandbox — the machine.
 
 **Gated on:** nothing. Item 94's Stage 4 is done and this builds on it.
 
