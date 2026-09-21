@@ -120,7 +120,7 @@ def _conf(d):
         "                             `hostname -I` on the machine with the device gives it.\n"
     )
     return (
-        "Put these in the project's .maestro-mac.conf:\n"
+        "Put these in the project's .maestro-drive.conf:\n"
         '  : "${TRANSPORT:=bridge}"\n'
         '  : "${BRIDGE_DIR:=%s}"\n'
         "%s"

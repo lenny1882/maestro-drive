@@ -74,7 +74,7 @@ MSG
           cat >&2 <<MSG
 notes.sh: that text contains the value of \$$_v.
 
-It lives in $MAESTRO_MAC_CONF_FOUND, which is kept out of
+It lives in $MAESTRO_DRIVE_CONF_FOUND, which is kept out of
 version control. The app notes are committed, so writing the value here undoes
 that. Refer to it by name instead:
 

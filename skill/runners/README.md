@@ -139,7 +139,7 @@ platform axis is the cheaper of the two to cut.
 ## Choosing a runner
 
 `bin/config.sh` gains two settings, both defaulting to what the code does
-today, so every existing `.maestro-mac.conf` keeps working unchanged:
+today, so every existing `.maestro-drive.conf` keeps working unchanged:
 
 ```sh
 : "${RUNNER:=flutter}"     # the framework module

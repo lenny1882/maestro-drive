@@ -1,5 +1,5 @@
 #!/bin/bash
-# Write a project's .maestro-mac.conf.
+# Write a project's .maestro-drive.conf.
 #
 # Deliberately does not guess. `--detect` asks the machine — this one for SSH
 # aliases, the Mac for booted simulators and the apps installed on them — and
@@ -20,7 +20,7 @@
 # overwrite an existing one without --force.
 set -uo pipefail
 
-HOST=""; FQDN=""; APP=""; REPO=""; DEVU=""; OUT="$PWD/.maestro-mac.conf"
+HOST=""; FQDN=""; APP=""; REPO=""; DEVU=""; OUT="$PWD/.maestro-drive.conf"
 DETECT=0; WRITE=0; FORCE=0; LOCAL=0; PLATU=""
 _PLAT=""; _PLAT_WHY=""
 
@@ -407,7 +407,7 @@ VALS
   # point in a first-time setup, so there is no device to ask about.
   _rn=
   if [ -n "$REPO" ]; then
-    _rn=$(MAESTRO_MAC_CONF="$OUT" MAC_HOST="$HOST" MAC_FQDN="$FQDN" APP_ID="$APP" REPO="$REPO" \
+    _rn=$(MAESTRO_DRIVE_CONF="$OUT" MAC_HOST="$HOST" MAC_FQDN="$FQDN" APP_ID="$APP" REPO="$REPO" \
           TRANSPORT="$([ "$LOCAL" = 1 ] && echo local || echo ssh)" \
           "$(dirname "$0")/runner.sh" detect 2>/dev/null |
           sed -n 's/^RUNNER=\([a-z-][a-z-]*\).*/\1/p')
@@ -469,11 +469,11 @@ VALS
   echo "wrote $OUT"
   sed 's/^/  /' "$OUT"
   # journeys and app notes belong to the project, so create the places they go
-  MAESTRO_MAC_CONF="$OUT" "$(dirname "$0")/notes.sh" init
+  MAESTRO_DRIVE_CONF="$OUT" "$(dirname "$0")/notes.sh" init
   if git -C "$(dirname "$OUT")" rev-parse --git-dir >/dev/null 2>&1; then
     cat <<'NOTE'
 
-This is a git working tree. .maestro-mac.conf and maestro/ are untracked, so
+This is a git working tree. .maestro-drive.conf and maestro/ are untracked, so
 they will show in `git status` and can be committed by accident.
 
 The conf is the one file that must stay out: it is where a credential goes, and
@@ -483,8 +483,8 @@ first APP_PIN written into it would land in an untracked, unignored file that a
 maestro/ is your decision; the journeys and notes in it are usually worth
 committing.
 
-  .maestro-mac.conf
-  .maestro-mac.conf.*
+  .maestro-drive.conf
+  .maestro-drive.conf.*
 NOTE
   fi
   exit 0
