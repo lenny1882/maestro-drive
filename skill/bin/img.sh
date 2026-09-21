@@ -139,11 +139,18 @@ _with_mac_sips() {
   local base r_in r_out
   # shellcheck disable=SC1091
   . "$HERE/lib.sh" || return 1
+  # This backend means "send it to the machine that has sips". Locally that
+  # machine is this one, and it has not got sips or it would have been chosen
+  # two branches up. Say so rather than failing inside a sips that is not there.
+  if _fs_shared; then
+    echo "img: no image tool on this machine — install ImageMagick (magick or convert)." >&2
+    return 1
+  fi
   base=$(basename "$FILE")
   r_in="$RDIR/img-in-$$-$base"; r_out="$RDIR/img-out-$$-$base"
   _ssh "mkdir -p '$RDIR'" >/dev/null || return 1
   _pick_host || return 1
-  scp "${SSH_OPTS[@]}" "$FILE" "$MAC_HOST:$r_in" >/dev/null || return 1
+  _push "$FILE" "$r_in" || return 1
   _ssh "$(_sips_script "$r_in" "$r_out")
 base64 < '$r_out'
 rm -f '$r_in' '$r_out'" | base64 -d > "$OUT.tmp" || { rm -f "$OUT.tmp"; return 1; }

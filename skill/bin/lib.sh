@@ -8,12 +8,36 @@
 
 mkdir -p "$LDIR"
 
+# The sandbox's egress proxy, and whether a curl from here goes through it
+# (item 94, 4.2).
+#
+# Across ssh it must: the sandbox has no direct route off this machine, so every
+# read of the Mac's published relay is `curl -x "$grpc_proxy"`. Locally it must
+# not — the target is this machine's own loopback, and a loopback address handed
+# to the proxy comes back refused, which reads as the service being down.
+#
+# Emptied here rather than branched at each call site, because the call sites
+# are not all in this package: bin/publish.sh and bin/net.sh curl directly, and
+# the framework module chooses by `[ -n "$grpc_proxy" ]` in a process this one
+# spawns. One exported empty value answers all three, and `curl -x ""` is curl's
+# own spelling of "no proxy".
+#
+# Defaulted in BOTH transports because every caller runs under `set -u`, where a
+# bare "$grpc_proxy" outside the sandbox is an unbound-variable crash rather
+# than a direct request.
+: "${grpc_proxy:=}"
+# Emptied only where a port on the device host is reachable from here without
+# it. Under the bridge the device is on this machine and the proxy is still the
+# only route to its ports, so it stays exactly as the ssh transport needs it.
+if _ports_here; then grpc_proxy=; fi
+export grpc_proxy
+
 # Where the runner modules are, on each side (BACKLOG item 87). Plain paths
 # rather than a call to bin/runner.sh: runner.sh sources THIS file, and every
 # _dev would otherwise pay for a subprocess to learn something config.sh already
 # knows. runner.sh validates them and lists the alternatives; these do not.
-PLATFORM_SH="$RDIR/runners/${PLATFORM:-ios}/platform.sh"
-FRAMEWORK_SH="$RDIR/runners/${RUNNER:-flutter}/framework.sh"
+PLATFORM_SH="$RMODS/${PLATFORM:-ios}/platform.sh"
+FRAMEWORK_SH="$RMODS/${RUNNER:-flutter}/framework.sh"
 PLATFORM_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${PLATFORM:-ios}/platform.sh"
 FRAMEWORK_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${RUNNER:-flutter}/framework.sh"
 
@@ -31,13 +55,95 @@ SSH_OPTS=(
   -o ServerAliveInterval=30
 )
 
+# Where the JDK is, and how that is known.
+#
+# Never an installer's layout. This package ran for weeks with
+# $HOME/.sdkman/candidates/java/current written into it, which is true of one
+# Mac and makes SDKMAN a requirement of a package that has no business having
+# one. Every version manager — sdkman, jenv, mise, asdf, jabba — works by a line
+# in the login shell's init, so remote/javahome.sh asks the machine's own shell
+# once, at setup, and bin/init.sh records the answer as $RJAVA in the conf.
+#
+# $RJAVA is the R family: the machine with the device, the same one $RDIR,
+# $RHELP and $RMODS are on. Override a recorded value with RJAVA=<path> in the
+# environment, not with JAVA_HOME — across ssh, JAVA_HOME here is this machine's
+# and means nothing on the Mac.
+#
+# With no $RJAVA — a conf written before this, or one never detected — the
+# fallback below runs on the far side, per command. It asks macOS's registry and
+# then the shell's own java, and it must NOT do what javahome.sh's first rung
+# does: an interactive shell with no tty can hang, and $TMO would make that a
+# three-minute stall on the function every call site goes through.
+_JAVA_ENV_FALLBACK='
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME:-}/bin/java" ]; then
+  JAVA_HOME=
+  [ -x /usr/libexec/java_home ] && JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null)
+  if [ -z "$JAVA_HOME" ]; then
+    _j=$(command -v java 2>/dev/null)
+    while [ -L "$_j" ]; do
+      _l=$(readlink "$_j")
+      case "$_l" in /*) _j=$_l ;; *) _j=$(dirname "$_j")/$_l ;; esac
+    done
+    case "$_j" in ""|/usr/bin/java) _j= ;; esac
+    [ -n "$_j" ] && JAVA_HOME=${_j%/bin/java}
+  fi
+fi
+if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+  export JAVA_HOME
+  PATH=$JAVA_HOME/bin:$PATH
+  export PATH
+else
+  echo "maestro-remote-mac: no JDK on this machine, and the conf does not say where one is." >&2
+  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-mac.conf)" >&2
+fi
+'
+
+# The JAVA_HOME lines for a script that will run on the machine with the device.
+#
+# A recorded $RJAVA is checked on that machine before it is used. A JDK that has
+# been upgraded, removed or swapped for a version manager leaves the conf naming
+# a directory that is no longer there, and an unguarded export would then be
+# WORSE than having recorded nothing: Maestro's CLI is a Gradle start script, so
+# a JAVA_HOME that is set and wrong aborts it, while a JAVA_HOME that is absent
+# lets the fallback find whatever is there now.
+_java_env() {
+  if [ -n "${RJAVA:-}" ]; then
+    printf "if [ -x '%s/bin/java' ]; then\n" "$RJAVA"
+    printf "  export JAVA_HOME='%s'\n  PATH=\$JAVA_HOME/bin:\$PATH\n  export PATH\nelse\n" "$RJAVA"
+    printf "  echo 'maestro-remote-mac: the conf records RJAVA=%s and there is no JDK there.' >&2\n" "$RJAVA"
+    printf "  echo '  Looking for another one. Re-record it:  bin/init.sh --detect' >&2\n"
+    printf '%s\nfi\n' "$_JAVA_ENV_FALLBACK"
+  else
+    printf '%s\n' "$_JAVA_ENV_FALLBACK"
+  fi
+}
+
+# Maestro's own directory, when the conf records one. Appended rather than
+# replacing $HOME/.maestro/bin, so a machine with the default install and a
+# conf written before this setting existed both keep working.
+_MAESTRO_PATH=${RMAESTRO:+:$RMAESTRO}
+
 # Environment every remote command needs. A non-interactive SSH shell has
 # neither Java nor Maestro on PATH, and Maestro will not start without both.
 REMOTE_ENV='
-export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin
-export JAVA_HOME=$HOME/.sdkman/candidates/java/current
-export PATH=$JAVA_HOME/bin:$PATH
-'
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
+'"$(_java_env)"
+
+# The same job locally, and it is NOT the same script (item 94, 2.1).
+#
+# REMOTE_ENV REPLACES PATH, which is right for a machine reached by ssh: the
+# non-interactive shell's PATH is whatever sshd hands it and the Mac's layout is
+# known. Run that here and it would drop every directory the caller's PATH
+# carries — on this machine the Android SDK lives under /mnt/sda, so adb would
+# vanish and every android verb would fail as "command not found" while looking
+# like a broken module.
+#
+# So: add, never replace. The JDK comes from the same place it does across ssh —
+# $RJAVA if the conf records one, and the fallback if not, which locally keeps an
+# existing JAVA_HOME when it points at a real JDK.
+LOCAL_ENV='
+export PATH=$PATH:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
+'"$(_java_env)"
 
 # Which alias to talk to, when MAC_HOST names more than one.
 #
@@ -91,6 +197,10 @@ _probe_host() {  # _probe_host <alias> [connect-seconds]
 
 _pick_host() {  # sets MAC_HOST to a single alias
   local n cached c
+  # Local transport has no host to pick. The candidate count would answer 0 and
+  # fall out below anyway; this says so at the top rather than leaving a reader
+  # to work out that an empty MAC_HOST reaches the same place by accident.
+  _fs_shared && return 0
   n=$(_host_candidates | grep -c .)
   [ "$n" -le 1 ] && return 0          # nothing to choose; behave as before
 
@@ -138,12 +248,113 @@ _ssh_aliases() {
 # Output streams, it is not captured: shot.sh pipes a base64 image through here
 # and journeys read line by line, so buffering would change how every caller
 # behaves.
+# What every transport sends, assembled once (item 96, 1.2).
+#
+# Three parts, always: the environment the far side needs, a cd into the
+# checkout, and the caller's script verbatim. Only the environment differs, and
+# only because REMOTE_ENV replaces PATH where LOCAL_ENV adds to it. Written out
+# once so a third transport cannot drift from the first two — the test asserts
+# all three produce byte-identical text.
+_payload() {  # _payload <script>
+  local env
+  if [ "${TRANSPORT:-ssh}" = ssh ]; then env=$REMOTE_ENV; else env=$LOCAL_ENV; fi
+  printf '%s\ncd %s 2>/dev/null || true\n%s' "$env" "'$REPO'" "$1"
+}
+
+# A request id, unique per call so concurrent requests cannot collide.
+_bridge_id() { printf '%s-%s-%s' "$$" "${RANDOM:-0}" "$(date +%s%N 2>/dev/null || date +%s)"; }
+
+# The client half of the bridge. remote/bridge.sh is the other half, and its
+# header has the protocol (item 96).
+#
+# The helper not running is like a host not answering, so it says so and returns
+# without running anything. It does NOT retry: a timeout here is the command's
+# own, the same reasoning that keeps the local branch retry-free — half of what
+# goes through this function taps a screen.
+_bridge_send() {  # _bridge_send <assembled script>
+  local d=${BRIDGE_DIR:-} id rcv i
+  [ -n "$d" ] || {
+    echo "maestro-remote-mac: TRANSPORT=bridge needs BRIDGE_DIR in the conf." >&2
+    echo "  It is the directory the helper serves — start one and set it." >&2
+    return 1; }
+  [ -p "$d/control" ] || {
+    echo "maestro-remote-mac: no bridge helper is serving $d." >&2
+    echo "  Nothing was run. Start it, then retry." >&2
+    return 1; }
+
+  id=$(_bridge_id)
+  printf '%s' "$1" > "$d/$id.cmd" || return 1
+  printf '%s\n' "$TMO" > "$d/$id.tmo"
+  rm -f "$d/$id.in" "$d/$id.out" "$d/$id.err" "$d/$id.rc"
+  mkfifo "$d/$id.in" "$d/$id.out" "$d/$id.err" || return 1
+
+  # stdin is forwarded as ssh forwards it: a channel, not a file read up front.
+  # It IS drained when the call is made, though, which ssh is laxer about — so a
+  # caller that reads its own stdin must do so before it makes an unrelated call
+  # (bin/flow.sh, which resolved the device first and lost its flow).
+  # Draining it first would stall every call whose caller leaves stdin open and
+  # sends nothing — which is most of them, and which hung the suite when this
+  # was a `cat` into a file.
+  # fd 9 is this call's stdin, named explicitly because a background command in
+  # a non-interactive shell gets /dev/null for stdin unless it is told otherwise
+  # — which silently delivered an empty stdin to the far side.
+  local inpid
+  exec 9<&0
+  if [ -t 0 ]; then : > "$d/$id.in" & else cat <&9 > "$d/$id.in" & fi
+  inpid=$!
+  exec 9<&-
+
+  # Both channels need a reader before the far side can open them for writing,
+  # and stderr must stay separate from stdout — half the callers parse stdout.
+  cat "$d/$id.err" >&2 &
+  local errpid=$!
+  printf '%s\n' "$id" > "$d/control"
+  cat "$d/$id.out"
+  wait "$errpid" 2>/dev/null
+
+  # The status file is written last, just after the channels close.
+  for i in $(seq 1 250); do
+    [ -f "$d/$id.rc" ] && break
+    sleep 0.02
+  done
+  rcv=$(cat "$d/$id.rc" 2>/dev/null)
+  kill "$inpid" 2>/dev/null; wait "$inpid" 2>/dev/null
+  rm -f "$d/$id.cmd" "$d/$id.in" "$d/$id.tmo" "$d/$id.out" "$d/$id.err" "$d/$id.rc"
+  case "$rcv" in
+    ''|*[!0-9]*)
+      echo "maestro-remote-mac: the bridge helper returned no exit status." >&2
+      return 1 ;;
+  esac
+  return "$rcv"
+}
+
 _ssh() {
+  # Local transport runs the very same script, through sh -c, on this machine.
+  # The 84 call sites do not change: they already hand over a shell script and
+  # read its output, and whether that script crosses a network is this
+  # function's business and none of theirs (item 94, 2.1).
+  #
+  # Still bounded by $TMO — a local command can hang as readily as a remote one,
+  # and a caller that set a timeout meant it. No retry, though: the 255/124
+  # re-pick below exists because ssh failed to reach a host, and locally there
+  # is no host to re-pick. A local 124 is the command itself running long, and
+  # half of what goes through here taps a screen.
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    timeout "$TMO" sh -c "$(_payload "$1")"
+    return $?
+  fi
+
+  # The bridge is local for the script's destination and remote for everything
+  # about reaching it: the device is on this machine, on the other side of the
+  # sandbox (item 96).
+  if [ "${TRANSPORT:-ssh}" = bridge ]; then
+    _bridge_send "$(_payload "$1")"
+    return $?
+  fi
+
   _pick_host || return 1
   local rc
-  timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$REMOTE_ENV
-cd '$REPO' 2>/dev/null || true
-$1"
+  timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$(_payload "$1")"
   rc=$?
   # 255 is ssh's own "could not connect", 124 is the timeout — in both the
   # remote command never ran, so re-running is safe. Any other non-zero is the
@@ -154,12 +365,111 @@ $1"
     rm -f "$HOST_CACHE"; unset _HOST_PICKED
     echo "maestro-remote-mac: $MAC_HOST stopped answering — re-picking" >&2
     _pick_host || return 1
-    timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$REMOTE_ENV
-cd '$REPO' 2>/dev/null || true
-$1"
+    timeout "$TMO" ssh "${SSH_OPTS[@]}" "$MAC_HOST" "$(_payload "$1")"
     rc=$?
   fi
   return "$rc"
+}
+
+# Where the device is, for a message to name (item 94, 3.5).
+#
+# Thirteen messages across nine files said "on $MAC_HOST". In local transport
+# there is no alias, so every one of them read "on " followed by nothing —
+# `no booted device on  (platform: android)`, which names the platform
+# correctly and then trails off where the answer should be.
+#
+# A function rather than a variable set once, because _pick_host narrows
+# MAC_HOST from a list to the alias that answered, and a message printed after
+# that should name the one alias rather than all of them.
+_where() {
+  if _fs_shared; then printf 'this machine'
+  else printf '%s' "$MAC_HOST"
+  fi
+}
+
+# The host a URL built HERE must name to reach a service on the machine with the
+# device (item 94, 4.1).
+#
+# Across ssh that is the Mac, by the name the sandbox can resolve. Locally the
+# service is on this machine's loopback, and MAC_FQDN is neither set nor read —
+# a local conf does not have one, so every URL built from it came out as
+# http://:9101, which curl reports as "URL rejected" rather than as a missing
+# setting.
+_urlhost() {
+  if _ports_here; then printf '127.0.0.1'
+  elif [ "${TRANSPORT:-ssh}" = bridge ]; then printf '%s' "$BRIDGE_HOST"
+  else printf '%s' "$MAC_FQDN"
+  fi
+}
+
+# The base URL of the driver API for the device being driven.
+#
+# Across ssh the driver binds the Mac's own loopback and remote/relay.py
+# republishes it on $DPORT, so this names the relay. Locally that loopback IS
+# this machine's: there is no relay, $DPORT names nothing that will ever listen,
+# and the port to read is the driver's own. Call this rather than building the
+# URL, because the port differs between the two and the host is only half of it.
+_driver_base() {
+  if _ports_here; then printf 'http://127.0.0.1:%s' "$DRIVER_PORT"
+  else printf 'http://%s:%s' "$(_urlhost)" "$DPORT"
+  fi
+}
+
+# _push <file>... <destination>   — move files TO the machine holding the device.
+#
+# The destination is a path on that machine, with no host prefix: _push adds the
+# host across ssh and does not need one locally. A destination ending in / or
+# naming an existing directory takes the file's own basename, as scp does.
+#
+# Locally every caller in this package is pushing a file onto itself, because
+# after item 94's 2.2 the destinations ARE the checkout: $RHELP is remote/ and
+# $RMODS is runners/, and every source is $HERE/../remote/x or
+# $HERE/../runners/y. So the local branch tests for that first — and it must,
+# because `cp a a` exits 1 with "are the same file" and every call site here
+# ends in `|| exit 1` or `|| return 1`. A bare cp would fail every local run.
+#
+# The two that are real copies rather than self-copies are mac.sh --send and
+# img.sh, which put a file the user named into the scratch directory.
+_push() {
+  local n=$# dest src target
+  [ "$n" -ge 2 ] || { echo "_push needs at least one file and a destination" >&2; return 2; }
+  dest=${!n}
+  local srcs=("${@:1:n-1}")
+
+  if _fs_shared; then
+    for src in "${srcs[@]}"; do
+      target=$dest
+      case "$dest" in */) target="$dest$(basename "$src")" ;; esac
+      [ -d "$dest" ] && target="${dest%/}/$(basename "$src")"
+      [ "$src" -ef "$target" ] && continue
+      mkdir -p "$(dirname "$target")" || return 1
+      cp "$src" "$target" || return 1
+    done
+    return 0
+  fi
+
+  scp "${SSH_OPTS[@]}" "${srcs[@]}" "$MAC_HOST:$dest" >/dev/null || return 1
+}
+
+# _pull <source> <destination>   — bring one file back FROM the device machine.
+#
+# The source is a path on that machine with no host prefix; the destination is
+# here. Across ssh that is one scp. Locally it is a cp, and a real one: $RDIR
+# and $LDIR do NOT collapse into one directory (see below), so the two paths
+# genuinely differ.
+#
+# Callers that already have an _ssh open for another reason fold the fetch into
+# it with base64 instead, to save a round trip. That is why this is not the only
+# way a file comes back — see bin/shot.sh, which does both.
+_pull() {
+  local src=${1:?_pull <source> <destination>} dst=${2:?_pull <source> <destination>}
+  if _fs_shared; then
+    [ "$src" -ef "$dst" ] && return 0
+    mkdir -p "$(dirname "$dst")" || return 1
+    cp "$src" "$dst" || return 1
+    return 0
+  fi
+  scp "${SSH_OPTS[@]}" "$MAC_HOST:$src" "$dst" >/dev/null || return 1
 }
 
 # Who is driving, for a wall label. The session colour first, because it is what
@@ -181,6 +491,24 @@ _label_by() {
 # actually live, so nothing may hardcode it. Ask the Mac which address it is
 # using. One SSH round trip, cached for the shell.
 _macip() {
+  # There is no Mac in local transport, and the question has no local twin: the
+  # address every URL built here uses is the loopback, which _urlhost answers
+  # without asking anything. Asking anyway would run `ipconfig getifaddr en0` on
+  # this machine — a command Linux does not have, on an interface name macOS
+  # uses — and report "could not determine the Mac's LAN address", which is a
+  # true sentence about a machine that is not in this configuration (item 94,
+  # 4.4). Refused rather than converted, as img.sh's mac backend was in 3.2.
+  if [ "${TRANSPORT:-ssh}" = bridge ]; then
+    # There is a Mac-shaped question here — which address this process should
+    # use for the device host — and the conf answers it without asking anything.
+    [ -n "${BRIDGE_HOST:-}" ] || { echo "no BRIDGE_HOST in the conf" >&2; return 1; }
+    printf '%s' "$BRIDGE_HOST"; return 0
+  fi
+  if _ports_here; then
+    echo "there is no Mac to ask in local transport — the device is on this machine." >&2
+    echo "  Every URL built here is 127.0.0.1; nothing needs a LAN address." >&2
+    return 1
+  fi
   if [ -z "${MACIP:-}" ]; then
     MACIP=$(_ssh 'ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null' | tr -d '[:space:]')
   fi
@@ -203,7 +531,7 @@ _dev() {
       echo "  pin one with DEV=<udid> in .maestro-mac.conf" >&2
     fi
   fi
-  [ -n "$DEV" ] || { echo "no booted device on $MAC_HOST (platform: ${PLATFORM:-ios})" >&2; return 1; }
+  [ -n "$DEV" ] || { echo "no booted device on $(_where) (platform: ${PLATFORM:-ios})" >&2; return 1; }
   printf '%s' "$DEV"
 }
 
@@ -362,7 +690,7 @@ _driver_bind() {
       local n; n=$(printf '%s\n' "$map" | grep -c .)
       if [ "$n" -eq 0 ]; then
         [ "${1:-}" = --fresh ] || { _driver_bind --fresh; return $?; }
-        echo "no driver is running on $MAC_HOST. Bring one up:  bin/drivers.sh up" >&2
+        echo "no driver is running on $(_where). Bring one up:  bin/drivers.sh up" >&2
         return 1
       elif [ "$n" -gt 1 ]; then
         # Driving the wrong simulator looks exactly like the app misbehaving,

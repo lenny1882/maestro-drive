@@ -40,8 +40,9 @@ FW_REMOTE=$("$HERE/runner.sh" rpath framework) || exit 1
 # Kept for the by-hand recipe _report prints; nothing above it uses it now.
 _vm() { curl -s -x "$grpc_proxy" --max-time 8 "$1/$2" 2>/dev/null; }
 
-# "<was> <now>", each on|off|unknown. The module runs here in the sandbox and
-# reaches the published relay through $grpc_proxy.
+# "<was> <now>", each on|off|unknown. The module runs here rather than on the
+# machine with the device, and reaches the endpoint through $grpc_proxy across
+# ssh and directly in local transport — it reads the variable lib.sh sets.
 _arm() { # _arm <base> <isolate>
   sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null || true
 }
@@ -67,13 +68,34 @@ TXT
 # published URI is built with no host at all — http://:9100/... (item 39). Narrow
 # to the alias that answers first (a no-op for a single-host config), then read
 # its LAN IP.
-_pick_host
-MACIP=$(ssh -G "$MAC_HOST" 2>/dev/null | awk '/^hostname /{print $2}')
-[ -n "$MACIP" ] || { echo "could not resolve a LAN IP for '$MAC_HOST' — ssh -G returned no hostname" >&2; exit 1; }
+# Locally there is nothing to resolve and no ssh to ask. The endpoint and
+# whatever reads the published URL are both on this machine, and since 4.1 there
+# is no relay in between either — so `start` writes the endpoint's own port on
+# the loopback and MACIP is never read. Asking ssh -G for a host that is not in
+# the conf would fail on a question with no reason to be asked.
+if _ports_here; then
+  :
+elif [ "$TRANSPORT" = bridge ]; then
+  # The device is on this machine and this process still cannot reach its
+  # loopback, so the published URI names the machine the way the ssh transport
+  # names the Mac (item 96).
+  MACIP=$(_macip) || exit 1
+else
+  _pick_host
+  MACIP=$(ssh -G "$MAC_HOST" 2>/dev/null | awk '/^hostname /{print $2}')
+  [ -n "$MACIP" ] || { echo "could not resolve a LAN IP for '$MAC_HOST' — ssh -G returned no hostname" >&2; exit 1; }
+fi
 
 case "${1:-start}" in
   stop)
-    _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
+    # No relay was started locally, so there is nothing to kill — but the state
+    # file is real either way and stop's job is to make the next status say
+    # "nothing published" rather than point at an endpoint nobody is watching.
+    if _ports_here; then
+      echo "no relay in local transport — cleared the published endpoint"
+    else
+      _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
+    fi
     rm -f "$STATE"
     ;;
   status)
@@ -107,12 +129,22 @@ case "${1:-start}" in
     RPORT=$(printf '%s' "$VBASE" | sed -E 's|.*:([0-9]+)/.*|\1|')
     RPATH=$(printf '%s' "$VBASE" | sed -E 's|.*:[0-9]+||')
 
-    _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null
-          nohup python3 '$RDIR/relay.py' $PUBPORT $RPORT >/dev/null 2>&1 &
+    # Locally the endpoint the framework just reported IS reachable from here —
+    # it is bound to this machine's loopback, which is the one this script
+    # curls. So there is no relay to start and $PUBPORT names nothing: the
+    # published URI is the debug endpoint's own port (item 94, 4.1). The state
+    # file, the per-device suffix and the arming below are unchanged, because
+    # they are about the app and not about the transport.
+    if _ports_here; then
+      printf 'http://127.0.0.1:%s%s %s\n' "$RPORT" "$RPATH" "$ISO" > "$STATE"
+    else
+      _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null
+          nohup python3 '$RHELP/relay.py' $PUBPORT $RPORT >/dev/null 2>&1 &
           sleep 1
           lsof -nP -iTCP:$PUBPORT -sTCP:LISTEN >/dev/null 2>&1 && echo 'relay up' || echo 'relay FAILED'"
 
-    printf 'http://%s:%s%s %s\n' "$MACIP" "$PUBPORT" "$RPATH" "$ISO" > "$STATE"
+      printf 'http://%s:%s%s %s\n' "$MACIP" "$PUBPORT" "$RPATH" "$ISO" > "$STATE"
+    fi
     read -r PBASE _ < "$STATE"
 
     read -r was now <<< "$(_arm "$PBASE" "$ISO")"

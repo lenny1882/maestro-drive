@@ -80,6 +80,55 @@ if [ -n "${PROFILE:-}" ] && [ -n "$MAESTRO_MAC_CONF_FOUND" ]; then
   fi
 fi
 
+# Which transport reaches the device (BACKLOG item 94):
+#
+#   ssh     a Mac across the network. What this package was built for, and the
+#           default, so an existing conf is unchanged by this setting's arrival.
+#   local   a simulator or emulator on the machine running the skill. MAC_HOST
+#           and MAC_FQDN are then neither needed nor used.
+#   bridge  the device is on this machine, and this process cannot reach it —
+#           a Claude session's sandbox has no /dev/kvm, its own PID and network
+#           namespaces, and writes confined to two directories. Scripts go to a
+#           helper outside it through the shared scratch, and the screen's port
+#           is reached the way the ssh transport reaches the Mac's, because the
+#           sandbox really is a different machine from the device host
+#           (BACKLOG item 96). BRIDGE_DIR says where the helper serves.
+#
+# An explicit setting rather than inferring it from an empty MAC_HOST. A conf
+# with a misspelt MAC_HOST has to keep failing as a broken remote conf; if
+# emptiness meant local, that typo would instead start looking for a device on
+# this machine and report it as missing, which is a true statement about the
+# wrong machine.
+#
+# Named TRANSPORT rather than MODE because it sits beside RUNNER, PLATFORM and
+# PROFILE, which each select one thing and say which in their name.
+: "${TRANSPORT:=ssh}"
+case "$TRANSPORT" in
+  ssh | local | bridge) ;;
+  *)
+    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+export TRANSPORT
+
+# Two questions, not one, and most of the package cares about only one of them
+# (BACKLOG item 96). Local versus remote is really:
+#
+#   _fs_shared    the machine with the device shares this filesystem, so a push
+#                 is a copy and $RHELP is the checkout itself
+#                 ssh: no.  local: yes.  bridge: yes.
+#
+#   _ports_here   a port on that machine is reachable from THIS process without
+#                 a relay and without the proxy
+#                 ssh: no.  local: yes.  bridge: NO — the device is on this
+#                 machine and the sandbox is in the way, so the screen is
+#                 reached exactly as the Mac's is.
+#
+# Every branch that used to ask "is this local" is really asking one of these.
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
+
 # SSH host alias from ~/.ssh/config. It must be an alias with a Host block: a
 # bare name gets no ProxyCommand, and without one there is no route out of the
 # sandbox at all. Never a .local name. reference/setup.md §3.
@@ -138,11 +187,71 @@ fi
 # Simulator UDID. Empty means the first booted device.
 : "${DEV:=}"
 
-# Where helper scripts and scratch files live on the Mac.
+# Where scratch files live on the machine that holds the device. Screenshots,
+# hierarchy dumps, flow output, driver labels, the ports map, the rig record.
 : "${RDIR:=/tmp/maestro-mac}"
+
+# Where the CODE that runs on that machine lives (BACKLOG item 94, 2.2).
+#
+# $RDIR did both jobs and they come apart the moment the device is here. Across
+# ssh the helpers and the runner modules are PUSHED into $RDIR by
+# bin/install.sh, so code and scratch share a directory and one name served.
+# Locally there is nothing to push: the code is in the checkout already, and
+# pointing a module path at /tmp/maestro-mac finds nothing — measured, exit 127
+# from `sh: 0: Can't open`.
+#
+# Two names and not one, because the layouts differ. Pushed, the helpers land
+# flat beside the scratch; in the checkout they are under remote/. The modules
+# keep their runners/<name>/ shape in both.
+#
+#   ssh    RMODS=$RDIR/runners     RHELP=$RDIR
+#   local  RMODS=<checkout>/runners  RHELP=<checkout>/remote
+#
+# Both resolve across ssh to exactly what $RDIR resolved to before this split.
+if _fs_shared; then
+  _SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  : "${RMODS:=$_SKILL_DIR/runners}"
+  : "${RHELP:=$_SKILL_DIR/remote}"
+  unset _SKILL_DIR
+else
+  : "${RMODS:=$RDIR/runners}"
+  : "${RHELP:=$RDIR}"
+fi
 
 # Local scratch. Must be writable inside the sandbox.
 : "${LDIR:=${TMPDIR:-/tmp}}"
+
+# Where the bridge helper serves, for TRANSPORT=bridge (BACKLOG item 96).
+#
+# A directory both sides can see — the session scratch — holding the control
+# FIFO and one set of files per request. It is the capability: anything that can
+# write in it can run anything on the machine with the device, which is why the
+# helper refuses a directory that is not its own user's, logs every script it
+# runs beside the FIFO, and is started deliberately rather than living in every
+# session.
+: "${BRIDGE_DIR:=}"
+
+# Where the maestro binary is on the machine with the device — the directory, not
+# the file, because it goes on PATH. The R family again, like $RJAVA.
+#
+# Left empty, $HOME/.maestro/bin is assumed, which is where Maestro's own
+# installer puts it. Recorded by `bin/init.sh --detect ... --write`, which asks
+# that machine's login shell: an install anywhere else lives on a PATH set in a
+# shell init file, and neither ssh nor a launcher without a terminal reads one.
+# Measured 21 Sep 2026 on this machine, where it is under /mnt/sda and the
+# process running the package could not see it.
+: "${RMAESTRO:=}"
+
+# Where the JDK is on the machine with the device — the R family, like $RDIR and
+# $RHELP. Written by `bin/init.sh --detect ... --write`, which asks that machine
+# rather than assuming an installer's layout: sdkman, jenv, mise, asdf and a
+# plain Homebrew install all put it somewhere different, and every one of them
+# works by a line in the login shell's init, which is what gets asked.
+#
+# Left empty, bin/lib.sh falls back to asking the far side per command. Record
+# it instead: the fallback cannot use the login shell, so it only finds a JDK
+# macOS itself knows about or one on the non-interactive PATH.
+: "${RJAVA:=}"
 
 # Default timeout (seconds) for a remote command.
 : "${TMO:=180}"
@@ -236,7 +345,65 @@ _app_vars() {
 for _n in ${!APP_@}; do export "${_n?}"; done
 unset _n
 
-if [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
+# What a project must set depends on the transport. Local mode has no host and
+# no mDNS name to give, so the ssh message would print two (unset) values
+# against settings the reader was never meant to fill, and send them to a
+# --detect that lists ssh aliases they do not have. This message is one of the
+# more useful things this package prints; it stays that good for both shapes,
+# which means two messages rather than one with a conditional clause in it.
+#
+# The searched-paths and detached-process paragraphs are the same in both,
+# because the conf search is the same in both.
+if [ "$TRANSPORT" = bridge ] && [ -n "$APP_ID" ] && [ -z "$BRIDGE_DIR" ]; then
+  cat >&2 <<MSG
+maestro-remote-mac: TRANSPORT=bridge with no BRIDGE_DIR.
+
+The device is on this machine and this process cannot reach it, so scripts go
+to a helper through a directory both sides can see. Nothing says where that is.
+
+  BRIDGE_DIR=<directory the helper serves>   in .maestro-mac.conf
+
+The helper is remote/bridge.sh and it is started deliberately — it is not
+running in every session, by design.
+MSG
+  return 1 2>/dev/null || exit 1
+fi
+
+# The address of the machine with the device, for the URLs this process builds
+# under TRANSPORT=bridge. The device is here, but this process reaches its ports
+# the way it reaches the Mac's — through the relay and the proxy — so it needs an
+# address that is routable from inside the sandbox rather than 127.0.0.1.
+# `hostname -I` reports it, and so does `ssh <mac> 'echo $SSH_CLIENT'`.
+: "${BRIDGE_HOST:=}"
+
+if _fs_shared; then
+  if [ -z "$APP_ID" ]; then
+    cat >&2 <<MSG
+maestro-remote-mac: not configured for this project.
+
+  TRANSPORT=$TRANSPORT  APP_ID=${APP_ID:-(unset)}
+  searched: \$MAESTRO_MAC_CONF, .maestro-mac.conf from \$PWD upwards, ~/.maestro-mac.conf,
+            and $_CONF_CACHE (this session's last find), which is $([ -r "$_CONF_CACHE" ] && cat "$_CONF_CACHE" || echo "empty")
+
+This transport drives a simulator or emulator on this machine, so MAC_HOST and
+MAC_FQDN are neither needed nor read. APP_ID is the only required value: the
+bundle id on iOS, the applicationId on Android.
+
+If this is a watcher, sampler or anything else started detached, the search is
+the problem and not the config: it walks up from \$PWD, and a detached process
+starts nowhere near the project. Pass the conf explicitly:
+
+  MAESTRO_MAC_CONF=<project>/.maestro-mac.conf <your command>
+
+Run the skill's bin/init.sh to write one. It asks this machine which toolchains
+and devices are here rather than guessing:
+
+  bin/init.sh --local --detect             # toolchains, devices, AVDs, checkout
+  bin/init.sh --local --app <bundle id or applicationId> [--repo <path>] --write
+MSG
+    return 1 2>/dev/null || exit 1
+  fi
+elif [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
   cat >&2 <<MSG
 maestro-remote-mac: not configured for this project.
 
@@ -282,9 +449,17 @@ fi
 # covers everything, the project's .claude/settings.local.json covers this one.
 # The check matches the actual command, so a narrow Bash(ssh mac-a:*) passes
 # for MAC_HOST=mac-a and a wide Bash(ssh mac-*:*) passes for all of them.
+# Not in local transport. Measured before writing the guard, by removing it:
+# the block is already silent there. It builds its command list from MAC_HOST's
+# aliases, an empty list has nothing uncovered, and nothing is printed — so the
+# guard buys one python3 subprocess per local session, not a behaviour change.
+# It is here to say that in the file. A reader should not have to derive "local
+# sessions never warn" from an empty split inside a heredoc'd python program,
+# and the day MAC_HOST gains a local default is the day the derivation stops
+# holding without anyone touching this block.
 _PERM_WARNED="${LDIR:-${TMPDIR:-/tmp}}/perm-warned"
 
-if [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
+if [ "$TRANSPORT" = ssh ] && [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
   # First line is the wildcard to suggest; the rest are the uncovered commands.
   _perm_out=$(
     MAC_HOST="$MAC_HOST" PROJECT_DIR="$PROJECT_DIR" python3 - <<'PY' 2>/dev/null

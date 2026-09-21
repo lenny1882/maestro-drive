@@ -77,6 +77,20 @@ install)
   echo "installed  $_id${_appid:+ ($_appid)}"
   ;;
 
+uninstall)
+  # ADDED 21 Sep 2026, NOT MEASURED — there is no phone on this machine. It was
+  # missing outright until the contract-coverage test went in (item 94, 5.3),
+  # and `bin/driver.sh clearstate` calls it: against a phone that call was
+  # answering "unknown verb" rather than removing anything.
+  #
+  # devicectl's uninstall, and the contract's rule that an app which is not
+  # there is not a failure — same as simctl's, so the exit status is discarded
+  # exactly as runners/ios does it.
+  xcrun devicectl device uninstall app --device "${1:?uninstall <id> <app-id>}" \
+    "${2:?app-id}" >/dev/null 2>&1
+  exit 0
+  ;;
+
 locked)
   # THE FIRST THING TO ASK when a driver will not attach. XCUITest cannot attach
   # to a locked springboard and it surfaces as a relay or connection failure

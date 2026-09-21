@@ -12,13 +12,25 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 d=$(_dev) || exit 1
 
-echo "== SSH round trip, no work =="
-for i in 1 2 3; do
-  s=$(date +%s.%N); ssh "${SSH_OPTS[@]}" "$MAC_HOST" true; e=$(date +%s.%N)
-  printf '  %.2fs\n' "$(echo "$e - $s" | bc)"
-done
+# The round trip is the thing this script was built to price, so locally it
+# says there is none rather than printing three numbers near zero. Those numbers
+# would be real — fork and exec cost something — but they would be measuring the
+# shell, and a reader comparing them against the Mac's 0.30-0.44s would be
+# comparing two different quantities that share a heading.
+if _fs_shared; then
+  echo "== round trip =="
+  echo "  none. The device is on this machine and nothing crosses a network."
+  _WHERE="on this machine"
+else
+  echo "== SSH round trip, no work =="
+  for i in 1 2 3; do
+    s=$(date +%s.%N); ssh "${SSH_OPTS[@]}" "$MAC_HOST" true; e=$(date +%s.%N)
+    printf '  %.2fs\n' "$(echo "$e - $s" | bc)"
+  done
+  _WHERE="on the Mac"
+fi
 
-echo "== on the Mac =="
+echo "== $_WHERE =="
 _ssh "
 echo '-- JVM only (maestro --version) x2 --'
 for i in 1 2; do /usr/bin/time -p maestro --version >/dev/null 2>>/tmp/b.err; grep real /tmp/b.err | tail -1; : > /tmp/b.err; done

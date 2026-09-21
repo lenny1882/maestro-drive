@@ -28,6 +28,10 @@ FIX="$REPO/test/fixtures"
 # Scratch, and HOME redirected with it: nothing here may touch the real config
 # or the real ~/.ssh.
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# The real one, kept before HOME is redirected: remote/javahome.sh asks the
+# login shell where its JDK is, and the login shell's init is in the user's own
+# home. A case that needs a real machine's real answer uses this (item 95).
+REAL_HOME=$HOME
 export HOME="$TMP/home"; mkdir -p "$HOME"
 # $TMPDIR with it: config.sh remembers the conf it found under $LDIR, which
 # defaults to $TMPDIR (item 71), and a case that sources config.sh without
@@ -52,6 +56,34 @@ for f in "$REPO"/runners/*/*.sh; do
   [ -r "$f" ] || continue
   n="runners/$(basename "$(dirname "$f")")/$(basename "$f")"
   sh -n "$f" && ok "$n parses" || no "$n parses" "syntax error"
+done
+# A duplicate case label is silent: `case` takes the first arm and the second is
+# dead, so a verb the contract names answers "unknown verb" while the file looks
+# like it implements it. Both platform modules carried one until 21 Sep 2026 —
+# `container)` twice, with `data-container` unreachable behind it (item 94, 5.3).
+for f in "$REPO"/runners/*/platform.sh; do
+  [ -r "$f" ] || continue
+  n="runners/$(basename "$(dirname "$f")")/platform.sh"
+  dup=$(grep -oE '^[a-z][a-z0-9|-]*\)' "$f" | tr -d ')' | tr '|' '\n' | sort | uniq -d | tr '\n' ' ')
+  [ -z "$dup" ] && ok "$n has no duplicate case label" \
+    || no "$n has no duplicate case label" "these appear twice: $dup"
+done
+# Every verb runners/README.md's table names has to be reachable in the two
+# modules that claim to implement it. Refusing with exit 2 counts — answering
+# "unknown verb" does not.
+for m in ios ios-device android; do
+  f="$REPO/runners/$m/platform.sh"
+  [ -r "$f" ] || continue
+  have=$(grep -oE '^[a-z][a-z0-9|-]*\)' "$f" | tr -d ')' | tr '|' '\n')
+  miss=
+  for v in claim devices boot shutdown install installed-info container \
+           data-container prefs-read prefs-flush orientations screenshot \
+           driver-up driver-down driver-scan uninstall locked last-used \
+           capture-cmd; do
+    printf '%s\n' "$have" | grep -qx "$v" || miss="$miss $v"
+  done
+  [ -z "$miss" ] && ok "runners/$m/platform.sh answers every contract verb" \
+    || no "runners/$m/platform.sh answers every contract verb" "missing:$miss"
 done
 python3 -c "import py_compile,sys; py_compile.compile('$REPO/bin/resolve.py', doraise=True)" \
   && ok "resolve.py compiles" || no "resolve.py compiles" "syntax error"
@@ -922,10 +954,20 @@ DBIN="$TMP/dbin"; mkdir -p "$DBIN"
 cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" \
    "$REPO/bin/jtok.py" "$DBIN/"
 cat > "$DBIN/lib.sh" <<'LIBSH'
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
 MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
+# The ssh form of the helper lib.sh grew in item 94's 4.1; driver.sh asks for
+# the URL rather than building it, so a stub lib.sh has to answer.
+_driver_base(){ printf 'http://%s:%s' "$MAC_FQDN" "$DPORT"; }
+# RHELP is where the pushed helpers live; config.sh sets it beside RDIR (item 94).
+RHELP=/tmp/none; RMODS=/tmp/none/runners
 _driver_bind(){ return 0; }
 _ssh(){ return 0; }
+# _push stands where scp was before item 94's 3.1; the real one is in lib.sh.
+_push(){ return 0; }
 LIBSH
 cat > "$TMP/stub/curl" <<'CURLSH'
 #!/usr/bin/env bash
@@ -2439,14 +2481,20 @@ printf '#!/usr/bin/env bash\necho ran > "$DEVMARK"\n' > "$DDIR/device.sh"
 chmod -x "$DDIR/device.sh" 2>/dev/null || true
 echo "stub 1 device" > "$DDIR/devmap"   # _is_device greps "^$DEV " -> "stub "
 cat > "$DDIR/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
+_driver_base(){ printf 'http://%s:%s' "\$MAC_FQDN" "\$DPORT"; }
+RHELP=$TMP/none; RMODS=$TMP/none/runners
 DEVICE_MAP=$DDIR/devmap
 PLATFORM_SH=/x/platform.sh
 _driver_bind(){ return 0; }
 _rebind(){ return 1; }
 # The lock probe answers by status; 1 is "not locked", which is what this case
 # is about — the failure is the face-up crash in the log, not a locked screen.
+_push(){ return 0; }
 _ssh(){ case "\$*" in *locked*) return 1 ;; esac
         echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; return 0; }
 LIBSH
@@ -2466,6 +2514,833 @@ case "$dout" in
   *"XCTest session dying"*) no "the face-up hint replaces the misleading XCTest-death message" "both were printed" ;;
   *) ok "the face-up hint replaces the misleading XCTest-death message" ;;
 esac
+
+echo
+echo "local transport: no relay, and the driver's own port (item 94, 4.1)"
+# The two URL helpers, against the real lib.sh rather than a stub, because what
+# they answer decides whether a URL names a port anything is listening on. A
+# local conf has no MAC_FQDN at all, so the old form built http://:9101 and curl
+# refused it — which reads as a dead relay rather than as a missing setting.
+nrl_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  DRIVER_PORT=22087; DPORT=9101
+  printf "%s %s" "$(_urlhost)" "$(_driver_base)"' 2>/dev/null)
+[ "$nrl_out" = "127.0.0.1 http://127.0.0.1:22087" ] \
+  && ok "locally a driver URL is the loopback and the driver's OWN port" \
+  || no "locally a driver URL is the loopback and the driver's OWN port" "got '$nrl_out'"
+
+nrl_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  DRIVER_PORT=22087; DPORT=9101
+  printf "%s %s" "$(_urlhost)" "$(_driver_base)"' 2>/dev/null)
+[ "$nrl_out" = "m.local http://m.local:9101" ] \
+  && ok "across ssh it is still the Mac and the relay's port" \
+  || no "across ssh it is still the Mac and the relay's port" "got '$nrl_out'"
+
+# And driver.sh itself, with a driver that does not answer: across ssh that is
+# where relay.py gets staged and started, so this is the case that says the
+# local branch really does neither. The stub records every _ssh and _push.
+NRL="$TMP/nrl"; mkdir -p "$NRL"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/jtok.py" "$NRL/"
+cat > "$NRL/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
+MAC_FQDN=; APP_ID=test.app; DEV=stub; DPORT=9101; DRIVER_PORT=22087
+DRIVER_PORT_BASE=22087; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
+RHELP=$TMP/none; RMODS=$TMP/none/runners; DEVICE_MAP=$NRL/nodevmap
+PLATFORM_SH=/x/platform.sh
+TRANSPORT=local
+_driver_bind(){ return 0; }
+_rebind(){ return 1; }
+_where(){ printf 'this machine'; }
+_driver_base(){ printf 'http://127.0.0.1:%s' "\$DRIVER_PORT"; }
+_push(){ echo "PUSH \$*" >> "\$SSHLOG"; return 0; }
+_ssh(){ echo "SSH \$*" >> "\$SSHLOG"
+        case "\$*" in *locked*) return 1 ;; esac
+        return 0; }
+LIBSH
+rm -f "$TMP/nrl.log"
+nrl_out=$(SSHLOG="$TMP/nrl.log" PATH="$DSTUB:$PATH" timeout 30 bash "$NRL/driver.sh" nodes 2>&1)
+grep -q 'relay.py' "$TMP/nrl.log" 2>/dev/null \
+  && no "locally a driver that does not answer starts no relay" "$(grep relay.py "$TMP/nrl.log" | head -1)" \
+  || ok "locally a driver that does not answer starts no relay"
+case "$nrl_out" in
+  *"nothing is listening on 22087"*) ok "and it names the driver port, not a relay port" ;;
+  *) no "and it names the driver port, not a relay port" "said: $(printf '%s' "$nrl_out" | tail -2)" ;;
+esac
+
+rm -f "$TMP/nrl.log"
+nrl_out=$(SSHLOG="$TMP/nrl.log" PATH="$DSTUB:$PATH" timeout 30 bash "$NRL/driver.sh" stop 2>&1)
+case "$nrl_out" in
+  *"no relay in local transport"*) ok "stop says there is no relay rather than reporting one killed" ;;
+  *) no "stop says there is no relay rather than reporting one killed" "said: $nrl_out" ;;
+esac
+grep -q 'pkill' "$TMP/nrl.log" 2>/dev/null \
+  && no "and stop kills nothing" "$(grep pkill "$TMP/nrl.log" | head -1)" \
+  || ok "and stop kills nothing"
+
+echo
+echo "local transport: the sandbox proxy is not on the way to a loopback (item 94, 4.2)"
+# A proxy handed a 127.0.0.1 target refuses it, and the refusal reads as the
+# service being down. The value is emptied rather than each call site branching,
+# because one of the call sites is the framework module, in a process bin/net.sh
+# spawns — so the check is what a CHILD sees, not just this shell.
+px_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null grpc_proxy=http://proxy:3128 bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  sh -c "printf %s \"\${grpc_proxy-UNSET}\""' 2>/dev/null)
+[ -z "$px_out" ] \
+  && ok "locally a set proxy is emptied, and the module inherits the empty value" \
+  || no "locally a set proxy is emptied, and the module inherits the empty value" "child saw '$px_out'"
+
+px_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null grpc_proxy=http://proxy:3128 bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  sh -c "printf %s \"\${grpc_proxy-UNSET}\""' 2>/dev/null)
+[ "$px_out" = "http://proxy:3128" ] \
+  && ok "across ssh the proxy is left alone — it is the only route to the Mac" \
+  || no "across ssh the proxy is left alone — it is the only route to the Mac" "child saw '$px_out'"
+
+# Outside a sandbox there is no proxy at all, and every caller runs under set -u:
+# a bare "$grpc_proxy" there is an unbound-variable crash, not a direct request.
+px_out=$(env -u grpc_proxy MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  set -u; . '"$REPO"'/bin/lib.sh 2>/dev/null
+  printf "[%s]" "$grpc_proxy"' 2>&1)
+[ "$px_out" = "[]" ] \
+  && ok "with no proxy set at all it is empty, not unbound" \
+  || no "with no proxy set at all it is empty, not unbound" "got '$px_out'"
+
+echo
+echo "the wall, locally: the URL it prints and the interface it serves on (item 94, 4.3)"
+# wall.sh with a stub lib.sh, so _url and _bind are the real ones and the _ssh
+# it would have sent is recorded instead. $WALLPORT never moves, so the whole of
+# 4.3 is which host the URL names and which interface the server binds.
+WL="$TMP/wl"; mkdir -p "$WL"
+cp "$REPO/bin/wall.sh" "$WL/"
+cat > "$WL/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
+APP_ID=test.app; WALLPORT=9990; RDIR=$TMP/none; RHELP=$TMP/none; RMODS=$TMP/none/runners
+SSH_OPTS=(-o X=y); DEV=stub
+TRANSPORT=\${T_TRANSPORT:-ssh}; MAC_FQDN=\${T_FQDN:-}; WALL_URL=\${T_WALL_URL:-}
+PLATFORM=\${T_PLATFORM:-ios}
+_urlhost(){ if [ "\$TRANSPORT" = local ]; then printf '127.0.0.1'; else printf '%s' "\$MAC_FQDN"; fi; }
+_where(){ printf 'stub'; }
+_push(){ return 0; }
+_ssh(){ echo "SSH \$*" >> "\$SSHLOG"; case "\$*" in *verify*) echo "[ok] ios: fine" ;; esac; return 0; }
+LIBSH
+printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\nprintf 200\n' > "$TMP/stub/curl"
+chmod +x "$TMP/stub/curl"
+
+rm -f "$TMP/wl.log"
+wl_out=$(SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" status 2>&1)
+case "$wl_out" in
+  *"http://127.0.0.1:9990/ -> HTTP 200"*) ok "locally the wall URL is the loopback, with the port unchanged" ;;
+  *) no "locally the wall URL is the loopback, with the port unchanged" "said: $(printf '%s' "$wl_out" | tail -2)" ;;
+esac
+
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q "wall.py' 9990 127.0.0.1" "$TMP/wl.log" 2>/dev/null \
+  && ok "and it binds the loopback, not every interface this machine is on" \
+  || no "and it binds the loopback, not every interface this machine is on" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=ssh T_FQDN=mac.local PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q "wall.py' 9990 0.0.0.0" "$TMP/wl.log" 2>/dev/null \
+  && ok "across ssh it still binds every interface — the browser is elsewhere" \
+  || no "across ssh it still binds every interface — the browser is elsewhere" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+rm -f "$TMP/wl.log"
+wl_out=$(SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android T_WALL_URL=http://tunnel:8080/ \
+  PATH="$TMP/stub:$PATH" timeout 30 bash "$WL/wall.sh" start 2>&1)
+case "$wl_out" in
+  *"http://tunnel:8080/"*) ok "WALL_URL still overrides the URL in local transport" ;;
+  *) no "WALL_URL still overrides the URL in local transport" "said: $(printf '%s' "$wl_out" | tail -2)" ;;
+esac
+grep -q "wall.py' 9990 0.0.0.0" "$TMP/wl.log" 2>/dev/null \
+  && ok "and it takes the open bind with it — a tunnel reaches the wall from off this machine" \
+  || no "and it takes the open bind with it — a tunnel reaches the wall from off this machine" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+# The SimulatorKit check is a question about iOS, and it ran before everything.
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q 'simulator-server verify' "$TMP/wl.log" 2>/dev/null \
+  && no "an Android wall is not asked about Apple's SimulatorKit" "it ran the verify anyway" \
+  || ok "an Android wall is not asked about Apple's SimulatorKit"
+
+echo
+echo "local transport: there is no Mac to ask for an address (item 94, 4.4)"
+# `ipconfig getifaddr en0` is a macOS command against a macOS interface name.
+# Run here it fails, and the failure message — "could not determine the Mac's
+# LAN address" — is a true sentence about a machine that is not in this
+# configuration. Refused instead, the way img.sh's mac backend was in 3.2.
+mi_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null; _macip; printf "rc=%s" "$?"' 2>&1)
+case "$mi_out" in
+  *"no Mac to ask in local transport"*rc=1) ok "_macip refuses locally instead of asking this machine for an en0" ;;
+  *) no "_macip refuses locally instead of asking this machine for an en0" "got: $mi_out" ;;
+esac
+case "$mi_out" in
+  *"could not determine the Mac's LAN address"*) no "and it does not report a Mac that is not in the configuration" "said it anyway" ;;
+  *) ok "and it does not report a Mac that is not in the configuration" ;;
+esac
+
+mi_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null timeout 30 bash "$REPO/bin/macip.sh" 2>&1; printf "rc=%s" "$?")
+case "$mi_out" in
+  *rc=1) ok "bin/macip.sh exits 1 locally rather than printing an address" ;;
+  *) no "bin/macip.sh exits 1 locally rather than printing an address" "got: $mi_out" ;;
+esac
+
+echo
+echo "the suite runs all three transports (item 94 5.1, item 96 3.1)"
+# Everything above this point is the ssh path. These are the shapes that exist
+# only locally: what a conf must set, what init.sh writes, and the copies that
+# become no-ops. Still no Mac — and no device either.
+LP="$TMP/localpass"; mkdir -p "$LP/proj" "$LP/ldir" "$LP/rhelp" "$LP/rdir" "$LP/dst" "$LP/bin"
+LPLIB=". $REPO/bin/lib.sh 2>/dev/null"
+
+# --- 1.2, what a local project must set -------------------------------------
+printf ': "${TRANSPORT:=local}"\n: "${APP_ID:=com.example.app}"\n' > "$LP/proj/ok.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/ok.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh || exit 1; printf "%s %s" "$TRANSPORT" "$APP_ID"' 2>&1)
+[ "$lp" = "local com.example.app" ] \
+  && ok "a local conf loads with APP_ID and nothing else" \
+  || no "a local conf loads with APP_ID and nothing else" "got '$lp'"
+
+printf ': "${TRANSPORT:=local}"\n' > "$LP/proj/bare.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/bare.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$lp" in
+  *"TRANSPORT=local"*"APP_ID=(unset)"*) ok "an unconfigured local project is told the local shape" ;;
+  *) no "an unconfigured local project is told the local shape" "said: $(printf '%s' "$lp" | head -3)" ;;
+esac
+# The ssh diagnostic line names MAC_HOST and MAC_FQDN as missing values. Locally
+# they are not missing, they are not settings — printing that line would send a
+# reader to configure a machine that is not in the picture.
+case "$lp" in
+  *"MAC_HOST=(unset)"*) no "and it is not asked for a Mac it does not have" "printed the ssh diagnostic" ;;
+  *) ok "and it is not asked for a Mac it does not have" ;;
+esac
+
+# 1.1's reason for an explicit setting: an ssh conf whose MAC_HOST is missing or
+# misspelt must keep failing AS a broken remote conf. If emptiness meant local,
+# the typo would start hunting for a device on this machine instead.
+printf ': "${MAC_FQDN:=m.local}"\n: "${APP_ID:=c.e.a}"\n' > "$LP/proj/broken.conf"
+lp=$(MAESTRO_MAC_CONF="$LP/proj/broken.conf" LDIR="$LP/ldir" bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$lp" in
+  *"MAC_HOST=(unset)"*) ok "an ssh conf with no MAC_HOST still fails as a broken remote conf" ;;
+  *) no "an ssh conf with no MAC_HOST still fails as a broken remote conf" "said: $(printf '%s' "$lp" | head -3)" ;;
+esac
+
+# --- 1.4, the conf init.sh writes -------------------------------------------
+LPI="$LP/initlocal"; mkdir -p "$LPI"
+( cd "$LPI" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
+    --app com.example.app --write >/dev/null 2>&1 )
+if [ -r "$LPI/.maestro-mac.conf" ]; then
+  grep -q 'TRANSPORT:=local' "$LPI/.maestro-mac.conf" \
+    && ok "init.sh --local writes TRANSPORT=local" \
+    || no "init.sh --local writes TRANSPORT=local" "absent"
+  # The settings, not the prose: the conf's own comment explains that MAC_HOST
+  # and MAC_FQDN are neither needed nor read, and saying so is the point.
+  grep -q 'MAC_HOST:=\|MAC_FQDN:=' "$LPI/.maestro-mac.conf" \
+    && no "and sets no MAC_HOST or MAC_FQDN" "$(grep -n 'MAC_HOST:=\|MAC_FQDN:=' "$LPI/.maestro-mac.conf" | head -1)" \
+    || ok "and sets no MAC_HOST or MAC_FQDN"
+else
+  no "init.sh --local writes TRANSPORT=local" "no conf written"
+  no "and sets no MAC_HOST or MAC_FQDN" "no conf written"
+fi
+lp=$(cd "$LP" && MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --host mac-x --app a 2>&1); rc=$?
+{ [ "$rc" != 0 ] && printf '%s' "$lp" | grep -q 'no --host or --fqdn'; } \
+  && ok "--host with --local is refused rather than silently dropped" \
+  || no "--host with --local is refused rather than silently dropped" "rc=$rc: $lp"
+
+# --- 3.1 and 3.2, the copies that become no-ops ------------------------------
+# `cp a a` exits 1 with "are the same file", and every _push call site ends in
+# `|| exit 1`, so a bare cp would fail every local run. Worse, the `cat > dst`
+# form truncates before it reads.
+printf 'original\n' > "$LP/rhelp/hier.py"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/rhelp/hier.py'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/rhelp/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "_push of a file onto itself succeeds and leaves it intact" \
+  || no "_push of a file onto itself succeeds and leaves it intact" "got '$lp'"
+
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/rhelp/'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/rhelp/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "and the same file through a directory destination is still a no-op" \
+  || no "and the same file through a directory destination is still a no-op" "got '$lp'"
+
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _push '$LP/rhelp/hier.py' '$LP/dst/'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/dst/hier.py')\"" 2>&1)
+[ "$lp" = "rc=0 original" ] \
+  && ok "a real local push is a real copy, taking the basename as scp does" \
+  || no "a real local push is a real copy, taking the basename as scp does" "got '$lp'"
+
+# $RDIR and $LDIR do NOT collapse (2.2, 3.2), so _pull is a real copy locally.
+printf 'shot\n' > "$LP/rdir/shot.png"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" bash -c \
+  "$LPLIB; _pull '$LP/rdir/shot.png' '$LP/ldir/shot.png'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/ldir/shot.png')\"" 2>&1)
+[ "$lp" = "rc=0 shot" ] \
+  && ok "_pull locally copies between the two scratch directories" \
+  || no "_pull locally copies between the two scratch directories" "got '$lp'"
+
+# --- 2.1, _ssh runs the script here ------------------------------------------
+printf '#!/usr/bin/env bash\necho "SSH WAS CALLED" >&2\nexit 99\n' > "$LP/bin/ssh"
+chmod +x "$LP/bin/ssh"
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" PATH="$LP/bin:$PATH" bash -c \
+  "$LPLIB; _ssh 'printf ran-here'" 2>/dev/null)
+[ "$lp" = "ran-here" ] \
+  && ok "_ssh runs the script on this machine and never reaches for ssh" \
+  || no "_ssh runs the script on this machine and never reaches for ssh" "got '$lp'"
+
+# --- 2.3, install.sh has nothing to push -------------------------------------
+# The danger is not that it copies needlessly: $RHELP and $RMODS ARE the
+# checkout locally, so a copy is a file onto itself and the chmod leaves mode
+# changes in git status. This checksums the tree it would have written into.
+lp_before=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+lp=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" RDIR="$LP/instscratch" \
+  timeout 30 bash "$REPO/bin/install.sh" 2>&1)
+lp_after=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+[ "$lp_before" = "$lp_after" ] \
+  && ok "install.sh locally leaves every file in the checkout byte-identical" \
+  || no "install.sh locally leaves every file in the checkout byte-identical" "the tree changed"
+case "$lp" in
+  *"nothing was copied"*) ok "and says so rather than reporting a push that did not happen" ;;
+  *) no "and says so rather than reporting a push that did not happen" "said: $(printf '%s' "$lp" | head -2)" ;;
+esac
+[ -d "$LP/instscratch/flows" ] \
+  && ok "and still makes the scratch directory, which is its job in both transports" \
+  || no "and still makes the scratch directory, which is its job in both transports" "no $LP/instscratch/flows"
+
+# --- 3.3, mcp.sh execs the server here ---------------------------------------
+printf '#!/usr/bin/env bash\necho "maestro $*" > "$MCPMARK"\n' > "$LP/bin/maestro"
+chmod +x "$LP/bin/maestro"
+rm -f "$LP/mcpmark"
+MCPMARK="$LP/mcpmark" TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" \
+  PATH="$LP/bin:$PATH" timeout 30 bash "$REPO/bin/mcp.sh" >/dev/null 2>&1
+[ "$(cat "$LP/mcpmark" 2>/dev/null)" = "maestro mcp" ] \
+  && ok "mcp.sh execs the server on this machine, not through ssh" \
+  || no "mcp.sh execs the server on this machine, not through ssh" "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
+
+# --- and the same three, under the bridge ------------------------------------
+# The bridge shares the filesystem with the device host, so these behave as they
+# do locally. What differs is that the script travels, which is why the helper
+# has to be up for install.sh's mkdir to happen at all.
+LPB="$TMP/localpass-bridge"; mkdir -p "$LPB"
+sh "$REPO/remote/bridge.sh" "$LPB" > "$LPB/serve.log" 2>&1 &
+LPB_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$LPB"
+
+lp_before=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+lp=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null \
+  LDIR="$LP/ldir" RDIR="$LP/bridgescratch" timeout 60 bash "$REPO/bin/install.sh" 2>&1)
+lp_after=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
+{ [ "$lp_before" = "$lp_after" ] && printf '%s' "$lp" | grep -q "nothing was copied"; } \
+  && ok "install.sh over the bridge copies nothing and leaves the checkout alone" \
+  || no "install.sh over the bridge copies nothing and leaves the checkout alone" "said: $(printf '%s' "$lp" | head -2)"
+[ -d "$LP/bridgescratch/flows" ] \
+  && ok "and still makes the scratch, through the helper" \
+  || no "and still makes the scratch, through the helper" "no $LP/bridgescratch/flows"
+
+printf 'shot\n' > "$LP/rdir/bridge.png"
+lp=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; _pull '$LP/rdir/bridge.png' '$LP/ldir/bridge.png'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$LP/ldir/bridge.png')\"" 2>/dev/null)
+[ "$lp" = "rc=0 shot" ] \
+  && ok "_pull over the bridge is a copy, not an scp" \
+  || no "_pull over the bridge is a copy, not an scp" "got '$lp'"
+
+rm -f "$LP/mcpmark"
+MCPMARK="$LP/mcpmark" TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 \
+  MAESTRO_MAC_CONF=/dev/null LDIR="$LP/ldir" PATH="$LP/bin:$PATH" timeout 30 bash "$REPO/bin/mcp.sh" >/dev/null 2>&1
+[ "$(cat "$LP/mcpmark" 2>/dev/null)" = "maestro mcp" ] \
+  && ok "mcp.sh execs the server here under the bridge too — it is already outside the sandbox" \
+  || no "mcp.sh execs the server here under the bridge too — it is already outside the sandbox" \
+       "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
+
+kill $LPB_PID 2>/dev/null; wait $LPB_PID 2>/dev/null
+
+echo
+echo "the docs describe both shapes (item 94, 5.4)"
+# A reader whose device is on this machine must not be sent through the SSH
+# setup. The entry point, the README and the setup page each have to say that
+# where the device is is a setting.
+# README.md is the repository's, not the skill's — it is not installed, so the
+# package's own suite checks that one.
+for f in SKILL.md reference/setup.md; do
+  n=$(basename "$f")
+  grep -q 'TRANSPORT' "$REPO/$f" 2>/dev/null \
+    && ok "$n says where the device is is a setting" \
+    || no "$n says where the device is is a setting" "no mention of TRANSPORT"
+done
+# Step 2 is ssh-copy-id. The local table has to send the reader past it.
+grep -q 'skip' "$REPO/reference/setup.md" && grep -q 'ssh-copy-id' "$REPO/reference/setup.md" \
+  && ok "setup.md names the steps a local machine skips" \
+  || no "setup.md names the steps a local machine skips" "no skip table"
+
+echo
+echo "the JDK is asked of the machine, not assumed (item 94)"
+# This package carried $HOME/.sdkman/candidates/java/current for weeks, which is
+# true of one Mac and makes SDKMAN a requirement. What every version manager has
+# in common is the login shell's init, so that is what gets asked — once, at
+# setup, and recorded as RJAVA.
+JH="$TMP/jh"; mkdir -p "$JH/bin" "$JH/empty"
+# A PATH with the three tools the script uses and no java on it. An empty PATH
+# would fail for the wrong reason — env could not find sh to run it with.
+for _t in sh dirname readlink; do ln -sf "$(command -v $_t)" "$JH/bin/$_t"; done
+jh_out=$(HOME="$REAL_HOME" sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
+if [ "$jh_rc" = 0 ]; then
+  [ -x "$jh_out/bin/java" ] \
+    && ok "javahome.sh finds this machine's JDK and prints its home" \
+    || no "javahome.sh finds this machine's JDK and prints its home" "rc=0 but no java under '$jh_out'"
+else
+  # Not a failure. A machine with no JDK is the case the next assertion is
+  # about, and this suite must not require one to be installed.
+  echo "  skip  javahome.sh finds this machine's JDK — this machine has none on any rung"
+fi
+
+# A machine with no java at all must say so rather than name a directory that
+# happens to exist elsewhere. An empty PATH, an empty HOME so no dotfile sets
+# JAVA_HOME, and /bin/sh as the shell.
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" SHELL=/bin/sh PATH="$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null); jh_rc=$?
+{ [ "$jh_rc" != 0 ] && [ -z "$jh_out" ]; } \
+  && ok "and exits 1 with nothing when the machine has no JDK" \
+  || no "and exits 1 with nothing when the machine has no JDK" "rc=$jh_rc out='$jh_out'"
+
+# The login shell's answer wins, because that is where every version manager
+# puts it. A fake manager: a shell whose init exports JAVA_HOME.
+mkdir -p "$JH/fake/bin"
+printf '#!/bin/sh\nexit 0\n' > "$JH/fake/bin/java"; chmod +x "$JH/fake/bin/java"
+printf 'export JAVA_HOME=%s\n' "$JH/fake" > "$JH/empty/.shinit"
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" ENV="$JH/empty/.shinit" SHELL=/bin/sh PATH="$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null)
+[ "$jh_out" = "$JH/fake" ] \
+  && ok "a JDK only the login shell knows about is found — any manager, no name" \
+  || no "a JDK only the login shell knows about is found — any manager, no name" "got '$jh_out'"
+
+# What lib.sh builds from a recorded RJAVA, and what it builds without one.
+jh_out=$(RJAVA=/opt/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; printf "%s" "$REMOTE_ENV"')
+case "$jh_out" in
+  *"export JAVA_HOME='/opt/jdk'"*) ok "a recorded RJAVA is what the remote script exports" ;;
+  *) no "a recorded RJAVA is what the remote script exports" "got: $(printf '%s' "$jh_out" | tr '\n' ' ')" ;;
+esac
+jh_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; printf "%s%s" "$REMOTE_ENV" "$LOCAL_ENV"')
+case "$jh_out" in
+  *sdkman*) no "no installer's directory is left in either environment" "sdkman is still in it" ;;
+  *) ok "no installer's directory is left in either environment" ;;
+esac
+case "$jh_out" in
+  *java_home*) ok "without RJAVA the far side is asked, per command" ;;
+  *) no "without RJAVA the far side is asked, per command" "no fallback in the env" ;;
+esac
+# The fallback must NOT use an interactive shell: that is what hangs with no tty.
+case "$jh_out" in
+  *' -ic '*|*'-ic '*) no "and the fallback never opens an interactive shell" "found -ic in the env" ;;
+  *) ok "and the fallback never opens an interactive shell" ;;
+esac
+
+# A shim manager: jenv without its export plugin, or mise and asdf through
+# shims, put a shell SCRIPT called java on PATH. It is not a symlink into a JDK,
+# so resolving it lands on the shim's own directory and a machine with a working
+# Java came back empty. Asking java itself is what covers them.
+mkdir -p "$JH/real/bin" "$JH/shim"
+printf '#!/bin/sh\nexit 0\n' > "$JH/real/bin/java"; chmod +x "$JH/real/bin/java"
+printf '#!/bin/sh\necho "    java.home = %s" >&2\n' "$JH/real" > "$JH/shim/java"
+chmod +x "$JH/shim/java"
+for _t in sed head tr; do ln -sf "$(command -v $_t)" "$JH/bin/$_t"; done
+jh_out=$(env -u JAVA_HOME HOME="$JH/empty" SHELL=/bin/sh PATH="$JH/shim:$JH/bin" \
+  sh "$REPO/remote/javahome.sh" 2>/dev/null)
+[ "$jh_out" = "$JH/real" ] \
+  && ok "a JDK reachable only through a shim is found by asking java itself" \
+  || no "a JDK reachable only through a shim is found by asking java itself" "got '$jh_out'"
+
+# A recorded RJAVA that no longer exists must not be exported. Maestro's CLI is
+# a Gradle start script: a JAVA_HOME that is set and wrong aborts it, where an
+# absent one lets the fallback find whatever is there now.
+#
+# A JDK the fallback can reach without an interactive shell, because this
+# machine's real one is only on the login shell's PATH (item 95, rung 1).
+mkdir -p "$JH/onpath/bin"
+printf '#!/bin/sh\nexit 0\n' > "$JH/onpath/bin/java"; chmod +x "$JH/onpath/bin/java"
+JH_PATH="$JH/onpath/bin:$PATH"
+jh_out=$(PATH="$JH_PATH" RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; sh -c "$LOCAL_ENV
+printf JH=%s \"\$JAVA_HOME\"" 2>/dev/null' 2>/dev/null)
+case "$jh_out" in
+  JH=/*) ok "a stale RJAVA falls back to the JDK that is actually there" ;;
+  *) no "a stale RJAVA falls back to the JDK that is actually there" "got '$jh_out'" ;;
+esac
+jh_out=$(RJAVA=/nonexistent/jdk MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; sh -c "$LOCAL_ENV
+true" 2>&1 >/dev/null')
+case "$jh_out" in
+  *"records RJAVA=/nonexistent/jdk"*) ok "and says which recorded path is gone, rather than failing quietly" ;;
+  *) no "and says which recorded path is gone, rather than failing quietly" "said: $jh_out" ;;
+esac
+
+# Maestro's own directory is the same class of question as the JDK's, and was
+# found the same way — by it not being there. This machine keeps Maestro under
+# /mnt/sda, exported from ~/.bashrc, which no non-interactive shell reads
+# (item 96, measured 21 Sep).
+wi_out=$(HOME="$REAL_HOME" sh "$REPO/remote/whereis.sh" maestro 2>/dev/null); wi_rc=$?
+if [ "$wi_rc" = 0 ]; then
+  [ -x "$wi_out/maestro" ] \
+    && ok "whereis.sh finds maestro's directory by asking the login shell" \
+    || no "whereis.sh finds maestro's directory by asking the login shell" "no maestro under '$wi_out'"
+else
+  echo "  skip  whereis.sh finds maestro — this machine has none"
+fi
+wi_out=$(sh "$REPO/remote/whereis.sh" definitely-not-a-real-binary 2>/dev/null); wi_rc=$?
+{ [ "$wi_rc" != 0 ] && [ -z "$wi_out" ]; } \
+  && ok "and exits 1 with nothing when there is no such executable" \
+  || no "and exits 1 with nothing when there is no such executable" "rc=$wi_rc out='$wi_out'"
+
+wi_out=$(RMAESTRO=/opt/m/bin MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$REMOTE_ENV\"" 2>/dev/null)
+case "$wi_out" in
+  *".maestro/bin:/opt/m/bin"*) ok "a recorded RMAESTRO is appended to PATH, not substituted for the default" ;;
+  *) no "a recorded RMAESTRO is appended to PATH, not substituted for the default" "got: $(printf '%s' "$wi_out" | head -2 | tr '\n' ' ')" ;;
+esac
+wi_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$REMOTE_ENV\"" 2>/dev/null)
+case "$wi_out" in
+  *'.maestro/bin'*) ok "and a conf without one keeps the default, so an old conf is unchanged" ;;
+  *) no "and a conf without one keeps the default, so an old conf is unchanged" "no default in PATH" ;;
+esac
+
+# init.sh records it as a finding.
+JHI="$TMP/jhinit"; mkdir -p "$JHI"
+( cd "$JHI" && PATH="$JH_PATH" MAESTRO_MAC_CONF= bash "$REPO/bin/init.sh" --local --platform android \
+    --app com.example.app --write >/dev/null 2>&1 )
+grep -q '"${RJAVA:=/' "$JHI/.maestro-mac.conf" 2>/dev/null \
+  && ok "init.sh --local records the JDK it found as RJAVA" \
+  || no "init.sh --local records the JDK it found as RJAVA" "$(grep -n RJAVA "$JHI/.maestro-mac.conf" 2>/dev/null | head -2)"
+
+echo
+echo "the bridge helper carries what _ssh carries (item 96, 1.1)"
+# One script in, stdin attached, stdout and stderr streamed back separately, the
+# real exit status. Those four are what every call site already depends on: half
+# of them read output line by line, publish.sh tells exit 2 from exit 1, and
+# wall.sh pipes into a cat on the far side.
+#
+# The helper is started here and killed at the end of the block. In use it is
+# started outside the sandbox, which is the whole point of it — but the protocol
+# is the same either way, and this exercises the protocol.
+BR="$TMP/bridge"; mkdir -p "$BR"
+sh "$REPO/remote/bridge.sh" "$BR" > "$BR/serve.log" 2>&1 &
+BR_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR" \
+  && ok "the helper comes up and opens its control fifo" \
+  || no "the helper comes up and opens its control fifo" "$(cat "$BR/serve.log" 2>/dev/null | head -2)"
+
+# _bridge_call <id> <script> [stdin-text] -- the client half, spelled out here so
+# the test exercises the protocol rather than a helper function's idea of it.
+_bridge_call() {
+  local id=$1 script=$2 input=${3:-}
+  printf '%s\n' "$script" > "$BR/$id.cmd"
+  printf '%s' "$input" > "$BR/$id.in"
+  echo 20 > "$BR/$id.tmo"
+  rm -f "$BR/$id.out" "$BR/$id.err" "$BR/$id.rc"
+  mkfifo "$BR/$id.out" "$BR/$id.err"
+  cat "$BR/$id.err" > "$BR/$id.errtext" &
+  echo "$id" > "$BR/control"
+  cat "$BR/$id.out"
+  timeout 5 sh -c 'until [ -f "$1" ]; do :; done' _ "$BR/$id.rc"
+}
+
+brout=$(_bridge_call one 'echo out-line; echo err-line >&2; exit 7')
+brrc=$(cat "$BR/one.rc" 2>/dev/null)
+[ "$brout" = "out-line" ] \
+  && ok "stdout comes back, and only stdout" \
+  || no "stdout comes back, and only stdout" "got '$brout'"
+[ "$(cat "$BR/one.errtext" 2>/dev/null)" = "err-line" ] \
+  && ok "stderr comes back on its own channel" \
+  || no "stderr comes back on its own channel" "got '$(cat "$BR/one.errtext" 2>/dev/null)'"
+[ "$brrc" = "7" ] \
+  && ok "the exit status is the script's own, not the channel's" \
+  || no "the exit status is the script's own, not the channel's" "got '$brrc'"
+
+brout=$(_bridge_call two 'cat' 'piped-in')
+[ "$brout" = "piped-in" ] \
+  && ok "stdin is forwarded — wall.sh label pipes into a cat on the far side" \
+  || no "stdin is forwarded — wall.sh label pipes into a cat on the far side" "got '$brout'"
+
+brout=$(_bridge_call three 'echo first; echo second')
+[ "$(printf '%s' "$brout" | tr "\n" " ")" = "first second" ] \
+  && ok "several lines come back, in order" \
+  || no "several lines come back, in order" "got '$brout'"
+
+# Streaming rather than a file read at the end, which lib.sh calls load-bearing:
+# journeys read line by line and shot.sh pipes base64 through. The first line
+# has to arrive while the script is still running, so this reads one line and
+# checks the clock rather than checking the whole output.
+printf 'echo first; sleep 2; echo second\n' > "$BR/four.cmd"
+: > "$BR/four.in"; echo 20 > "$BR/four.tmo"
+rm -f "$BR/four.out" "$BR/four.err"; mkfifo "$BR/four.out" "$BR/four.err"
+cat "$BR/four.err" >/dev/null &
+echo four > "$BR/control"
+br_t0=$(date +%s)
+br_first=$(timeout 10 head -1 < "$BR/four.out")
+br_t1=$(date +%s)
+{ [ "$br_first" = "first" ] && [ $((br_t1 - br_t0)) -lt 2 ]; } \
+  && ok "the first line arrives before the script has finished" \
+  || no "the first line arrives before the script has finished" \
+       "got '$br_first' after $((br_t1 - br_t0))s"
+
+# Every script it runs is in the log, which is what makes it auditable.
+grep -q 'echo out-line' "$BR/log" 2>/dev/null \
+  && ok "every script is appended to the log" \
+  || no "every script is appended to the log" "not in $BR/log"
+
+# A directory owned by somebody else is a door somebody else propped open.
+brout=$(sh "$REPO/remote/bridge.sh" /tmp 2>&1); brrc=$?
+{ [ "$brrc" != 0 ] && printf '%s' "$brout" | grep -q 'owned by'; } \
+  && ok "it refuses a directory that is not ours" \
+  || no "it refuses a directory that is not ours" "rc=$brrc: $brout"
+
+kill $BR_PID 2>/dev/null
+wait $BR_PID 2>/dev/null
+
+echo
+echo "_ssh over the bridge, and one payload for all three (item 96, 1.2)"
+# The message every transport sends is the same three parts — the environment,
+# a cd into the checkout, the caller's script. It was written out twice; a third
+# copy is how transports drift, so it is assembled once and this asserts the
+# three produce identical text.
+bx_a=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; TRANSPORT=local _payload "SCRIPT-BODY"')
+bx_b=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _payload "SCRIPT-BODY"')
+[ "$bx_a" = "$bx_b" ] && [ -n "$bx_a" ] \
+  && ok "local and bridge assemble byte-identical script text" \
+  || no "local and bridge assemble byte-identical script text" "differ"
+bx_c=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _payload "SCRIPT-BODY"')
+case "$bx_c" in
+  *"cd '"*"' 2>/dev/null || true"*"SCRIPT-BODY") ok "and ssh's differs only in the environment it prefixes" ;;
+  *) no "and ssh's differs only in the environment it prefixes" "got: $(printf '%s' "$bx_c" | tr '\n' '|')" ;;
+esac
+
+BR2="$TMP/bridge2"; mkdir -p "$BR2"
+sh "$REPO/remote/bridge.sh" "$BR2" > "$BR2/serve.log" 2>&1 &
+BR2_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR2"
+
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "echo over-the-bridge; echo noise >&2; exit 3"' 2>/dev/null)
+bx_rc=$?
+[ "$bx_out" = "over-the-bridge" ] \
+  && ok "_ssh over the bridge returns stdout, and only stdout" \
+  || no "_ssh over the bridge returns stdout, and only stdout" "got '$bx_out'"
+
+bx_rc=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "exit 3" >/dev/null 2>&1; echo $?')
+[ "$bx_rc" = "3" ] \
+  && ok "and the caller sees the script's own exit status" \
+  || no "and the caller sees the script's own exit status" "got '$bx_rc'"
+
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR2" MAESTRO_MAC_CONF=/dev/null bash -c \
+  'echo piped | { . '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "cat"; }' 2>/dev/null)
+[ "$bx_out" = "piped" ] \
+  && ok "and stdin reaches the far side" \
+  || no "and stdin reaches the far side" "got '$bx_out'"
+
+kill $BR2_PID 2>/dev/null; wait $BR2_PID 2>/dev/null
+
+# A helper that is not running is like a host that is not answering: say so,
+# run nothing, and do not retry — half of what goes through _ssh taps a screen.
+bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$TMP/no-such-bridge" MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "echo SHOULD-NOT-RUN"' 2>&1); bx_rc=$?
+{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no bridge helper is serving' \
+  && ! printf '%s' "$bx_out" | grep -q 'SHOULD-NOT-RUN'; } \
+  && ok "no helper: it says so, runs nothing, and fails" \
+  || no "no helper: it says so, runs nothing, and fails" "rc=$bx_rc: $bx_out"
+
+# The conf has to say where the helper serves; there is no sensible default.
+bx_out=$(TRANSPORT=bridge APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1); bx_rc=$?
+{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no BRIDGE_DIR'; } \
+  && ok "a bridge conf without BRIDGE_DIR is refused, and says what to set" \
+  || no "a bridge conf without BRIDGE_DIR is refused, and says what to set" "rc=$bx_rc: $(printf '%s' "$bx_out" | head -1)"
+
+bx_out=$(TRANSPORT=carrier-pigeon APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c \
+  '. '"$REPO"'/bin/config.sh' 2>&1)
+case "$bx_out" in
+  *"use ssh, local or bridge"*) ok "an unknown transport is refused, naming the three" ;;
+  *) no "an unknown transport is refused, naming the three" "said: $(printf '%s' "$bx_out" | head -1)" ;;
+esac
+
+echo
+echo "the bridge takes local's answers for files and ssh's for ports (item 96, 1.3)"
+# Local versus remote is three questions, and the bridge answers them from two
+# different columns: the device host shares this filesystem, and its ports are
+# still only reachable the way the Mac's are — the sandbox is in the way.
+bv() {  # bv <transport> <expression>
+  TRANSPORT=$1 APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAC_HOST=m MAC_FQDN=m.local \
+  MAESTRO_MAC_CONF=/dev/null bash -c ". $REPO/bin/lib.sh 2>/dev/null; $2" 2>/dev/null
+}
+[ "$(bv bridge '_urlhost')" = "10.0.0.9" ] \
+  && ok "a bridge URL names the device host, not the loopback" \
+  || no "a bridge URL names the device host, not the loopback" "got '$(bv bridge '_urlhost')'"
+[ "$(bv bridge 'DRIVER_PORT=22087; DPORT=9101; _driver_base')" = "http://10.0.0.9:9101" ] \
+  && ok "and the driver is read through the relay's port, as across ssh" \
+  || no "and the driver is read through the relay's port, as across ssh" \
+       "got '$(bv bridge 'DRIVER_PORT=22087; DPORT=9101; _driver_base')'"
+bv_px=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null \
+  grpc_proxy=http://proxy:3128 bash -c ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$grpc_proxy\"" 2>/dev/null)
+[ "$bv_px" = "http://proxy:3128" ] \
+  && ok "the proxy stays set — it is still the only route to those ports" \
+  || no "the proxy stays set — it is still the only route to those ports" "got '$bv_px'"
+[ "$(bv bridge '_macip')" = "10.0.0.9" ] \
+  && ok "_macip answers from the conf instead of refusing" \
+  || no "_macip answers from the conf instead of refusing" "got '$(bv bridge '_macip')'"
+[ "$(bv bridge '_where')" = "this machine" ] \
+  && ok "and a message still says the device is on this machine" \
+  || no "and a message still says the device is on this machine" "got '$(bv bridge '_where')'"
+
+# $RHELP and $RMODS are the checkout itself, as they are locally: there is one
+# filesystem, so there is nothing to push and nowhere else to push it.
+bv_h=$(bv bridge 'printf %s "$RHELP"')
+case "$bv_h" in
+  */remote) ok "the helpers and modules are the checkout, so a push is a copy" ;;
+  *) no "the helpers and modules are the checkout, so a push is a copy" "RHELP=$bv_h" ;;
+esac
+BV="$TMP/bridgefiles"; mkdir -p "$BV"
+printf 'original\n' > "$BV/hier.py"
+bv_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; _push '$BV/hier.py' '$BV/hier.py'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$BV/hier.py')\"" 2>/dev/null)
+[ "$bv_out" = "rc=0 original" ] \
+  && ok "a push of a file onto itself is a no-op, not an scp" \
+  || no "a push of a file onto itself is a no-op, not an scp" "got '$bv_out'"
+
+echo
+echo "what a bridge failure means (item 96, 1.4)"
+# ssh re-picks a host on 255 and 124 because the command never ran. A timeout on
+# a live helper is the command's own, and half of what goes through _ssh taps a
+# screen — so it is reported, not retried.
+BR3="$TMP/bridge3"; mkdir -p "$BR3"
+sh "$REPO/remote/bridge.sh" "$BR3" > "$BR3/serve.log" 2>&1 &
+BR3_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR3"
+bx_rc=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR3" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; TMO=1 _ssh 'sleep 5' >/dev/null 2>&1; echo \$?")
+[ "$bx_rc" = "124" ] \
+  && ok "a command that outruns \$TMO comes back as 124, from the far side" \
+  || no "a command that outruns \$TMO comes back as 124, from the far side" "got '$bx_rc'"
+[ "$(grep -c 'sleep 5' "$BR3/log" 2>/dev/null)" = "1" ] \
+  && ok "and it is not retried — one invocation in the log, not two" \
+  || no "and it is not retried — one invocation in the log, not two" \
+       "$(grep -c 'sleep 5' "$BR3/log" 2>/dev/null) invocations"
+kill $BR3_PID 2>/dev/null; wait $BR3_PID 2>/dev/null
+
+echo
+echo "the bridge server starts a helper and nothing else (item 96, 2.1)"
+# The whole point of the verb list is what is NOT in it: no boot, no device, no
+# paths. Booting is platform.sh boot, which travels over the bridge like every
+# other verb, so an Android answer and an iOS answer never end up in a server.
+_mcp() {  # _mcp <json-rpc line>... -- returns the text of the last result
+  { printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+    printf '%s\n' "$@"; } | timeout 60 python3 "$REPO/bin/bridge-mcp.py" |
+  python3 -c '
+import sys, json
+last = ""
+for line in sys.stdin:
+    m = json.loads(line)
+    r = m.get("result", {})
+    if "content" in r:
+        last = r["content"][0]["text"]
+    elif "tools" in r:
+        t = r["tools"]
+        last = "TOOLS %d %s %s" % (
+            len(t), t[0]["name"],
+            ",".join(sorted(t[0]["inputSchema"]["properties"])))
+print(last)'
+}
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+[ "$mc_out" = "TOOLS 1 bridge action" ] \
+  && ok "one tool, named bridge, taking one argument and no path" \
+  || no "one tool, named bridge, taking one argument and no path" "got '$mc_out'"
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"boot"}}}')
+case "$mc_out" in
+  *"unknown action"*) ok "an action outside the three is refused by name" ;;
+  *) no "an action outside the three is refused by name" "said: $mc_out" ;;
+esac
+
+# start, drive a script over it, stop — the round trip the server exists for.
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
+mc_dir=$(printf '%s' "$mc_out" | sed -n 's/^serving //p' | head -1)
+{ [ -n "$mc_dir" ] && [ -p "$mc_dir/control" ]; } \
+  && ok "start leaves a helper serving a directory of its own" \
+  || no "start leaves a helper serving a directory of its own" "said: $(printf '%s' "$mc_out" | head -2)"
+case "$mc_out" in
+  *'TRANSPORT:=bridge'*'BRIDGE_DIR:='*) ok "and prints the conf lines that point at it" ;;
+  *) no "and prints the conf lines that point at it" "no conf in the reply" ;;
+esac
+
+if [ -n "$mc_dir" ]; then
+  mc_ran=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$mc_dir" BRIDGE_HOST=10.0.0.9 \
+    MAESTRO_MAC_CONF=/dev/null bash -c ". $REPO/bin/lib.sh 2>/dev/null; _ssh 'echo through'" 2>/dev/null)
+  [ "$mc_ran" = "through" ] \
+    && ok "and _ssh runs a script through the helper it started" \
+    || no "and _ssh runs a script through the helper it started" "got '$mc_ran'"
+fi
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"stop"}}}')
+case "$mc_out" in
+  *"to stop"*) ok "stop tells the helper to stop between requests" ;;
+  *) no "stop tells the helper to stop between requests" "said: $mc_out" ;;
+esac
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"stop"}}}')
+case "$mc_out" in
+  *"no helper of mine"*) ok "and stopping twice says so rather than pretending" ;;
+  *) no "and stopping twice says so rather than pretending" "said: $mc_out" ;;
+esac
+
+echo
+echo "the helper stops when the session does (item 96, 2.2)"
+# A helper that outlives the session that asked for it is a shell channel into
+# this machine that nobody is watching — the thing the item's controls are
+# about. SessionEnd already takes down the rig; the bridge goes with it.
+mc_out=$(timeout 30 python3 "$REPO/bin/bridge-mcp.py" --status 2>&1)
+case "$mc_out" in
+  *"no helper"*) ok "the server answers on the command line, for a hook that is not a session" ;;
+  *) no "the server answers on the command line, for a hook that is not a session" "said: $mc_out" ;;
+esac
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
+mc_dir=$(printf '%s' "$mc_out" | sed -n 's/^serving //p' | head -1)
+if [ -n "$mc_dir" ] && [ -p "$mc_dir/control" ]; then
+  TRANSPORT=ssh MAESTRO_MAC_CONF=/dev/null timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
+  timeout 20 sh -c 'until [ ! -f "$1/pid" ]; do sleep 0.1; done' _ "$mc_dir" \
+    && ok "the SessionEnd hook stops it" \
+    || no "the SessionEnd hook stops it" "pid file still in $mc_dir"
+  # The log stays: what ran on this machine is the record, and a teardown that
+  # takes the evidence with it is worse than one that leaves a directory.
+  [ -s "$mc_dir/log" ] \
+    && ok "and leaves the log behind to be read" \
+    || no "and leaves the log behind to be read" "no log in $mc_dir"
+else
+  no "the SessionEnd hook stops it" "no helper started"
+  no "and leaves the log behind to be read" "no helper started"
+fi
+
+# The order matters: under the bridge, `rig down` travels through the helper.
+grep -n 'DRIVERS" rig down' "$REPO/hooks/rig-down-on-end.sh" | head -1 | cut -d: -f1 > "$TMP/rigline"
+grep -n 'BRIDGE_MCP" --stop' "$REPO/hooks/rig-down-on-end.sh" | head -1 | cut -d: -f1 > "$TMP/bridgeline"
+[ "$(cat "$TMP/rigline")" -lt "$(cat "$TMP/bridgeline")" ] 2>/dev/null \
+  && ok "and takes the rig down first, since the rig travels through it" \
+  || no "and takes the rig down first, since the rig travels through it" "wrong order in the hook"
 
 echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
