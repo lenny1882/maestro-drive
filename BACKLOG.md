@@ -96,7 +96,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep; reproduced and the first decision settled 21 Sep — the conf lists all three aliases and the server starts**
+## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep; the first two decisions built 21 Sep — the conf lists every alias, and an unreachable Mac now leaves a server that says so**
 
 `maestro-mac` failed to connect for this entire session — `CONNECTION_CLOSED`,
 every time, including after `/mcp` reconnects. Nothing else was wrong: the Mac
@@ -118,7 +118,7 @@ next restart with no change made. Both entries in `~/.claude.json` name
 `~/.claude/skills/maestro-drive/bin/`. `CONNECTION_CLOSED` names the transport
 and nothing else, so which server said it is the first thing to establish.
 
-**Three things to decide, not one to fix — the first is now settled.**
+**Three things to decide, not one to fix — the first two are now built.**
 
 **Where the aliases live — SETTLED 21 Sep, and it needed no code.** `MAC_HOST`
 may name several, and `_pick_host` walks them — but this conf named one. The
@@ -155,10 +155,36 @@ a Linux JDK path into a Mac's conf, a finding that is wrong rather than absent.
 Three tests, in the skill suite: both `--host` spellings, and that an
 unreachable Mac leaves `RJAVA` unset. 558 passed, 0 failed; package suite 158.
 
-**What the server should do when it cannot reach the Mac.** Exiting is honest
-and unreadable. A server that starts, answers `tools/list`, and returns "the Mac
-is not reachable on any alias in this conf" from every call would put the
-diagnosis where somebody sees it.
+**What the server should do when it cannot reach the Mac — BUILT 21 Sep.**
+Exiting is honest and unreadable. `bin/unreachable-mcp.py` is 74 lines of the
+same stdio loop as `bridge-mcp.py`: `mcp.sh` execs it instead of exiting, it
+answers `initialize` and lists one tool, `why_unreachable`, and it returns the
+reason from **every** `tools/call` rather than only its own — a caller that
+guessed a Maestro tool name would otherwise get a protocol fault instead of the
+answer. `_pick_host` already wrote the right sentence to stderr; the message is
+passed in on argv, so the aliases tried and the conf path travel with it and the
+wording stays in one place.
+
+It is not a retry and not a proxy. Answering `tools/list` with the Maestro tool
+set would be a lie, since none of those tools can run, and connecting lazily on
+first use means proxying stdio for the life of the session — larger than
+anything in this package. Restarting the session is the fix and the message says
+so.
+
+**The list made the hang longer, which is the cost of the first decision.**
+Three aliases and no Mac is three probes at `PROBE_FAST` then three at
+`PROBE_SLOW` — up to 69s before `_pick_host` gives up. That is now 69s to a
+server that explains itself rather than 69s to `CONNECTION_CLOSED`, but it is
+still 69s, and cutting it is a separate question from this one.
+
+**Four tests**, in the skill suite: the three calls a client makes before it can
+show anything are each answered, and the reason names the aliases by name. 562
+passed, 0 failed; package suite 158.
+
+**One failure it does NOT cover.** `config.sh` refuses a conf that is missing
+`MAC_FQDN` and exits before any of `mcp.sh`'s own code runs, so a half-written
+conf still reads as `CONNECTION_CLOSED`. Same sentence, different cause, and it
+is above the line where this fix sits.
 
 **Whether it should be reading the project conf at all.** The MCP server is
 spawned once per session, before any project is in view, and `config.sh`'s

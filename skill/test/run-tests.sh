@@ -2862,6 +2862,37 @@ MCPMARK="$LP/mcpmark" TRANSPORT=local APP_ID=x MAESTRO_DRIVE_CONF=/dev/null LDIR
   && ok "mcp.sh execs the server on this machine, not through ssh" \
   || no "mcp.sh execs the server on this machine, not through ssh" "marker: $(cat "$LP/mcpmark" 2>/dev/null)"
 
+# --- when no alias answers, the reason becomes the server (item 97) ----------
+# Exiting here is what made the failure unreadable: Claude Code says
+# CONNECTION_CLOSED, which names the transport and neither the Mac, the conf nor
+# the aliases tried. The three calls below are the whole protocol a client makes
+# before it can show anything, so all three have to be answered by something.
+mkdir -p "$LP/unldir"
+mcpun=$(MAC_HOST="nope-alpha nope-beta" MAC_FQDN=nope.local TRANSPORT=ssh APP_ID=x MAESTRO_DRIVE_CONF=/dev/null \
+  LDIR="$LP/unldir" PROBE_FAST=1 PROBE_SLOW=1 timeout 90 bash "$REPO/bin/mcp.sh" 2>/dev/null <<'RPC'
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"anything"}}
+RPC
+)
+printf '%s' "$mcpun" | grep -q '"protocolVersion"' \
+  && ok "an unreachable Mac leaves a server that answers initialize" \
+  || no "an unreachable Mac leaves a server that answers initialize" "got: $(printf '%s' "$mcpun" | head -1)"
+printf '%s' "$mcpun" | grep -q '"why_unreachable"' \
+  && ok "and lists one tool, which says what it is for" \
+  || no "and lists one tool, which says what it is for" "got: $(printf '%s' "$mcpun" | sed -n 2p)"
+# Any tool name, not just its own. A caller that guessed a Maestro tool name
+# would otherwise get a protocol error instead of the reason.
+printf '%s' "$mcpun" | sed -n 3p | grep -q '"isError": true' \
+  && ok "and answers a call it does not recognise with an error rather than a protocol fault" \
+  || no "and answers a call it does not recognise with an error rather than a protocol fault" \
+       "got: $(printf '%s' "$mcpun" | sed -n 3p)"
+# The aliases that were tried, by name. "could not connect" without them is the
+# sentence this whole item exists to replace.
+printf '%s' "$mcpun" | sed -n 3p | grep -q 'nope-alpha' \
+  && ok "and the reason names the aliases it tried" \
+  || no "and the reason names the aliases it tried" "$(printf '%s' "$mcpun" | sed -n 3p)"
+
 # --- and the same three, under the bridge ------------------------------------
 # The bridge shares the filesystem with the device host, so these behave as they
 # do locally. What differs is that the script travels, which is why the helper
