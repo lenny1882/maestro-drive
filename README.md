@@ -120,7 +120,7 @@ session inherits that name as though a person had set it.
 
 `bin/mcp.sh` — the `maestro-mac` MCP server, in `~/.claude.json`. It opens
 `maestro mcp` over SSH to the Mac, picking the SSH alias out of
-`.maestro-mac.conf` so the server follows the Mac between networks.
+`.maestro-drive.conf` so the server follows the Mac between networks.
 
 Three details, if you are reading the entries it writes:
 

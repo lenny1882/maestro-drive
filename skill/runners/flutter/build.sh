@@ -201,7 +201,7 @@ elif [ -z "$FLAVOR" ]; then
       for f in $CANDIDATES; do echo "             $f  (-t lib/main_$f.dart)" >&2; done
       [ -n "$MATCH" ] && { echo "           $NM of them build $APPID:" >&2
                            for f in $MATCH; do echo "             $f" >&2; done; }
-      echo "           pass --flavor, or set BUILD_FLAVOR in .maestro-mac.conf." >&2
+      echo "           pass --flavor, or set BUILD_FLAVOR in .maestro-drive.conf." >&2
       echo "           Building the wrong one installs a different bundle id and" >&2
       echo "           leaves the app under test untouched, which is silent." >&2
       [ "$DETECT" = 1 ] || exit 1

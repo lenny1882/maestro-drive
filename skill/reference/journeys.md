@@ -170,7 +170,7 @@ A value can come from the command line for a one-off:
 PIN=1234 ./bin/driver.sh script login.journey
 ```
 
-— or from the project's `.maestro-mac.conf`, where anything named `APP_*` is
+— or from the project's `.maestro-drive.conf`, where anything named `APP_*` is
 exported and reaches the substitution:
 
 ```sh

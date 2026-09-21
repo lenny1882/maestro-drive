@@ -94,7 +94,7 @@ if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
   export PATH
 else
   echo "maestro-remote-mac: no JDK on this machine, and the conf does not say where one is." >&2
-  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-mac.conf)" >&2
+  echo "  Record it once:  bin/init.sh --detect   (writes RJAVA to .maestro-drive.conf)" >&2
 fi
 '
 
@@ -528,7 +528,7 @@ _dev() {
     if [ "$n" -gt 1 ]; then
       echo "note: $n devices are booted and DEV is not set — using:" >&2
       printf '%s\n' "$booted" | awk -F'\t' '{printf "  %s  %s\n", $1, $3}' >&2
-      echo "  pin one with DEV=<udid> in .maestro-mac.conf" >&2
+      echo "  pin one with DEV=<udid> in .maestro-drive.conf" >&2
     fi
   fi
   [ -n "$DEV" ] || { echo "no booted device on $(_where) (platform: ${PLATFORM:-ios})" >&2; return 1; }
@@ -697,7 +697,7 @@ _driver_bind() {
         # so this refuses rather than picking.
         echo "$n drivers are running and DEV is not set:" >&2
         printf '%s\n' "$map" | awk '{printf "  %s  port %s\n", $1, $2}' >&2
-        echo "  set DEV=<udid>, or pin it in .maestro-mac.conf" >&2
+        echo "  set DEV=<udid>, or pin it in .maestro-drive.conf" >&2
         return 1
       fi
       line=$map

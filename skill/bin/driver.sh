@@ -470,9 +470,9 @@ _watch_start() {  # _watch_start <pattern> [--context <pat>] [--interval n] [--c
     echo "  change then arrives twice. Stop the first: $0 watch stop" >&2
     return 1
   fi
-  local rows_cmd ctx_cmd="" conf="${MAESTRO_MAC_CONF_FOUND:-}"
-  rows_cmd="DEV=$DEV MAESTRO_MAC_CONF=$(printf %q "$conf") $0 rows $(printf %q "$pat") --json"
-  [ -n "$ctx" ] && ctx_cmd="DEV=$DEV MAESTRO_MAC_CONF=$(printf %q "$conf") $0 rows $(printf %q "$ctx") --json"
+  local rows_cmd ctx_cmd="" conf="${MAESTRO_DRIVE_CONF_FOUND:-}"
+  rows_cmd="DEV=$DEV MAESTRO_DRIVE_CONF=$(printf %q "$conf") $0 rows $(printf %q "$pat") --json"
+  [ -n "$ctx" ] && ctx_cmd="DEV=$DEV MAESTRO_DRIVE_CONF=$(printf %q "$conf") $0 rows $(printf %q "$ctx") --json"
   : > "$_WATCH_LOG"
   printf 'started=%s interval=%s pattern=%s\n' "$(date +%H:%M:%S)" "$interval" "$pat" > "$_WATCH_CLAIM"
   echo "watch: $DEV every ${interval}s -> $_WATCH_LOG" >&2

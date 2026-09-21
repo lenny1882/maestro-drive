@@ -12,7 +12,7 @@ per-project settings — and assumes all of this already works.
 
 ## A device on this machine
 
-`TRANSPORT=local` in `.maestro-mac.conf` means the device is here and nothing
+`TRANSPORT=local` in `.maestro-drive.conf` means the device is here and nothing
 goes over ssh. Six of the ten steps below are then about a machine that is not
 in the picture:
 
@@ -270,7 +270,7 @@ hand and inherits it (BACKLOG item 67).
 `SessionEnd` takes no matcher. The hook detaches its work and exits 0
 immediately, so closing a terminal never waits on an SSH round trip and never
 reports an error. In a project that has never driven anything it costs nothing:
-with no `.maestro-mac.conf` and no claim file there is nothing to take down.
+with no `.maestro-drive.conf` and no claim file there is nothing to take down.
 
 **Both hooks ship with the skill and both are registered for you.** They live in
 the repo's `skill/hooks/`, and `install.sh` puts the whole `skill/` directory at
@@ -347,10 +347,10 @@ claude mcp add --scope user maestro-mac -- bash ~/.claude/skills/maestro-remote-
 ```
 
 `bin/mcp.sh` sources `lib.sh`, picks the right SSH alias from
-`.maestro-mac.conf` (trying each in turn, the same way every other script
+`.maestro-drive.conf` (trying each in turn, the same way every other script
 does), and execs the SSH connection to `maestro mcp`. The MCP config names the
 script and nothing else — a new network only has to be added to
-`.maestro-mac.conf`, not to the MCP entry separately.
+`.maestro-drive.conf`, not to the MCP entry separately.
 
 The old form — a bare `ssh <alias> ...` in the args — hardcoded one alias and
 broke whenever the Mac moved to a different network. If you have that, running
@@ -437,7 +437,7 @@ twelve checkouts it takes about three seconds, which is one SSH call rather
 than the three session B spent guessing at `~/src`, `~/Development` and
 `~/Projects` by hand.
 
-That writes `.maestro-mac.conf` and creates `maestro/journeys/` and
+That writes `.maestro-drive.conf` and creates `maestro/journeys/` and
 `maestro/app-notes.md`. Then, once per machine, push the Mac-side helpers:
 
 ```sh
