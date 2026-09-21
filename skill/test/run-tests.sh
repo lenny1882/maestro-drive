@@ -924,6 +924,9 @@ cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/t
 cat > "$DBIN/lib.sh" <<'LIBSH'
 MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
+# The ssh form of the helper lib.sh grew in item 94's 4.1; driver.sh asks for
+# the URL rather than building it, so a stub lib.sh has to answer.
+_driver_base(){ printf 'http://%s:%s' "$MAC_FQDN" "$DPORT"; }
 # RHELP is where the pushed helpers live; config.sh sets it beside RDIR (item 94).
 RHELP=/tmp/none; RMODS=/tmp/none/runners
 _driver_bind(){ return 0; }
@@ -2445,6 +2448,7 @@ echo "stub 1 device" > "$DDIR/devmap"   # _is_device greps "^$DEV " -> "stub "
 cat > "$DDIR/lib.sh" <<LIBSH
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
+_driver_base(){ printf 'http://%s:%s' "\$MAC_FQDN" "\$DPORT"; }
 RHELP=$TMP/none; RMODS=$TMP/none/runners
 DEVICE_MAP=$DDIR/devmap
 PLATFORM_SH=/x/platform.sh
@@ -2472,6 +2476,68 @@ case "$dout" in
   *"XCTest session dying"*) no "the face-up hint replaces the misleading XCTest-death message" "both were printed" ;;
   *) ok "the face-up hint replaces the misleading XCTest-death message" ;;
 esac
+
+echo
+echo "local transport: no relay, and the driver's own port (item 94, 4.1)"
+# The two URL helpers, against the real lib.sh rather than a stub, because what
+# they answer decides whether a URL names a port anything is listening on. A
+# local conf has no MAC_FQDN at all, so the old form built http://:9101 and curl
+# refused it — which reads as a dead relay rather than as a missing setting.
+nrl_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  DRIVER_PORT=22087; DPORT=9101
+  printf "%s %s" "$(_urlhost)" "$(_driver_base)"' 2>/dev/null)
+[ "$nrl_out" = "127.0.0.1 http://127.0.0.1:22087" ] \
+  && ok "locally a driver URL is the loopback and the driver's OWN port" \
+  || no "locally a driver URL is the loopback and the driver's OWN port" "got '$nrl_out'"
+
+nrl_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null
+  DRIVER_PORT=22087; DPORT=9101
+  printf "%s %s" "$(_urlhost)" "$(_driver_base)"' 2>/dev/null)
+[ "$nrl_out" = "m.local http://m.local:9101" ] \
+  && ok "across ssh it is still the Mac and the relay's port" \
+  || no "across ssh it is still the Mac and the relay's port" "got '$nrl_out'"
+
+# And driver.sh itself, with a driver that does not answer: across ssh that is
+# where relay.py gets staged and started, so this is the case that says the
+# local branch really does neither. The stub records every _ssh and _push.
+NRL="$TMP/nrl"; mkdir -p "$NRL"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/jtok.py" "$NRL/"
+cat > "$NRL/lib.sh" <<LIBSH
+MAC_FQDN=; APP_ID=test.app; DEV=stub; DPORT=9101; DRIVER_PORT=22087
+DRIVER_PORT_BASE=22087; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
+RHELP=$TMP/none; RMODS=$TMP/none/runners; DEVICE_MAP=$NRL/nodevmap
+PLATFORM_SH=/x/platform.sh
+TRANSPORT=local
+_driver_bind(){ return 0; }
+_rebind(){ return 1; }
+_where(){ printf 'this machine'; }
+_driver_base(){ printf 'http://127.0.0.1:%s' "\$DRIVER_PORT"; }
+_push(){ echo "PUSH \$*" >> "\$SSHLOG"; return 0; }
+_ssh(){ echo "SSH \$*" >> "\$SSHLOG"
+        case "\$*" in *locked*) return 1 ;; esac
+        return 0; }
+LIBSH
+rm -f "$TMP/nrl.log"
+nrl_out=$(SSHLOG="$TMP/nrl.log" PATH="$DSTUB:$PATH" timeout 30 bash "$NRL/driver.sh" nodes 2>&1)
+grep -q 'relay.py' "$TMP/nrl.log" 2>/dev/null \
+  && no "locally a driver that does not answer starts no relay" "$(grep relay.py "$TMP/nrl.log" | head -1)" \
+  || ok "locally a driver that does not answer starts no relay"
+case "$nrl_out" in
+  *"nothing is listening on 22087"*) ok "and it names the driver port, not a relay port" ;;
+  *) no "and it names the driver port, not a relay port" "said: $(printf '%s' "$nrl_out" | tail -2)" ;;
+esac
+
+rm -f "$TMP/nrl.log"
+nrl_out=$(SSHLOG="$TMP/nrl.log" PATH="$DSTUB:$PATH" timeout 30 bash "$NRL/driver.sh" stop 2>&1)
+case "$nrl_out" in
+  *"no relay in local transport"*) ok "stop says there is no relay rather than reporting one killed" ;;
+  *) no "stop says there is no relay rather than reporting one killed" "said: $nrl_out" ;;
+esac
+grep -q 'pkill' "$TMP/nrl.log" 2>/dev/null \
+  && no "and stop kills nothing" "$(grep pkill "$TMP/nrl.log" | head -1)" \
+  || ok "and stop kills nothing"
 
 echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"

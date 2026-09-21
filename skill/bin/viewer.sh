@@ -53,7 +53,14 @@ case "${1:-start}" in
     ;;
 
   stop)
-    _ssh "pkill -f 'relay.py $VPORT ' && echo stopped || echo 'not running'"
+    # Nothing is republished locally, so there is no relay to kill — and this
+    # must not read as having stopped the viewer, which is Maestro's and lives
+    # as long as the MCP server does.
+    if [ "${TRANSPORT:-ssh}" = local ]; then
+      echo "no relay in local transport — nothing to stop. The viewer belongs to 'maestro mcp'."
+    else
+      _ssh "pkill -f 'relay.py $VPORT ' && echo stopped || echo 'not running'"
+    fi
     ;;
 
   start)
@@ -70,31 +77,54 @@ case "${1:-start}" in
 
     # Most devices listed wins; with one viewer that is simply the one there is.
     rport=$(echo "$ports" | sort -k2 -rn | head -1 | awk '{print $1}')
-    echo "republishing the viewer on 127.0.0.1:$rport" >&2
 
-    _ssh "mkdir -p '$RDIR'"
-    _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || exit 1
+    if [ "${TRANSPORT:-ssh}" = local ]; then
+      # The viewer is already on this machine's loopback and so is the browser
+      # that reads it, so there is nothing to republish (item 94, 4.1) — and the
+      # absolute 127.0.0.1 stream URL, which is why the picture is blank across
+      # ssh and why bin/wall.sh exists, resolves here. $VPORT is the port this
+      # republishes *on*, so it has no meaning either; the URL is the viewer's
+      # own port.
+      urls=("$VIEWER_URL" "http://127.0.0.1:$rport/")
+      tried="${VIEWER_URL:+$VIEWER_URL, }127.0.0.1:$rport"
+      blank_note=0
+    else
+      echo "republishing the viewer on 127.0.0.1:$rport" >&2
 
-    # relay.py explains its own failures on stderr. An earlier version sent them
-    # to /dev/null and printed a guess instead, so the one line that said what
-    # was wrong was never seen by anyone (backlog 64).
-    _ssh "pkill -f 'relay.py $VPORT ' 2>/dev/null; sleep 1
+      _ssh "mkdir -p '$RDIR'"
+      _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || exit 1
+
+      # relay.py explains its own failures on stderr. An earlier version sent them
+      # to /dev/null and printed a guess instead, so the one line that said what
+      # was wrong was never seen by anyone (backlog 64).
+      _ssh "pkill -f 'relay.py $VPORT ' 2>/dev/null; sleep 1
 cd '$RDIR' && nohup python3 '$RHELP/relay.py' $VPORT $rport > relay.log 2>&1 &
 sleep 2
 cat '$RDIR/relay.log'"
 
-    ip=$(_macip) || ip=""
-    for url in "$VIEWER_URL" "http://$MAC_FQDN:$VPORT/" "${ip:+http://$ip:$VPORT/}"; do
+      ip=$(_macip) || ip=""
+      urls=("$VIEWER_URL" "http://$(_urlhost):$VPORT/" "${ip:+http://$ip:$VPORT/}")
+      tried="${VIEWER_URL:+$VIEWER_URL, }$(_urlhost)${ip:+, $ip}"
+      blank_note=1
+    fi
+
+    for url in "${urls[@]}"; do
       [ -n "$url" ] || continue
       code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$url")
       if [ "$code" = "200" ]; then
         echo "$url"
-        echo "note: the device picture will be blank from here — the viewer's stream" >&2
-        echo "      URL is an absolute 127.0.0.1 address. Use bin/wall.sh to watch." >&2
+        if [ "$blank_note" = 1 ]; then
+          echo "note: the device picture will be blank from here — the viewer's stream" >&2
+          echo "      URL is an absolute 127.0.0.1 address. Use bin/wall.sh to watch." >&2
+        fi
         exit 0
       fi
     done
-    echo "the relay is up but nothing answered on port $VPORT (tried ${VIEWER_URL:+$VIEWER_URL, }$MAC_FQDN${ip:+, $ip})" >&2
+    if [ "${TRANSPORT:-ssh}" = local ]; then
+      echo "the viewer is listed on port $rport but nothing answered there (tried $tried)" >&2
+    else
+      echo "the relay is up but nothing answered on port $VPORT (tried $tried)" >&2
+    fi
     exit 1
     ;;
 

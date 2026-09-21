@@ -81,7 +81,14 @@ fi
 
 case "${1:-start}" in
   stop)
-    _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
+    # No relay was started locally, so there is nothing to kill — but the state
+    # file is real either way and stop's job is to make the next status say
+    # "nothing published" rather than point at an endpoint nobody is watching.
+    if [ "${TRANSPORT:-ssh}" = local ]; then
+      echo "no relay in local transport — cleared the published endpoint"
+    else
+      _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
+    fi
     rm -f "$STATE"
     ;;
   status)
@@ -115,12 +122,22 @@ case "${1:-start}" in
     RPORT=$(printf '%s' "$VBASE" | sed -E 's|.*:([0-9]+)/.*|\1|')
     RPATH=$(printf '%s' "$VBASE" | sed -E 's|.*:[0-9]+||')
 
-    _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null
+    # Locally the endpoint the framework just reported IS reachable from here —
+    # it is bound to this machine's loopback, which is the one this script
+    # curls. So there is no relay to start and $PUBPORT names nothing: the
+    # published URI is the debug endpoint's own port (item 94, 4.1). The state
+    # file, the per-device suffix and the arming below are unchanged, because
+    # they are about the app and not about the transport.
+    if [ "${TRANSPORT:-ssh}" = local ]; then
+      printf 'http://127.0.0.1:%s%s %s\n' "$RPORT" "$RPATH" "$ISO" > "$STATE"
+    else
+      _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null
           nohup python3 '$RHELP/relay.py' $PUBPORT $RPORT >/dev/null 2>&1 &
           sleep 1
           lsof -nP -iTCP:$PUBPORT -sTCP:LISTEN >/dev/null 2>&1 && echo 'relay up' || echo 'relay FAILED'"
 
-    printf 'http://%s:%s%s %s\n' "$MACIP" "$PUBPORT" "$RPATH" "$ISO" > "$STATE"
+      printf 'http://%s:%s%s %s\n' "$MACIP" "$PUBPORT" "$RPATH" "$ISO" > "$STATE"
+    fi
     read -r PBASE _ < "$STATE"
 
     read -r was now <<< "$(_arm "$PBASE" "$ISO")"
