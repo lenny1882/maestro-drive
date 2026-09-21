@@ -1391,6 +1391,16 @@ repo's. Nobody else has one to break. So it becomes `.maestro-drive.conf`,
 `config.sh` looks for that name and no other, and the dual read is never
 written.
 
+**The search was wrong, found out 21 Sep.** There were three, not one — this
+repo's, `oi/native/hugoboss-flutter-runner/` and its
+`.worktrees/hbd20-1812-disappearing-requests/`. The conclusion survives, because
+the two that were missed are also this machine's and were renamed by hand on 21
+Sep, but it survives by luck: the count *was* the argument for dropping the
+compatibility read, and a count that is out by two is not an argument. Item 98
+in `BACKLOG-DONE.md` records what renaming those two took, including that their
+`.gitignore` entries named the old string literally and so stopped covering the
+file the moment it was renamed.
+
 **`flutter-hot-reload-mac` reads the same file and has to move with it.** Nine
 references, in its `SKILL.md` and its `bin/lib.sh`. It is a separate skill in a
 separate repository, so the two renames have to land together or it stops

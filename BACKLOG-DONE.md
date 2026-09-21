@@ -259,9 +259,27 @@ matches on, so it and the directory have to change in the same commit or the
 skill stops loading.
 
 **The conf is 96 occurrences and NO compatibility read**, which 5.5 settled:
-exactly one `.maestro-mac.conf` exists, this repo's, so `config.sh` looks for
-`.maestro-drive.conf` and nothing else. The one file in existence gets renamed
-by hand.
+`config.sh` looks for `.maestro-drive.conf` and nothing else, and the files in
+existence get renamed by hand.
+
+**5.5 counted those files wrong, and the count was the argument.** It said
+exactly one `.maestro-mac.conf` existed, this repo's — so nobody else had one to
+break and the dual read need never be written. A scan on 21 Sep found **three**:
+this repo's, `oi/native/hugoboss-flutter-runner/`, and that project's
+`.worktrees/hbd20-1812-disappearing-requests/`, which has its own checkout of
+`.gitignore` on its own branch. The two that were missed sat unrenamed for the
+whole of the rename, and with no compatibility read that project was simply
+unconfigured — `config.sh` searched for a name that was not there.
+
+**Renaming them un-ignored them, which is the sharper half.** Both checkouts
+ignored the literal string `.maestro-mac.conf` and nothing else, so a file
+renamed to `.maestro-drive.conf` matched no pattern — and that file carries
+`APP_PIN`. Neither had the `.maestro-mac.conf.*` profile pattern either, so
+`.maestro-drive.conf.uat`, where the PIN lives in a two-environment project,
+was never covered in the first place. Both `.gitignore` files now carry the old
+name, `.maestro-drive.conf` and `.maestro-drive.conf.*`; the ignore entry was
+written **before** the rename in each, so the credential was never untracked and
+unignored even for a moment. Done 21 Sep, old files deleted.
 
 **`flutter-hot-reload-mac` reads that conf and is a separate repository.** Nine
 references, in its `SKILL.md` and its `bin/lib.sh`. Its rename has to land in
