@@ -6,9 +6,14 @@
 # prints the candidates so the values put in the file are ones that exist.
 #
 #   bin/init.sh --detect                        # ssh aliases here
-#   bin/init.sh --host <alias> --detect         # simulators + installed apps
-#   bin/init.sh --host <alias> --fqdn <mac>.local \
+#   bin/init.sh --host <alias>... --detect      # which answer, then simulators
+#   bin/init.sh --host <alias>... --fqdn <mac>.local \
 #               --app <bundle-id> --repo <checkout on the Mac> --write
+#
+# --host takes more than one alias, repeated or as one quoted list. The Mac is
+# on a different network at home, at the office and on guest wifi, and each is
+# a different Host block; MAC_HOST holds all of them and bin/lib.sh probes
+# them in order (BACKLOG item 97).
 #
 # --local writes a conf for a device on THIS machine (BACKLOG item 94). There
 # is no host to give, so --app is the only required value:
@@ -26,7 +31,10 @@ _PLAT=""; _PLAT_WHY=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --host)  HOST=$2; shift 2 ;;
+    # Repeatable, and a quoted whitespace-separated list works too: the Mac
+    # moves between networks and each network is a different Host block, so
+    # the conf wants all of them (BACKLOG item 97).
+    --host)  HOST="${HOST:+$HOST }$2"; shift 2 ;;
     --fqdn)  FQDN=$2; shift 2 ;;
     --app)   APP=$2; shift 2 ;;
     --repo)  REPO=$2; shift 2 ;;
@@ -135,6 +143,18 @@ _local_platform() {
 # question is the login shell's own environment: that is the one thing every
 # version manager has in common, and naming any manager's directory here would
 # make it a requirement of the package (item 94).
+# Which alias reaches the Mac, when the conf names several (BACKLOG item 97).
+# Asking the Mac something needs exactly one, and any that answers will do —
+# this is _pick_host's job in bin/lib.sh, repeated here because init.sh runs
+# before there is a conf for lib.sh to read.
+_host1() {  # _host1   -- prints the first alias in $HOST that answers
+  local h
+  for h in $HOST; do
+    ssh "${SSH_OPTS[@]}" "$h" 'exit 0' >/dev/null 2>&1 && { printf '%s' "$h"; return 0; }
+  done
+  return 1
+}
+
 _javahome() {  # _javahome [ssh alias]   -- prints the path, or nothing
   local js="$(dirname "$0")/../remote/javahome.sh"
   if [ -n "${1:-}" ]; then
@@ -255,29 +275,46 @@ if [ "$DETECT" = 1 ]; then
     echo "Pick the one that reaches the Mac, then:  $0 --host <alias> --detect"
     exit 0
   fi
+  # Every alias given, not just the first. This is the question you actually
+  # have when the Mac has moved — which of my Host blocks reaches it today — and
+  # answering it for all of them is what makes the list in the conf worth
+  # writing. The rest of the detection needs one Mac, so it goes to the first
+  # that answered.
   echo "== reachable"
-  ssh "${SSH_OPTS[@]}" "$HOST" 'echo "  ok: $(scutil --get LocalHostName 2>/dev/null).local  ($(sw_vers -productVersion))"' \
-    || { echo "  cannot reach $HOST over ssh" >&2; exit 1; }
+  HOST1=""
+  for _h in $HOST; do
+    if _who=$(ssh "${SSH_OPTS[@]}" "$_h" 'echo "$(scutil --get LocalHostName 2>/dev/null).local  ($(sw_vers -productVersion))"' 2>/dev/null); then
+      echo "  $_h: ok: $_who"
+      [ -z "$HOST1" ] && HOST1=$_h
+    else
+      echo "  $_h: no answer"
+    fi
+  done
+  if [ -z "$HOST1" ]; then
+    echo "  no alias in '$HOST' answered over ssh" >&2
+    exit 1
+  fi
+  case "$HOST" in *[[:space:]]*) echo "  (everything below is asked of $HOST1)" ;; esac
   echo "== booted simulators"
-  ssh "${SSH_OPTS[@]}" "$HOST" 'xcrun simctl list devices booted | sed -n "s/^ */  /p"'
+  ssh "${SSH_OPTS[@]}" "$HOST1" 'xcrun simctl list devices booted | sed -n "s/^ */  /p"'
   echo "== apps installed on the first booted simulator"
-  ssh "${SSH_OPTS[@]}" "$HOST" 'xcrun simctl listapps booted 2>/dev/null |
+  ssh "${SSH_OPTS[@]}" "$HOST1" 'xcrun simctl listapps booted 2>/dev/null |
     grep -o "CFBundleIdentifier = \"[^\"]*\"" | sed "s/.*= \"/  /;s/\"//" |
     grep -v "^  com\.apple\." | sort -u'
 
   echo "== maestro on the Mac"
-  _mb=$(_whereis maestro "$HOST")
+  _mb=$(_whereis maestro "$HOST1")
   if [ -n "$_mb" ]; then
     echo "  $_mb"
   else
-    echo "  not found on its login shell's PATH — check with:  ssh $HOST 'bash -ic \"command -v maestro\"'"
+    echo "  not found on its login shell's PATH — check with:  ssh $HOST1 'bash -ic \"command -v maestro\"'"
   fi
 
   echo "== java on the Mac"
-  _jh=$(_javahome "$HOST")
+  _jh=$(_javahome "$HOST1")
   if [ -n "$_jh" ]; then
     echo "  $_jh"
-    ssh "${SSH_OPTS[@]}" "$HOST" "'$_jh/bin/java' -version 2>&1 | head -1" | sed 's/^/  /'
+    ssh "${SSH_OPTS[@]}" "$HOST1" "'$_jh/bin/java' -version 2>&1 | head -1" | sed 's/^/  /'
   else
     echo "  no JDK found, and a non-interactive ssh shell reads no .zshrc — so a"
     echo "  version manager's JDK is invisible unless its shell init sets JAVA_HOME."
@@ -288,7 +325,7 @@ if [ "$DETECT" = 1 ]; then
   # three SSH calls hunting for it by hand; this is one, and it says which
   # candidate is the same repository rather than which one is spelt the same.
   echo "== checkouts on the Mac"
-  found=$(ssh "${SSH_OPTS[@]}" "$HOST" 'sh -s 5' < "$(dirname "$0")/../remote/findrepo.sh")
+  found=$(ssh "${SSH_OPTS[@]}" "$HOST1" 'sh -s 5' < "$(dirname "$0")/../remote/findrepo.sh")
   if [ -z "$found" ]; then
     echo "  none found under the home directory (searched 5 deep, caches pruned)"
   else
@@ -309,7 +346,7 @@ if [ "$DETECT" = 1 ]; then
     [ -n "$here" ] || echo "  (no origin here to match against — pick by name)"
   fi
   echo
-  echo "Then:  $0 --host $HOST --fqdn <name from above> --app <bundle id> \\"
+  echo "Then:  $0 --host \"$HOST\" --fqdn <name from above> --app <bundle id> \\"
   echo "         --repo <checkout from above> --write"
   exit 0
 fi
@@ -440,8 +477,16 @@ VALS
   # The JDK, asked of the machine that will run Maestro rather than assumed.
   # Written as a finding or not at all: a guess here is a path that exists on
   # somebody else's machine, and the fallback in bin/lib.sh is better than that.
-  _jh=$([ "$LOCAL" = 1 ] && _javahome || _javahome "$HOST")
-  _mb=$([ "$LOCAL" = 1 ] && _whereis maestro || _whereis maestro "$HOST")
+  # One alias to ask, because $HOST may now list several. Empty means none
+  # answered, and then neither value is written — the same outcome this block
+  # already has when a lookup comes back empty. Passing an empty alias would be
+  # worse than that: _javahome with no argument answers about THIS machine, and
+  # a Linux JDK path in a Mac's conf is a finding that is wrong rather than
+  # absent.
+  HOST1=""
+  [ "$LOCAL" = 1 ] || HOST1=$(_host1) || true
+  _jh=$([ "$LOCAL" = 1 ] && _javahome || { [ -n "$HOST1" ] && _javahome "$HOST1"; })
+  _mb=$([ "$LOCAL" = 1 ] && _whereis maestro || { [ -n "$HOST1" ] && _whereis maestro "$HOST1"; })
   # Only when it is somewhere other than the default. A setting that repeats the
   # default is noise, and it would go stale if Maestro were reinstalled.
   if [ -n "$_mb" ] && [ "$_mb" != "$HOME/.maestro/bin" ]; then

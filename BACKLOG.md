@@ -138,10 +138,22 @@ never probes, never caches and never re-picks. So the single-alias conf did not
 merely make a good mechanism unlucky; it switched the mechanism off. That is why
 the failure was total rather than slow.
 
-**`bin/init.sh` still writes one.** Line 369 emits `: "${MAC_HOST:=$HOST}"` from
-the single `--host` it was given, so every conf it writes starts in the state
-that caused this. Patching one conf by hand does not close this item; that line
-does, and it is the only part of the first decision still open.
+**`bin/init.sh` writes all of them, 21 Sep.** It used to emit
+`: "${MAC_HOST:=$HOST}"` from the single `--host` it was given, so every conf it
+wrote started in the state that caused this. `--host` now accumulates — repeated
+or as one quoted list — and the conf line needed no change, because `${HOST}`
+already interpolated whitespace.
+
+Three other sites did. `--detect` probes **every** alias given and prints which
+answered, since "which of my Host blocks reaches the Mac today" is the question
+you actually have when it has moved; the rest of the detection then goes to the
+first that answered. The write path picks one alias the same way for the JDK and
+`maestro` lookups, and **skips both when none answers** — `_javahome` with no
+argument answers about the local machine, so passing an empty alias would write
+a Linux JDK path into a Mac's conf, a finding that is wrong rather than absent.
+
+Three tests, in the skill suite: both `--host` spellings, and that an
+unreachable Mac leaves `RJAVA` unset. 558 passed, 0 failed; package suite 158.
 
 **What the server should do when it cannot reach the Mac.** Exiting is honest
 and unreadable. A server that starts, answers `tools/list`, and returns "the Mac
