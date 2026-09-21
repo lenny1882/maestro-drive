@@ -26,7 +26,10 @@ mkdir -p "$LDIR"
 # bare "$grpc_proxy" outside the sandbox is an unbound-variable crash rather
 # than a direct request.
 : "${grpc_proxy:=}"
-if [ "${TRANSPORT:-ssh}" = local ]; then grpc_proxy=; fi
+# Emptied only where a port on the device host is reachable from here without
+# it. Under the bridge the device is on this machine and the proxy is still the
+# only route to its ports, so it stays exactly as the ssh transport needs it.
+if _ports_here; then grpc_proxy=; fi
 export grpc_proxy
 
 # Where the runner modules are, on each side (BACKLOG item 87). Plain paths
@@ -192,7 +195,7 @@ _pick_host() {  # sets MAC_HOST to a single alias
   # Local transport has no host to pick. The candidate count would answer 0 and
   # fall out below anyway; this says so at the top rather than leaving a reader
   # to work out that an empty MAC_HOST reaches the same place by accident.
-  [ "${TRANSPORT:-ssh}" = local ] && return 0
+  _fs_shared && return 0
   n=$(_host_candidates | grep -c .)
   [ "$n" -le 1 ] && return 0          # nothing to choose; behave as before
 
@@ -371,7 +374,7 @@ _ssh() {
 # MAC_HOST from a list to the alias that answered, and a message printed after
 # that should name the one alias rather than all of them.
 _where() {
-  if [ "${TRANSPORT:-ssh}" = local ]; then printf 'this machine'
+  if _fs_shared; then printf 'this machine'
   else printf '%s' "$MAC_HOST"
   fi
 }
@@ -385,7 +388,8 @@ _where() {
 # http://:9101, which curl reports as "URL rejected" rather than as a missing
 # setting.
 _urlhost() {
-  if [ "${TRANSPORT:-ssh}" = local ]; then printf '127.0.0.1'
+  if _ports_here; then printf '127.0.0.1'
+  elif [ "${TRANSPORT:-ssh}" = bridge ]; then printf '%s' "$BRIDGE_HOST"
   else printf '%s' "$MAC_FQDN"
   fi
 }
@@ -398,7 +402,7 @@ _urlhost() {
 # and the port to read is the driver's own. Call this rather than building the
 # URL, because the port differs between the two and the host is only half of it.
 _driver_base() {
-  if [ "${TRANSPORT:-ssh}" = local ]; then printf 'http://127.0.0.1:%s' "$DRIVER_PORT"
+  if _ports_here; then printf 'http://127.0.0.1:%s' "$DRIVER_PORT"
   else printf 'http://%s:%s' "$(_urlhost)" "$DPORT"
   fi
 }
@@ -424,7 +428,7 @@ _push() {
   dest=${!n}
   local srcs=("${@:1:n-1}")
 
-  if [ "${TRANSPORT:-ssh}" = local ]; then
+  if _fs_shared; then
     for src in "${srcs[@]}"; do
       target=$dest
       case "$dest" in */) target="$dest$(basename "$src")" ;; esac
@@ -451,7 +455,7 @@ _push() {
 # way a file comes back — see bin/shot.sh, which does both.
 _pull() {
   local src=${1:?_pull <source> <destination>} dst=${2:?_pull <source> <destination>}
-  if [ "${TRANSPORT:-ssh}" = local ]; then
+  if _fs_shared; then
     [ "$src" -ef "$dst" ] && return 0
     mkdir -p "$(dirname "$dst")" || return 1
     cp "$src" "$dst" || return 1
@@ -486,7 +490,13 @@ _macip() {
   # uses — and report "could not determine the Mac's LAN address", which is a
   # true sentence about a machine that is not in this configuration (item 94,
   # 4.4). Refused rather than converted, as img.sh's mac backend was in 3.2.
-  if [ "${TRANSPORT:-ssh}" = local ]; then
+  if [ "${TRANSPORT:-ssh}" = bridge ]; then
+    # There is a Mac-shaped question here — which address this process should
+    # use for the device host — and the conf answers it without asking anything.
+    [ -n "${BRIDGE_HOST:-}" ] || { echo "no BRIDGE_HOST in the conf" >&2; return 1; }
+    printf '%s' "$BRIDGE_HOST"; return 0
+  fi
+  if _ports_here; then
     echo "there is no Mac to ask in local transport — the device is on this machine." >&2
     echo "  Every URL built here is 127.0.0.1; nothing needs a LAN address." >&2
     return 1

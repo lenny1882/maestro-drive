@@ -73,8 +73,13 @@ TXT
 # is no relay in between either — so `start` writes the endpoint's own port on
 # the loopback and MACIP is never read. Asking ssh -G for a host that is not in
 # the conf would fail on a question with no reason to be asked.
-if [ "$TRANSPORT" = local ]; then
+if _ports_here; then
   :
+elif [ "$TRANSPORT" = bridge ]; then
+  # The device is on this machine and this process still cannot reach its
+  # loopback, so the published URI names the machine the way the ssh transport
+  # names the Mac (item 96).
+  MACIP=$(_macip) || exit 1
 else
   _pick_host
   MACIP=$(ssh -G "$MAC_HOST" 2>/dev/null | awk '/^hostname /{print $2}')
@@ -86,7 +91,7 @@ case "${1:-start}" in
     # No relay was started locally, so there is nothing to kill — but the state
     # file is real either way and stop's job is to make the next status say
     # "nothing published" rather than point at an endpoint nobody is watching.
-    if [ "${TRANSPORT:-ssh}" = local ]; then
+    if _ports_here; then
       echo "no relay in local transport — cleared the published endpoint"
     else
       _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
@@ -130,7 +135,7 @@ case "${1:-start}" in
     # published URI is the debug endpoint's own port (item 94, 4.1). The state
     # file, the per-device suffix and the arming below are unchanged, because
     # they are about the app and not about the transport.
-    if [ "${TRANSPORT:-ssh}" = local ]; then
+    if _ports_here; then
       printf 'http://127.0.0.1:%s%s %s\n' "$RPORT" "$RPATH" "$ISO" > "$STATE"
     else
       _ssh "pkill -f 'relay.py $PUBPORT' 2>/dev/null

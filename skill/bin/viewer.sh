@@ -56,7 +56,7 @@ case "${1:-start}" in
     # Nothing is republished locally, so there is no relay to kill — and this
     # must not read as having stopped the viewer, which is Maestro's and lives
     # as long as the MCP server does.
-    if [ "${TRANSPORT:-ssh}" = local ]; then
+    if _ports_here; then
       echo "no relay in local transport — nothing to stop. The viewer belongs to 'maestro mcp'."
     else
       _ssh "pkill -f 'relay.py $VPORT ' && echo stopped || echo 'not running'"
@@ -78,7 +78,7 @@ case "${1:-start}" in
     # Most devices listed wins; with one viewer that is simply the one there is.
     rport=$(echo "$ports" | sort -k2 -rn | head -1 | awk '{print $1}')
 
-    if [ "${TRANSPORT:-ssh}" = local ]; then
+    if _ports_here; then
       # The viewer is already on this machine's loopback and so is the browser
       # that reads it, so there is nothing to republish (item 94, 4.1) — and the
       # absolute 127.0.0.1 stream URL, which is why the picture is blank across
@@ -120,7 +120,7 @@ cat '$RDIR/relay.log'"
         exit 0
       fi
     done
-    if [ "${TRANSPORT:-ssh}" = local ]; then
+    if _ports_here; then
       echo "the viewer is listed on port $rport but nothing answered there (tried $tried)" >&2
     else
       echo "the relay is up but nothing answered on port $VPORT (tried $tried)" >&2

@@ -15,7 +15,7 @@ HERE="$(cd "$(dirname "$0")/../remote" && pwd)"
 #
 # The scratch directory is still this script's to make. It is $RDIR in both
 # transports and nothing else creates it.
-if [ "$TRANSPORT" = local ]; then
+if _fs_shared; then
   _ssh "mkdir -p '$RDIR' '$RDIR/flows'" || exit 1
   echo "local transport: the code is already in place, so nothing was copied."
   echo "  modules:  $RMODS"

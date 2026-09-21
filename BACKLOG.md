@@ -223,16 +223,42 @@ local branch retry-free, because half of what goes through `_ssh` taps a screen.
 **Verified:** 520 passed, 0 failed, eight new; 145 passed, 0 failed in the
 package's suite.
 
-**1.3 The values follow the table.** `_push`/`_pull` take local's answer;
+**1.3 DONE 21 Sep — the values follow the table.** `_push`/`_pull` take local's answer;
 `_urlhost`, `_driver_base` and `$grpc_proxy` take ssh's. *Done when:* a bridge
 conf builds a driver URL naming the host's address and a relay port, and a push
 is a copy rather than an scp.
 
-**1.4 What a failure means.** ssh re-picks a host on 255 and 124; local
+**Two predicates replace thirty scattered "is this local" tests.** `_fs_shared`
+is true when the machine with the device shares this filesystem — ssh no, local
+yes, bridge yes. `_ports_here` is true when a port on that machine is reachable
+from this process without a relay and without the proxy — ssh no, local yes,
+bridge **no**. Every branch in `bin/` was asking one of those two questions
+while appearing to ask about the transport, which is why a third transport would
+otherwise have meant editing all of them and getting some wrong.
+
+**The split is not cosmetic.** `_urlhost` and `_driver_base` follow
+`_ports_here`, so the bridge reads the driver through `relay.py` exactly as the
+Mac is read, and `$grpc_proxy` stays set for the same reason. `_push`, `_pull`,
+`$RHELP`, `$RMODS`, `mcp.sh` and `install.sh` follow `_fs_shared`, so a push is
+a copy onto itself. `_macip` gains a third answer — the conf's `BRIDGE_HOST` —
+because under the bridge the question is real again.
+
+**The four stub `lib.sh` files in the suite carry the predicates**, since a stub
+that replaces `lib.sh` replaces `config.sh` with it.
+
+**1.4 DONE 21 Sep — what a failure means.** ssh re-picks a host on 255 and 124; local
 deliberately does not retry. The bridge needs its own rule: a helper that is not
 running is like a host that is not answering, and a timeout on a live helper is
 the command's own. *Done when:* a stopped helper says so and does not retry a
 command that may have tapped a screen.
+
+**Three failures, three answers.** No helper serving: say so, run nothing,
+return 1. A command that outruns `$TMO`: the far side's own `timeout` ends it
+and 124 comes back, once — the log shows one invocation, not two. No status
+file after the channels close: report that rather than invent a zero.
+
+**Verified:** 529 passed, 0 failed, nine new across 1.3 and 1.4; 145 passed, 0
+failed in the package's suite.
 
 **Stage 2 — starting it.**
 

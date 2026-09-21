@@ -39,7 +39,7 @@ done
 # and decode is pure cost — and worse than cost: $RDIR and $LDIR are two real
 # directories here too, so the pair would be doing by arithmetic what `cp` does
 # by name. The branch is the point of the unit, not a wart in it.
-if [ "$TRANSPORT" = local ]; then
+if _fs_shared; then
   _ssh "sleep $S; sh '$PLATFORM_SH' screenshot '$d' '$RDIR/$N.png'" || exit 1
   _pull "$RDIR/$N.png" "$LDIR/$N.png" || exit 1
 else

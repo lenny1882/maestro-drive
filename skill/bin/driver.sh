@@ -199,7 +199,7 @@ _start() {
   # listening on $DRIVER_PORT" is the question _up just answered against that
   # very port. What is left is the retry, which is about the driver and not
   # about the transport.
-  if [ "${TRANSPORT:-ssh}" = local ]; then
+  if _ports_here; then
     _rebind && { _start; return $?; }
     _ensure_device && { _start; return $?; }
     echo "nothing is listening on $DRIVER_PORT — bin/drivers.sh up ${DEV} (or bin/device.sh up ${DEV} for a phone)" >&2
@@ -948,7 +948,7 @@ case "${1:-start}" in
   stop)   # There is no relay locally, so this verb has nothing to stop — and it
           # must not read as having stopped the driver, which is still up and is
           # bin/drivers.sh down's to take away.
-          if [ "${TRANSPORT:-ssh}" = local ]; then
+          if _ports_here; then
             echo "no relay in local transport — nothing to stop. The driver itself: bin/drivers.sh down ${DEV}"
           else
             _ssh "pkill -f 'relay.py $DPORT ' && echo stopped || echo 'not running'"

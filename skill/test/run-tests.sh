@@ -926,6 +926,9 @@ DBIN="$TMP/dbin"; mkdir -p "$DBIN"
 cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" \
    "$REPO/bin/jtok.py" "$DBIN/"
 cat > "$DBIN/lib.sh" <<'LIBSH'
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
 MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
 # The ssh form of the helper lib.sh grew in item 94's 4.1; driver.sh asks for
@@ -2450,6 +2453,9 @@ printf '#!/usr/bin/env bash\necho ran > "$DEVMARK"\n' > "$DDIR/device.sh"
 chmod -x "$DDIR/device.sh" 2>/dev/null || true
 echo "stub 1 device" > "$DDIR/devmap"   # _is_device greps "^$DEV " -> "stub "
 cat > "$DDIR/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
 MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
 DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
 _driver_base(){ printf 'http://%s:%s' "\$MAC_FQDN" "\$DPORT"; }
@@ -2509,6 +2515,9 @@ nrl_out=$(MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -
 NRL="$TMP/nrl"; mkdir -p "$NRL"
 cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/jtok.py" "$NRL/"
 cat > "$NRL/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
 MAC_FQDN=; APP_ID=test.app; DEV=stub; DPORT=9101; DRIVER_PORT=22087
 DRIVER_PORT_BASE=22087; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y)
 RHELP=$TMP/none; RMODS=$TMP/none/runners; DEVICE_MAP=$NRL/nodevmap
@@ -2580,6 +2589,9 @@ echo "the wall, locally: the URL it prints and the interface it serves on (item 
 WL="$TMP/wl"; mkdir -p "$WL"
 cp "$REPO/bin/wall.sh" "$WL/"
 cat > "$WL/lib.sh" <<LIBSH
+# config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
 APP_ID=test.app; WALLPORT=9990; RDIR=$TMP/none; RHELP=$TMP/none; RMODS=$TMP/none/runners
 SSH_OPTS=(-o X=y); DEV=stub
 TRANSPORT=\${T_TRANSPORT:-ssh}; MAC_FQDN=\${T_FQDN:-}; WALL_URL=\${T_WALL_URL:-}
@@ -3071,6 +3083,69 @@ case "$bx_out" in
   *"use ssh, local or bridge"*) ok "an unknown transport is refused, naming the three" ;;
   *) no "an unknown transport is refused, naming the three" "said: $(printf '%s' "$bx_out" | head -1)" ;;
 esac
+
+echo
+echo "the bridge takes local's answers for files and ssh's for ports (item 96, 1.3)"
+# Local versus remote is three questions, and the bridge answers them from two
+# different columns: the device host shares this filesystem, and its ports are
+# still only reachable the way the Mac's are — the sandbox is in the way.
+bv() {  # bv <transport> <expression>
+  TRANSPORT=$1 APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAC_HOST=m MAC_FQDN=m.local \
+  MAESTRO_MAC_CONF=/dev/null bash -c ". $REPO/bin/lib.sh 2>/dev/null; $2" 2>/dev/null
+}
+[ "$(bv bridge '_urlhost')" = "10.0.0.9" ] \
+  && ok "a bridge URL names the device host, not the loopback" \
+  || no "a bridge URL names the device host, not the loopback" "got '$(bv bridge '_urlhost')'"
+[ "$(bv bridge 'DRIVER_PORT=22087; DPORT=9101; _driver_base')" = "http://10.0.0.9:9101" ] \
+  && ok "and the driver is read through the relay's port, as across ssh" \
+  || no "and the driver is read through the relay's port, as across ssh" \
+       "got '$(bv bridge 'DRIVER_PORT=22087; DPORT=9101; _driver_base')'"
+bv_px=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null \
+  grpc_proxy=http://proxy:3128 bash -c ". $REPO/bin/lib.sh 2>/dev/null; printf %s \"\$grpc_proxy\"" 2>/dev/null)
+[ "$bv_px" = "http://proxy:3128" ] \
+  && ok "the proxy stays set — it is still the only route to those ports" \
+  || no "the proxy stays set — it is still the only route to those ports" "got '$bv_px'"
+[ "$(bv bridge '_macip')" = "10.0.0.9" ] \
+  && ok "_macip answers from the conf instead of refusing" \
+  || no "_macip answers from the conf instead of refusing" "got '$(bv bridge '_macip')'"
+[ "$(bv bridge '_where')" = "this machine" ] \
+  && ok "and a message still says the device is on this machine" \
+  || no "and a message still says the device is on this machine" "got '$(bv bridge '_where')'"
+
+# $RHELP and $RMODS are the checkout itself, as they are locally: there is one
+# filesystem, so there is nothing to push and nowhere else to push it.
+bv_h=$(bv bridge 'printf %s "$RHELP"')
+case "$bv_h" in
+  */remote) ok "the helpers and modules are the checkout, so a push is a copy" ;;
+  *) no "the helpers and modules are the checkout, so a push is a copy" "RHELP=$bv_h" ;;
+esac
+BV="$TMP/bridgefiles"; mkdir -p "$BV"
+printf 'original\n' > "$BV/hier.py"
+bv_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR=/tmp BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; _push '$BV/hier.py' '$BV/hier.py'; printf 'rc=%s %s' \"\$?\" \"\$(cat '$BV/hier.py')\"" 2>/dev/null)
+[ "$bv_out" = "rc=0 original" ] \
+  && ok "a push of a file onto itself is a no-op, not an scp" \
+  || no "a push of a file onto itself is a no-op, not an scp" "got '$bv_out'"
+
+echo
+echo "what a bridge failure means (item 96, 1.4)"
+# ssh re-picks a host on 255 and 124 because the command never ran. A timeout on
+# a live helper is the command's own, and half of what goes through _ssh taps a
+# screen — so it is reported, not retried.
+BR3="$TMP/bridge3"; mkdir -p "$BR3"
+sh "$REPO/remote/bridge.sh" "$BR3" > "$BR3/serve.log" 2>&1 &
+BR3_PID=$!
+timeout 5 sh -c 'until [ -p "$1/control" ]; do :; done' _ "$BR3"
+bx_rc=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$BR3" BRIDGE_HOST=10.0.0.9 MAESTRO_MAC_CONF=/dev/null bash -c \
+  ". $REPO/bin/lib.sh 2>/dev/null; TMO=1 _ssh 'sleep 5' >/dev/null 2>&1; echo \$?")
+[ "$bx_rc" = "124" ] \
+  && ok "a command that outruns \$TMO comes back as 124, from the far side" \
+  || no "a command that outruns \$TMO comes back as 124, from the far side" "got '$bx_rc'"
+[ "$(grep -c 'sleep 5' "$BR3/log" 2>/dev/null)" = "1" ] \
+  && ok "and it is not retried — one invocation in the log, not two" \
+  || no "and it is not retried — one invocation in the log, not two" \
+       "$(grep -c 'sleep 5' "$BR3/log" 2>/dev/null) invocations"
+kill $BR3_PID 2>/dev/null; wait $BR3_PID 2>/dev/null
 
 echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"

@@ -24,7 +24,7 @@ set -uo pipefail
 # would lose every device tool with no error a reader could act on. `exec`
 # replaces this process, which is what the config entry already expects — so the
 # registered entry needs no change to follow the conf between transports.
-if [ "$TRANSPORT" = local ]; then
+if _fs_shared; then
   exec sh -c "$LOCAL_ENV
 exec maestro mcp"
 fi

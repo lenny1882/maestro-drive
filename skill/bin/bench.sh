@@ -17,7 +17,7 @@ d=$(_dev) || exit 1
 # would be real — fork and exec cost something — but they would be measuring the
 # shell, and a reader comparing them against the Mac's 0.30-0.44s would be
 # comparing two different quantities that share a heading.
-if [ "$TRANSPORT" = local ]; then
+if _fs_shared; then
   echo "== round trip =="
   echo "  none. The device is on this machine and nothing crosses a network."
   _WHERE="on this machine"
