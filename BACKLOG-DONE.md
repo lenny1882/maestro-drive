@@ -1,4 +1,4 @@
-# maestro-remote-mac — backlog
+# maestro-drive — backlog (done)
 
 Raised 12 Aug 2026 from a review of two sessions that used the skill against a
 real app. Ordered by measured time cost, highest first.
@@ -173,6 +173,104 @@ apply. Nine hook behaviour tests added; suite 170 → 179, all passing. Left for
 operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
+
+## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **DONE 21 Sep 2026; the repository renamed throughout, the three things outside it closed the same day, and it shipped in v2.1.0**
+
+**Done 21 Sep, in three commits.** The conf is `.maestro-drive.conf` and the
+override is `$MAESTRO_DRIVE_CONF`; the package is `maestro-drive` in the
+installer, the uninstaller, the update path, the manifest, the release workflow,
+the skill's frontmatter and directory, the hooks, the wizard, both suites and
+the docs; and an upgrade from the old name now leaves nothing behind.
+
+**The release publishes two asset names, which was not in the plan.** An
+installed copy runs the `update.sh` it was installed with, and every copy from
+before the rename asks for `maestro-remote-mac.tar.gz`. GitHub redirects a
+renamed repository so the URL resolves, but an asset that is not there is a 404
+— those installs would have stopped updating at the last release under the old
+name. `release.yml` uploads a byte-for-byte copy under the old name, and
+`update.sh` extracts with `--strip-components=1`, so the prefix inside the
+tarball never mattered. The second asset comes out once nobody is on a
+pre-rename install.
+
+**The legacy sweep is the part that had a bug in it.** `manifest.sh` now carries
+`LEGACY_OWNS`, `LEGACY_SKILL_DIRS` and `LEGACY_LIB_DIRS`, and both scripts match
+against every name the package has had. The first version of the jq predicate
+read `any($names[]; $c | contains(.))` — the pipe rebinds `.`, so it asked
+whether the command contains itself, which is always true, and the strip took
+every other package's hooks with it. The suite caught it; it reads `. as $n`
+before the pipe now.
+
+**THE THREE THINGS OUTSIDE THE REPOSITORY ARE DONE TOO, all on 21 Sep**, and
+none of them were done from a session — which is what the entry above predicted.
+
+**The repository is renamed on GitHub.** `github.com/lenny1882/maestro-drive`
+resolves, and `main`, `release/v2.x` and `v2.1.0` all sit on it. `GITHUB_SLUG`
+in `update.sh` and `lib/update-check.sh` now names a slug that exists rather than
+one held up by a redirect.
+
+**`.claude/skills/release/SKILL.md` says `maestro-drive`** — three lines, the
+description, the title and the `git tag -m` template, committed as `c2e15e3`.
+The edit itself was made outside a session: `.claude/skills` is still mounted
+read-only, and a `touch` into it on 21 Sep was refused with `Read-only file
+system`. A session could stage and commit the change but could not have written
+it.
+
+**`flutter-hot-reload-mac` reads `.maestro-drive.conf`.** The installed copy at
+`~/.claude/skills/flutter-hot-reload-mac/` has no `.maestro-mac.conf` or
+`MAESTRO_MAC_CONF` reference left — `bin/lib.sh` searches `.maestro-drive.conf`
+upward from `$PWD` then `~/.maestro-drive.conf`, and the `SKILL.md` frontmatter
+names it. `~/.claude/skills` is read-only to the sandbox as well, so this too was
+a hand edit.
+
+**It shipped in v2.1.0 on 21 Sep**, the first release under the new name, with
+both asset names on it.
+
+### The plan, as raised — what the three commits above were working from
+
+The decision is taken and recorded in 94's 5.5: the package becomes
+**`maestro-drive`**, and the rename covers the repo slug, the installed skill
+directory, `~/.local/share/`'s lib directory, the 14 message prefixes and the
+per-project conf, which becomes `.maestro-drive.conf`. It does not cover the MCP
+entry `maestro-mac`, which is item 97's.
+
+This item is the carrying out, which is not a search and replace:
+
+**The installed directory has to be migrated, not just written elsewhere.**
+Everyone who upgrades has `~/.claude/skills/maestro-remote-mac` and
+`~/.local/share/maestro-remote-mac` already. An installer that creates the new
+pair and leaves the old one leaves a second copy of the skill for Claude to
+find, with its own hooks registered in `settings.json` — two gates on every Bash
+call, and a `SessionEnd` hook pointing at a directory nobody updates.
+`manifest.sh` needs a legacy list that `install.sh` migrates from and
+`uninstall.sh` sweeps.
+
+**`GITHUB_SLUG` is pinned in two installed files.** `update.sh:24` and
+`lib/update-check.sh:41`. GitHub redirects a renamed repository, the API with
+it, so an installed copy keeps updating — but the redirect is the only thing
+holding it, and it lasts exactly as long as nobody creates a new repository
+under the old name.
+
+**`.github/workflows/release.yml` names the package five times**, and the
+release tarball's name is what `update.sh` downloads. A release cut during the
+rename has to be one or the other, not half of each.
+
+**The three documents and the frontmatter.** `SKILL.md`'s `name:` is what Claude
+matches on, so it and the directory have to change in the same commit or the
+skill stops loading.
+
+**The conf is 96 occurrences and NO compatibility read**, which 5.5 settled:
+exactly one `.maestro-mac.conf` exists, this repo's, so `config.sh` looks for
+`.maestro-drive.conf` and nothing else. The one file in existence gets renamed
+by hand.
+
+**`flutter-hot-reload-mac` reads that conf and is a separate repository.** Nine
+references, in its `SKILL.md` and its `bin/lib.sh`. Its rename has to land in
+the same release or it stops finding any settings — which is why this item is a
+release and not a commit, and it is worth doing while item 93 is open against
+that skill anyway.
+
+**Gated on:** nothing. Better done in one release rather than spread over
+several, and better not at the same time as 97.
 
 ## 86. Ten test cases fail for two hours every night — **DONE 18 Sep**
 

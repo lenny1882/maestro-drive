@@ -1,8 +1,11 @@
 # maestro-drive — backlog
 
-One item remains — 87 — and it is not gated. **17 is done** — the package has a git
-repo, a version, a manifest, an installer and an update path. That releases
-**28**, which waited on it and is now the only decision left in this file.
+**Four items are open — 87, 90, 93 and 97.** 87 is not gated; 90 waits on
+finding out whether a physical phone can be streamed at all; 93 waits on 87
+landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
+project's conf, finds one alias, cannot reach it, and exits before it speaks a
+word of MCP. **17 is done** — the package has a git repo, a version, a manifest, an
+installer and an update path. That released **28**.
 
 **70–82 were raised on 17 Sep** by an audit of the fourteen simulator-driving
 sessions of 15 and 16 Sep (PROJ-1812/1811 reproduction and fix verification).
@@ -76,10 +79,14 @@ change, on a test that was only correct when it was not shortly after midnight.
 It is in `BACKLOG-DONE.md`.
 
 **87 was raised on 18 Sep**, the first item about what this package is *for*
-rather than how it works. With 85 done it is the only item left open in this
-file.
+rather than how it works. It is the oldest item still open here.
 
-**Next item number: 98.** Items 1–97 are allocated; new items start from 98.
+**Next item number: 99.** Items 1–98 are allocated; new items start from 99.
+
+**98 is done and is in `BACKLOG-DONE.md`.** The package is `maestro-drive`
+everywhere — the repo on GitHub, the conf, the installed skill and lib
+directories, the message prefixes and the sister skill — and v2.1.0 on 21 Sep is
+the first release under the new name.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -88,99 +95,6 @@ work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
 
 ---
-
-## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **OPEN, raised 21 Sep; the repository is renamed throughout on 21 Sep, and three things outside it are not**
-
-**Done 21 Sep, in three commits.** The conf is `.maestro-drive.conf` and the
-override is `$MAESTRO_DRIVE_CONF`; the package is `maestro-drive` in the
-installer, the uninstaller, the update path, the manifest, the release workflow,
-the skill's frontmatter and directory, the hooks, the wizard, both suites and
-the docs; and an upgrade from the old name now leaves nothing behind.
-
-**The release publishes two asset names, which was not in the plan.** An
-installed copy runs the `update.sh` it was installed with, and every copy from
-before the rename asks for `maestro-remote-mac.tar.gz`. GitHub redirects a
-renamed repository so the URL resolves, but an asset that is not there is a 404
-— those installs would have stopped updating at the last release under the old
-name. `release.yml` uploads a byte-for-byte copy under the old name, and
-`update.sh` extracts with `--strip-components=1`, so the prefix inside the
-tarball never mattered. The second asset comes out once nobody is on a
-pre-rename install.
-
-**The legacy sweep is the part that had a bug in it.** `manifest.sh` now carries
-`LEGACY_OWNS`, `LEGACY_SKILL_DIRS` and `LEGACY_LIB_DIRS`, and both scripts match
-against every name the package has had. The first version of the jq predicate
-read `any($names[]; $c | contains(.))` — the pipe rebinds `.`, so it asked
-whether the command contains itself, which is always true, and the strip took
-every other package's hooks with it. The suite caught it; it reads `. as $n`
-before the pipe now.
-
-**THREE THINGS ARE NOT DONE, and none of them can be done from a session.**
-
-**The repository has not been renamed on GitHub.** `GITHUB_SLUG` says
-`lenny1882/maestro-drive` in `update.sh` and `lib/update-check.sh`, and until the
-rename happens those two point at a slug that does not exist. Nothing else
-depends on it — the redirect covers old installs either way — but a release cut
-before the rename publishes to the old repository under the new asset name.
-
-**`.claude/skills/release/SKILL.md` still says `maestro-remote-mac` three
-times.** The sandbox mounts this repository's `.claude/skills` read-only, so the
-release skill cannot be edited from a session. Three lines: its description, its
-title, and the `git tag -m` template.
-
-**`flutter-hot-reload-mac` still reads `.maestro-mac.conf`.** Nine references,
-in its `SKILL.md` and its `bin/lib.sh`, and `~/.claude/skills` is read-only to
-the sandbox as well. It has no source checkout on this machine — the installed
-copy is all there is — so this is a hand edit or a lifted restriction. Until it
-happens that skill finds no settings at all, because the file it looks for has
-been renamed out from under it.
-
-### The plan, as raised — what the three commits above were working from
-
-The decision is taken and recorded in 94's 5.5: the package becomes
-**`maestro-drive`**, and the rename covers the repo slug, the installed skill
-directory, `~/.local/share/`'s lib directory, the 14 message prefixes and the
-per-project conf, which becomes `.maestro-drive.conf`. It does not cover the MCP
-entry `maestro-mac`, which is item 97's.
-
-This item is the carrying out, which is not a search and replace:
-
-**The installed directory has to be migrated, not just written elsewhere.**
-Everyone who upgrades has `~/.claude/skills/maestro-remote-mac` and
-`~/.local/share/maestro-remote-mac` already. An installer that creates the new
-pair and leaves the old one leaves a second copy of the skill for Claude to
-find, with its own hooks registered in `settings.json` — two gates on every Bash
-call, and a `SessionEnd` hook pointing at a directory nobody updates.
-`manifest.sh` needs a legacy list that `install.sh` migrates from and
-`uninstall.sh` sweeps.
-
-**`GITHUB_SLUG` is pinned in two installed files.** `update.sh:24` and
-`lib/update-check.sh:41`. GitHub redirects a renamed repository, the API with
-it, so an installed copy keeps updating — but the redirect is the only thing
-holding it, and it lasts exactly as long as nobody creates a new repository
-under the old name.
-
-**`.github/workflows/release.yml` names the package five times**, and the
-release tarball's name is what `update.sh` downloads. A release cut during the
-rename has to be one or the other, not half of each.
-
-**The three documents and the frontmatter.** `SKILL.md`'s `name:` is what Claude
-matches on, so it and the directory have to change in the same commit or the
-skill stops loading.
-
-**The conf is 96 occurrences and NO compatibility read**, which 5.5 settled:
-exactly one `.maestro-mac.conf` exists, this repo's, so `config.sh` looks for
-`.maestro-drive.conf` and nothing else. The one file in existence gets renamed
-by hand.
-
-**`flutter-hot-reload-mac` reads that conf and is a separate repository.** Nine
-references, in its `SKILL.md` and its `bin/lib.sh`. Its rename has to land in
-the same release or it stops finding any settings — which is why this item is a
-release and not a commit, and it is worth doing while item 93 is open against
-that skill anyway.
-
-**Gated on:** nothing. Better done in one release rather than spread over
-several, and better not at the same time as 97.
 
 ## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep**
 
@@ -1437,7 +1351,8 @@ Split out of item 87's Stage 5, where it was 5.3. **The work is in the
 is where the seam it should plug into lives.
 
 The sister skill installs alongside this one, reads **the same
-`.maestro-mac.conf`**, and does the half this package deliberately does not:
+`.maestro-drive.conf`** — renamed on both sides by item 98 — and does the half
+this package deliberately does not:
 build from source, launch under `flutter run`, push local edits as hot reloads.
 
 **It defaults where this package discovers, from the same conf file.**
