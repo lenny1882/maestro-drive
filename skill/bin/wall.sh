@@ -31,9 +31,23 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 HERE=$(cd "$(dirname "$0")" && pwd)
 
+# $WALLPORT is ours and never moves, which is the whole point of the wall, so
+# the only thing that differs between the transports is which host to name —
+# and WALL_URL still overrides both (item 94, 4.3).
 _url() {
   [ -n "$WALL_URL" ] && { printf '%s' "$WALL_URL"; return; }
-  printf 'http://%s:%s/' "$MAC_FQDN" "$WALLPORT"
+  printf 'http://%s:%s/' "$(_urlhost)" "$WALLPORT"
+}
+
+# Which interface the wall serves on. Across a network the browser is on another
+# machine, so it must be every interface. Locally the browser is on this one,
+# and a wall bound to 0.0.0.0 here would put every app screen on whatever
+# network this machine is sitting on. WALL_URL means the wall is reached some
+# other way — a tunnel, a reverse proxy — so it takes the open bind with it.
+_bind() {
+  if [ "${TRANSPORT:-ssh}" = local ] && [ -z "$WALL_URL" ]; then printf '127.0.0.1'
+  else printf '0.0.0.0'
+  fi
 }
 
 # The capture binary loads Apple's private SimulatorKit from a path compiled
@@ -41,6 +55,12 @@ _url() {
 # until this is right, so it is checked first and reported in full.
 _check_simulatorkit() {
   local out
+  # Apple's private framework, loaded by Apple's capture binary. It is not a
+  # question about the wall, it is a question about iOS — and it was the first
+  # thing `start` and `status` did, so on any other platform the wall refused to
+  # start over a framework that has nothing to do with it. Found running 4.3
+  # against this Linux machine, where PLATFORM is android.
+  [ "${PLATFORM:-ios}" = ios ] || return 0
   out=$(_ssh '~/.maestro/deps/simulator-server verify 2>&1 | grep -E "^\[[a-z]+\] ios:"')
   case "$out" in
     \[ok\]*) return 0 ;;
@@ -152,7 +172,7 @@ case "${1:-start}" in
     # stderr to /dev/null, so the one line explaining a failure — "no service on
     # port N to republish" — was never seen by anyone. Do not repeat that.
     _ssh "pkill -f 'wall.py $WALLPORT' 2>/dev/null; sleep 1
-cd '$RDIR' && nohup python3 '$RHELP/wall.py' $WALLPORT > wall.log 2>&1 &
+cd '$RDIR' && nohup python3 '$RHELP/wall.py' $WALLPORT $(_bind) > wall.log 2>&1 &
 sleep 6
 tail -n 20 '$RDIR/wall.log'"
 

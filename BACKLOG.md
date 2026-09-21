@@ -612,13 +612,34 @@ that is the state outside a Claude sandbox, where the ssh path also runs.
 seen empty by a child process, left alone across ssh, and empty rather than
 unbound when nothing set it.
 
-**4.3 The wall.** `wall.py:807` binds `0.0.0.0` and `wall.sh:35-36` builds
-`http://$MAC_FQDN:$WALLPORT/` unless `WALL_URL` is set. `WALL_URL` may already
-be the whole answer, and the bind may be fine as it is. Check before writing
-anything — this unit may turn out to be a test and a comment. *Files:*
-`skill/bin/wall.sh`. *Done when:* a local wall is reachable at a URL the skill
-prints, and whatever `MAC_FQDN` did for it is either replaced or shown not to
-have been needed.
+**4.3 DONE 21 Sep — the wall.** `WALL_URL` was not the answer, and the bind was
+not fine as it was. `wall.sh:_url` takes `_urlhost`, and the wall is started
+with the interface to serve on as a second argument.
+
+**The URL was one host substitution, as expected.** `$WALLPORT` is ours and
+never moves — that is the whole point of the wall, the URL you bookmark once —
+so the only thing that differed between the transports was which host to name.
+`WALL_URL` overrides both, unchanged.
+
+**The bind is the part that was not free.** `wall.py` bound `0.0.0.0` because
+the browser is on another machine and has to reach it. Locally the browser is on
+this one, and the same bind would put every app screen on whatever network this
+machine is sitting on — a café, a client's office. It now binds `127.0.0.1`
+locally, and `WALL_URL` takes the open bind with it, because a tunnel or a
+reverse proxy means the wall is deliberately reached from somewhere else.
+
+**One thing was found rather than planned: the wall refused to start on
+Android.** `_check_simulatorkit` was the first thing `start` and `status` did,
+and it asks whether Apple's private SimulatorKit is where Apple's capture binary
+expects it. That is a question about iOS, not about the wall, and on this Linux
+machine — where `PLATFORM` is android — it blocked the unit's own "done when".
+Gated on `PLATFORM=ios`. It would have blocked any Android wall, in either
+transport; there was simply never an Android device to find out with.
+
+**Verified:** 470 passed, 0 failed, six new — the loopback URL with the port
+unchanged, the loopback bind, the open bind across ssh, `WALL_URL` overriding
+both the URL and the bind, and an Android wall not being asked about
+SimulatorKit. Not yet run against a booted device; that is 5.2.
 
 **4.4 `MACIP` and `MAC_FQDN` leave the local path.** `lib.sh:184-188` asks the
 Mac for its `en0` address. Locally every URL the sandbox builds is

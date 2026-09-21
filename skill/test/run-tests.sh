@@ -2569,6 +2569,67 @@ px_out=$(env -u grpc_proxy MAC_HOST=m MAC_FQDN=m.local APP_ID=x MAESTRO_MAC_CONF
   || no "with no proxy set at all it is empty, not unbound" "got '$px_out'"
 
 echo
+echo "the wall, locally: the URL it prints and the interface it serves on (item 94, 4.3)"
+# wall.sh with a stub lib.sh, so _url and _bind are the real ones and the _ssh
+# it would have sent is recorded instead. $WALLPORT never moves, so the whole of
+# 4.3 is which host the URL names and which interface the server binds.
+WL="$TMP/wl"; mkdir -p "$WL"
+cp "$REPO/bin/wall.sh" "$WL/"
+cat > "$WL/lib.sh" <<LIBSH
+APP_ID=test.app; WALLPORT=9990; RDIR=$TMP/none; RHELP=$TMP/none; RMODS=$TMP/none/runners
+SSH_OPTS=(-o X=y); DEV=stub
+TRANSPORT=\${T_TRANSPORT:-ssh}; MAC_FQDN=\${T_FQDN:-}; WALL_URL=\${T_WALL_URL:-}
+PLATFORM=\${T_PLATFORM:-ios}
+_urlhost(){ if [ "\$TRANSPORT" = local ]; then printf '127.0.0.1'; else printf '%s' "\$MAC_FQDN"; fi; }
+_where(){ printf 'stub'; }
+_push(){ return 0; }
+_ssh(){ echo "SSH \$*" >> "\$SSHLOG"; case "\$*" in *verify*) echo "[ok] ios: fine" ;; esac; return 0; }
+LIBSH
+printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\nprintf 200\n' > "$TMP/stub/curl"
+chmod +x "$TMP/stub/curl"
+
+rm -f "$TMP/wl.log"
+wl_out=$(SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" status 2>&1)
+case "$wl_out" in
+  *"http://127.0.0.1:9990/ -> HTTP 200"*) ok "locally the wall URL is the loopback, with the port unchanged" ;;
+  *) no "locally the wall URL is the loopback, with the port unchanged" "said: $(printf '%s' "$wl_out" | tail -2)" ;;
+esac
+
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q "wall.py' 9990 127.0.0.1" "$TMP/wl.log" 2>/dev/null \
+  && ok "and it binds the loopback, not every interface this machine is on" \
+  || no "and it binds the loopback, not every interface this machine is on" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=ssh T_FQDN=mac.local PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q "wall.py' 9990 0.0.0.0" "$TMP/wl.log" 2>/dev/null \
+  && ok "across ssh it still binds every interface — the browser is elsewhere" \
+  || no "across ssh it still binds every interface — the browser is elsewhere" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+rm -f "$TMP/wl.log"
+wl_out=$(SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android T_WALL_URL=http://tunnel:8080/ \
+  PATH="$TMP/stub:$PATH" timeout 30 bash "$WL/wall.sh" start 2>&1)
+case "$wl_out" in
+  *"http://tunnel:8080/"*) ok "WALL_URL still overrides the URL in local transport" ;;
+  *) no "WALL_URL still overrides the URL in local transport" "said: $(printf '%s' "$wl_out" | tail -2)" ;;
+esac
+grep -q "wall.py' 9990 0.0.0.0" "$TMP/wl.log" 2>/dev/null \
+  && ok "and it takes the open bind with it — a tunnel reaches the wall from off this machine" \
+  || no "and it takes the open bind with it — a tunnel reaches the wall from off this machine" "started: $(grep -o "wall.py' [0-9]* [0-9.]*" "$TMP/wl.log" | head -1)"
+
+# The SimulatorKit check is a question about iOS, and it ran before everything.
+rm -f "$TMP/wl.log"
+SSHLOG="$TMP/wl.log" T_TRANSPORT=local T_PLATFORM=android PATH="$TMP/stub:$PATH" \
+  timeout 30 bash "$WL/wall.sh" start >/dev/null 2>&1
+grep -q 'simulator-server verify' "$TMP/wl.log" 2>/dev/null \
+  && no "an Android wall is not asked about Apple's SimulatorKit" "it ran the verify anyway" \
+  || ok "an Android wall is not asked about Apple's SimulatorKit"
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.
