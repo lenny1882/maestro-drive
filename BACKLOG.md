@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 97.** Items 1–96 are allocated; new items start from 97.
+**Next item number: 98.** Items 1–97 are allocated; new items start from 98.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -89,7 +89,40 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 96. A device on this machine is on the other side of the sandbox — **OPEN, raised 21 Sep**
+## 97. The MCP server dies when the Mac is on another network — **OPEN, raised 21 Sep**
+
+`maestro-mac` failed to connect for this entire session — `CONNECTION_CLOSED`,
+every time, including after `/mcp` reconnects. Nothing else was wrong: the Mac
+answered ssh on `mac-senseguest` throughout, and every `bin/` script worked
+against it.
+
+**The cause is the conf, and the symptom names none of it.** `bin/mcp.sh`
+sources `config.sh`, which loads this project's conf — `MAC_HOST=mac-home`, an
+alias for 192.168.4.250. The Mac is on the senseguest network. `_pick_host` has
+one candidate, cannot reach it, and the server exits before it speaks a word of
+MCP; Claude Code reports that a server closed the connection, which reads as a
+broken install.
+
+**Three things to decide, not one to fix.**
+
+**Where the aliases live.** `MAC_HOST` may name several, and `_pick_host` walks
+them — but this conf names one. A conf listing all three would have found the
+Mac by itself, which is what item 18 built the list for.
+
+**What the server should do when it cannot reach the Mac.** Exiting is honest
+and unreadable. A server that starts, answers `tools/list`, and returns "the Mac
+is not reachable on any alias in this conf" from every call would put the
+diagnosis where somebody sees it.
+
+**Whether it should be reading the project conf at all.** The MCP server is
+spawned once per session, before any project is in view, and `config.sh`'s
+search walks up from `$PWD` — which for a server Claude Code spawns is wherever
+the session started. The `maestro-bridge` server takes no conf at all and starts
+a helper the conf then points at; `mcp.sh` could work the same way.
+
+**Gated on:** nothing. Found while proving item 96.
+
+## 96. A device on this machine is on the other side of the sandbox — **DONE 21 Sep 2026; all three stages, and the live run in 3.2 drove a real emulator**
 
 Item 94 made the package drive a device on the machine it runs on. It works —
 Stages 1 to 4, 500 tests — and inside a Claude session on THIS machine it
@@ -326,6 +359,14 @@ leaves it alone too. `uninstall.sh` removes both names, because the entry would
 otherwise point at a script that has just been deleted, which fails at every
 session start rather than visibly.
 
+**One thing it does not do yet.** `install.sh` decides whether to ask with
+`[ -t 0 ]` and reads with a plain `read`, while `update.sh` and `uninstall.sh`
+both read from `</dev/tty`. An update run the usual way — `curl … | bash` —
+leaves stdin a pipe, so `update.sh` can ask its own question and `install.sh`
+cannot: it falls through to printing the flag. Its existing wizard prompt has
+had the same shape all along. One line each, and both prompts should read from
+`/dev/tty` when there is one.
+
 **Verified:** 150 passed, 0 failed in the package's suite, five new.
 
 **Stage 3 — proof.**
@@ -477,7 +518,7 @@ not run: an Apple or Temurin `.pkg` under `/Library/Java/JavaVirtualMachines`
 (rung 2) — there is no such Mac here — and Homebrew's keg-only `openjdk` reached
 by a `PATH` line, which rung 3 resolves through the keg symlink.
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep, Stage 4 on 21 Sep; Stage 5 is the proof and the name**
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep. Stages 1-3 built 18 Sep; Stage 4, 5.1, 5.2 and 5.4 on 21 Sep. 5.3 is part done and 5.5, the name, is untouched**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
