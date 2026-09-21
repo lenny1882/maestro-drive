@@ -341,6 +341,18 @@ _label_by() {
 # actually live, so nothing may hardcode it. Ask the Mac which address it is
 # using. One SSH round trip, cached for the shell.
 _macip() {
+  # There is no Mac in local transport, and the question has no local twin: the
+  # address every URL built here uses is the loopback, which _urlhost answers
+  # without asking anything. Asking anyway would run `ipconfig getifaddr en0` on
+  # this machine — a command Linux does not have, on an interface name macOS
+  # uses — and report "could not determine the Mac's LAN address", which is a
+  # true sentence about a machine that is not in this configuration (item 94,
+  # 4.4). Refused rather than converted, as img.sh's mac backend was in 3.2.
+  if [ "${TRANSPORT:-ssh}" = local ]; then
+    echo "there is no Mac to ask in local transport — the device is on this machine." >&2
+    echo "  Every URL built here is 127.0.0.1; nothing needs a LAN address." >&2
+    return 1
+  fi
   if [ -z "${MACIP:-}" ]; then
     MACIP=$(_ssh 'ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null' | tr -d '[:space:]')
   fi
