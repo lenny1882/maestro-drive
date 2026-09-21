@@ -79,7 +79,7 @@ It is in `BACKLOG-DONE.md`.
 rather than how it works. With 85 done it is the only item left open in this
 file.
 
-**Next item number: 96.** Items 1–95 are allocated; new items start from 96.
+**Next item number: 97.** Items 1–96 are allocated; new items start from 97.
 
 **Two commits on `backlog/87-runner-modules` carry the wrong item number.** They
 say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
@@ -88,6 +88,125 @@ work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
 
 ---
+
+## 96. A device on this machine is on the other side of the sandbox — **OPEN, raised 21 Sep**
+
+Item 94 made the package drive a device on the machine it runs on. It works —
+Stages 1 to 4, 500 tests — and inside a Claude session on THIS machine it
+cannot reach the device at all. Measured 21 Sep, from the Bash tool:
+
+```
+/dev/kvm       absent          an x86 emulator cannot start
+processes      4               its own PID namespace
+interfaces     lo              its own network namespace
+writes         cwd and $TMPDIR only
+```
+
+**The SSH transport works from in here for a reason that local transport
+removes.** The sandbox permits egress to the Mac, and the Mac is outside it
+doing the work. Locally there is no other machine, so the work lands in the one
+place that cannot do it.
+
+**An MCP server is outside the sandbox.** Measured the same day, with a throwaway
+server registered and called: `/dev/kvm present, opened read-write`, the AVD
+directory writable, 483 processes, the host's interfaces, parent
+`/home/james/.local/bin/claude`. So a process Claude Code spawns can do what the
+Bash tool cannot.
+
+**And the scratch is shared.** `/tmp/claude-1000` is a real host directory both
+sides see. A FIFO created in the sandbox and written by a host process delivered
+its bytes. A TCP listener on the host was also reachable, through the egress
+proxy, once its address was declared — but `ssh` to the same machine was refused
+as *Containment Escape*, so that route rests on a per-command judgement rather
+than a rule.
+
+### The shape, and why not the others
+
+**Four shapes were considered.** One MCP tool per `bin/` script (ten typed
+tools); one per runner-module verb; one per intent; or a generic channel that
+carries what `_ssh` already carries. The first three add a second way to drive
+to a package whose whole design is one way to drive — written, tested and kept
+in step per platform and per transport, forever, for one machine's testing
+problem. The fourth adds a third value to a setting that already exists.
+
+**It is chosen for sharing, and the cost is stated plainly.** The bridge carries
+arbitrary shell to this machine — the same capability the ssh transport has
+against the Mac, pointed at the machine the sandbox exists to protect, and
+nothing reviews the traffic. It is the boundary removed rather than narrowed.
+The controls are that it is started deliberately rather than running in every
+session, that it logs every script it executes, and that it stops at session
+end.
+
+**A Mac never uses it.** On macOS there is no KVM in the picture and seatbelt has
+no PID or network namespace, so local transport as 94 built it should reach a
+simulator directly. This item exists for this Linux machine's sandbox.
+
+**Local versus remote is three things, and the bridge answers each from an
+existing answer:**
+
+| | ssh | local | bridge |
+| --- | --- | --- | --- |
+| a shell script reaches the device host | `ssh` | `sh -c` | the channel |
+| a file reaches it | `scp` | `cp`, one filesystem | `cp`, one filesystem |
+| an HTTP client here reaches a port there | relay + proxy + `$MAC_FQDN` | `127.0.0.1` | relay + proxy + the host's address |
+
+That third row is the one that would otherwise bite: `driver.sh` curls
+`$BASE/status` **from the sandbox**, and under the bridge the driver is bound to
+the host's loopback, which the sandbox cannot reach. `_urlhost` and
+`_driver_base` already have the branch point.
+
+### The plan, in stages
+
+**Stage 1 — the channel.**
+
+**1.1 `remote/bridge.sh`, the host-side helper.** Reads a request id from a
+control FIFO, runs the script that request carries, streams stdout and stderr
+back down two FIFOs the client made, writes the exit status to a file. One
+directory per session under the shared scratch, with a random component in its
+name. Every script it runs is appended to a log beside it. *Done when:* a script
+sent from the sandbox runs on the host and its output comes back, and the log
+shows what ran.
+
+**1.2 `_ssh` gains the bridge branch, and the payload assembly is factored out.**
+The message is the same three parts in every transport — environment prefix,
+`cd $REPO`, the caller's script — and it is currently written out twice. A third
+copy is not the answer. *Done when:* a given call produces byte-identical script
+text in all three transports, and the bridge branch streams stdout, forwards
+stdin and returns the real exit status.
+
+**1.3 The values follow the table.** `_push`/`_pull` take local's answer;
+`_urlhost`, `_driver_base` and `$grpc_proxy` take ssh's. *Done when:* a bridge
+conf builds a driver URL naming the host's address and a relay port, and a push
+is a copy rather than an scp.
+
+**1.4 What a failure means.** ssh re-picks a host on 255 and 124; local
+deliberately does not retry. The bridge needs its own rule: a helper that is not
+running is like a host that is not answering, and a timeout on a live helper is
+the command's own. *Done when:* a stopped helper says so and does not retry a
+command that may have tapped a screen.
+
+**Stage 2 — starting it.**
+
+**2.1 The MCP server, one verb.** `bridge start|stop|status`, and nothing else.
+No `boot`, no AVD names, nothing platform-shaped — booting a device is
+`platform.sh boot` sent over the bridge like everything else, which is what
+keeps android and ios sharing the same path. *Done when:* the server starts the
+helper, reports where its directory is, and stops it.
+
+**2.2 It stops when the session does.** `rig-down-on-end.sh` is already the
+SessionEnd hook; the helper hangs off the same idea rather than inventing one.
+
+**Stage 3 — proof.**
+
+**3.1 The suite runs three transports.** 5.1's block gains a column. The helper
+can be started in-process, so it still needs no Mac and no device.
+
+**3.2 The live run — this is item 94's 5.2.** `rig up`, a flow, a screenshot,
+`net.sh`, `prefs.sh`, against `Pixel_6_Pro_API_34` and
+`com.prodirectsport.consumer.dev`, with the result recorded verb by verb. 94's
+5.3 and item 87's 4.4 follow it.
+
+**Gated on:** nothing. Item 94's Stage 4 is done and this builds on it.
 
 ## 95. The JDK was one machine's installer path, hardcoded — **DONE 21 Sep 2026**
 
