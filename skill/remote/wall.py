@@ -802,11 +802,18 @@ class Handler(BaseHTTPRequestHandler):
             return                              # browser went away
 
 
-def main(port):
+def main(port, bind="0.0.0.0"):
+    """bind defaults to every interface, which is what a Mac across a network
+    needs: the browser is on another machine and the wall has to be reachable
+    from it. Driving a device on THIS machine, the browser is here too, and the
+    loopback is enough — so bin/wall.sh passes 127.0.0.1 in local transport
+    rather than serving app screens to whatever network it is sitting on
+    (item 94, 4.3).
+    """
     threading.Thread(target=WALL.scan_forever, daemon=True).start()
-    srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    srv = ThreadingHTTPServer((bind, port), Handler)
     srv.daemon_threads = True
-    log("wall listening on 0.0.0.0:%d" % port)
+    log("wall listening on %s:%d" % (bind, port))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -819,4 +826,5 @@ def main(port):
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 9990)
+    main(int(sys.argv[1]) if len(sys.argv) > 1 else 9990,
+         sys.argv[2] if len(sys.argv) > 2 else "0.0.0.0")
