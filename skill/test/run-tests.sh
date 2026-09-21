@@ -2630,6 +2630,29 @@ grep -q 'simulator-server verify' "$TMP/wl.log" 2>/dev/null \
   || ok "an Android wall is not asked about Apple's SimulatorKit"
 
 echo
+echo "local transport: there is no Mac to ask for an address (item 94, 4.4)"
+# `ipconfig getifaddr en0` is a macOS command against a macOS interface name.
+# Run here it fails, and the failure message — "could not determine the Mac's
+# LAN address" — is a true sentence about a machine that is not in this
+# configuration. Refused instead, the way img.sh's mac backend was in 3.2.
+mi_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null; _macip; printf "rc=%s" "$?"' 2>&1)
+case "$mi_out" in
+  *"no Mac to ask in local transport"*rc=1) ok "_macip refuses locally instead of asking this machine for an en0" ;;
+  *) no "_macip refuses locally instead of asking this machine for an en0" "got: $mi_out" ;;
+esac
+case "$mi_out" in
+  *"could not determine the Mac's LAN address"*) no "and it does not report a Mac that is not in the configuration" "said it anyway" ;;
+  *) ok "and it does not report a Mac that is not in the configuration" ;;
+esac
+
+mi_out=$(TRANSPORT=local APP_ID=x MAESTRO_MAC_CONF=/dev/null timeout 30 bash "$REPO/bin/macip.sh" 2>&1; printf "rc=%s" "$?")
+case "$mi_out" in
+  *rc=1) ok "bin/macip.sh exits 1 locally rather than printing an address" ;;
+  *) no "bin/macip.sh exits 1 locally rather than printing an address" "got: $mi_out" ;;
+esac
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.

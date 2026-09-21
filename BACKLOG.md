@@ -89,7 +89,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep; Stage 4 started 21 Sep**
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep; planned in five stages 18 Sep. Stages 1-3 built 18 Sep, Stage 4 on 21 Sep; Stage 5 is the proof and the name**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -641,11 +641,34 @@ unchanged, the loopback bind, the open bind across ssh, `WALL_URL` overriding
 both the URL and the bind, and an Android wall not being asked about
 SimulatorKit. Not yet run against a booted device; that is 5.2.
 
-**4.4 `MACIP` and `MAC_FQDN` leave the local path.** `lib.sh:184-188` asks the
-Mac for its `en0` address. Locally every URL the sandbox builds is
-`127.0.0.1`. This is last in the stage because 4.1 and 4.3 are its only real
-callers. *Files:* `skill/bin/lib.sh`. *Done when:* no local code path reads
-`MACIP` or `MAC_FQDN`.
+**4.4 DONE 21 Sep — `MACIP` and `MAC_FQDN` leave the local path.** 4.1 and 4.3
+took the callers, which is what this unit was waiting for: `_urlhost` stands
+where `$MAC_FQDN` did in `driver.sh`, `drivers.sh`, `viewer.sh` and `wall.sh`,
+and `publish.sh` no longer resolves an address it does not use. What is left
+here is `_macip` itself.
+
+**Refused locally rather than converted.** `_macip` runs
+`ipconfig getifaddr en0` — a macOS command against a macOS interface name. Run
+on this machine it fails, and the failure says "could not determine the Mac's
+LAN address", which is a true sentence about a machine that is not in this
+configuration. It now says there is no Mac to ask and that every URL built here
+is `127.0.0.1`. Same decision as `img.sh`'s `mac` backend in 3.2: a question
+with no local twin is answered by saying so.
+
+**`bin/macip.sh` inherits that and exits 1**, which is right — it exists to
+print an address nothing may hardcode, and locally there is no address to print.
+
+**The five remaining reads are all in ssh-only branches**: `_urlhost`'s `else`,
+and in `publish.sh` the `ssh -G` resolution and the state line beside it.
+
+**Verified:** 473 passed, 0 failed in the skill's suite and 144 passed, 0
+failed in the package's, three new — `_macip` refusing locally with the right
+message, not printing the old one, and `macip.sh` exiting 1.
+
+**Stage 4 is complete.** Nothing in the local path starts a relay, carries a
+proxy, or reads an address belonging to a machine that is not there. All of it
+is still verified by the suite alone — no local run has happened yet, and 5.2
+is where that is paid for.
 
 **Stage 5 — proof, docs, and the name.**
 
