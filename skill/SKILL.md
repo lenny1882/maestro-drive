@@ -1,6 +1,6 @@
 ---
-name: maestro-remote-mac
-description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-mac.conf.
+name: maestro-drive
+description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-drive.conf.
 allowed-tools:
   - Bash
   - Read
@@ -11,7 +11,7 @@ allowed-tools:
 # Maestro on a remote Mac
 
 **Which machine has the device is a setting, not an assumption.** `TRANSPORT`
-in `.maestro-mac.conf` is `ssh` — a Mac across the network, what this package
+in `.maestro-drive.conf` is `ssh` — a Mac across the network, what this package
 was built for and what everything below describes — or `local`, a simulator or
 emulator on the machine running the skill. In local transport `MAC_HOST` and
 `MAC_FQDN` are neither needed nor read, every URL is `127.0.0.1`, and the
@@ -128,7 +128,7 @@ on the Mac written over the same SSH everything else uses, so the wall is only
 ever read from.
 
 **2. Check the project is configured.** Every script sources
-`bin/config.sh`, which looks for `.maestro-mac.conf` — `$MAESTRO_MAC_CONF`
+`bin/config.sh`, which looks for `.maestro-drive.conf` — `$MAESTRO_DRIVE_CONF`
 first, then from `$PWD` upwards, then `~/`. If it is missing the scripts stop
 with instructions. Do not invent values: ask the machine, then ask the user.
 
@@ -666,13 +666,13 @@ What stays out: anything not actually run; anything true of Maestro or iOS
 generally, which belongs in this skill's `reference/` instead; screenshots as
 evidence for positions; and credentials.
 
-**A credential goes in `.maestro-mac.conf` and nowhere else.** That file is the
+**A credential goes in `.maestro-drive.conf` and nowhere else.** That file is the
 one a project keeps out of version control — the journeys, the flows and the
 notes are all committed. Anything named `APP_*` in the conf is exported, so a
 journey says `${APP_PIN}` and the value stays in one gitignored place:
 
 ```sh
-: "${APP_PIN:=1234}"             # .maestro-mac.conf
+: "${APP_PIN:=1234}"             # .maestro-drive.conf
 type "^Passcode$" ${APP_PIN}     # the journey
 ```
 
@@ -759,7 +759,7 @@ with this skill.
    is dead by the next call (measured; 21 attempts over 15-16 Sep). The
    harness's `run_in_background: true` is the mechanism that survives, and
    `Monitor` with an until-loop is how to wait for one. Anything started that
-   way starts outside the project, so pass `MAESTRO_MAC_CONF` to it.
+   way starts outside the project, so pass `MAESTRO_DRIVE_CONF` to it.
    `reference/connection.md` has all three with their measurements.
 10. **Before waiting for a timed state, find the three ways to reach it.** Name
     the event, then name how it could be reached by *waiting*, by a *backend
@@ -792,13 +792,13 @@ with this skill.
 Read the one that matches the problem; none of them are needed up front.
 
 **Where this skill lives, and where to write a finding about it.** The source is
-the `maestro-remote-mac` git repo, whose `skill/` directory is this one.
-`~/.claude/skills/maestro-remote-mac` is either a symlink to that `skill/`
+the `maestro-drive` git repo, whose `skill/` directory is this one.
+`~/.claude/skills/maestro-drive` is either a symlink to that `skill/`
 directory (`./install.sh --link`) or a copy of it taken from a release tarball
 (`./install.sh`). Check which before editing:
 
 ```sh
-readlink -f ~/.claude/skills/maestro-remote-mac
+readlink -f ~/.claude/skills/maestro-drive
 ```
 
 **If it is a copy, anything you write under the `~/.claude/skills` path is
@@ -831,7 +831,7 @@ fix it yourself.
 
 | script | does |
 | --- | --- |
-| `bin/init.sh` | detect candidates, write `.maestro-mac.conf`, lay out `maestro/` |
+| `bin/init.sh` | detect candidates, write `.maestro-drive.conf`, lay out `maestro/` |
 | `bin/notes.sh` | create, locate, append to or archive the project's app notes |
 | `bin/journey.sh` | edit a journey with a replace that fails loudly when it does not match |
 | `bin/secrets.sh` | has a credential from the conf escaped into a committed file? |

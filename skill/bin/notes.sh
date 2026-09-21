@@ -74,7 +74,7 @@ MSG
           cat >&2 <<MSG
 notes.sh: that text contains the value of \$$_v.
 
-It lives in $MAESTRO_MAC_CONF_FOUND, which is kept out of
+It lives in $MAESTRO_DRIVE_CONF_FOUND, which is kept out of
 version control. The app notes are committed, so writing the value here undoes
 that. Refer to it by name instead:
 
@@ -134,7 +134,7 @@ MSG
     echo "  a person folds this into reference/ and commits it."
     echo "  staging lives under the installed skill: safe across installs only"
     echo "  if this was installed with ./install.sh --link. Check with"
-    echo "  readlink -f ~/.claude/skills/maestro-remote-mac"
+    echo "  readlink -f ~/.claude/skills/maestro-drive"
     ;;
   *) echo "usage: $0 [path|init|add <section> <text> --measured|--once|--inferred|check|promote]" >&2; exit 2 ;;
 esac

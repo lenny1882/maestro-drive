@@ -4,7 +4,7 @@
 #   bin/secrets.sh check [dir]     # default: the project the conf belongs to
 #   bin/secrets.sh list            # which values are defined, without printing them
 #
-# A project value is anything named APP_* in `.maestro-mac.conf` other than the
+# A project value is anything named APP_* in `.maestro-drive.conf` other than the
 # reserved APP_ID and APP_NOTES (bin/config.sh explains the convention). The
 # conf is the one file kept out of version control, so a login PIN belongs there
 # and is referred to as ${APP_PIN} everywhere else. This looks for the literal
@@ -41,9 +41,9 @@ case "${1:-check}" in
       n=$((n + 1))
       printf '  %-16s %s chars\n' "$name" "${#val}"
     done < <(_values)
-    [ "$n" -eq 0 ] && echo "  no project values set in ${MAESTRO_MAC_CONF_FOUND:-(no conf found)}"
+    [ "$n" -eq 0 ] && echo "  no project values set in ${MAESTRO_DRIVE_CONF_FOUND:-(no conf found)}"
     echo
-    echo "conf: ${MAESTRO_MAC_CONF_FOUND:-(none)}"
+    echo "conf: ${MAESTRO_DRIVE_CONF_FOUND:-(none)}"
     ;;
 
   check)
@@ -58,7 +58,7 @@ secrets.sh: no project values are set, so there is nothing to look for.
 A project value is any APP_* in the conf except APP_ID and APP_NOTES. To move a
 credential out of the committed files and into the conf:
 
-  ${MAESTRO_MAC_CONF_FOUND:-.maestro-mac.conf}:   : "\${APP_PIN:=<the value>}"
+  ${MAESTRO_DRIVE_CONF_FOUND:-.maestro-drive.conf}:   : "\${APP_PIN:=<the value>}"
   the journey:                    type "^Passcode\$" \${APP_PIN}
 MSG
       exit 2; }
@@ -78,7 +78,7 @@ MSG
       SCOPE="found under $DIR (no git repo here)"
     fi
 
-    CONF_REAL=$(readlink -f "${MAESTRO_MAC_CONF_FOUND:-/nonexistent}" 2>/dev/null)
+    CONF_REAL=$(readlink -f "${MAESTRO_DRIVE_CONF_FOUND:-/nonexistent}" 2>/dev/null)
     found=0
     for name in "${VARS[@]}"; do
       val=${!name}
@@ -98,10 +98,10 @@ MSG
     done
 
     # The conf holds the credentials; check it is gitignored.
-    if [ -n "${MAESTRO_MAC_CONF_FOUND:-}" ] && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
-      if ! git -C "$DIR" check-ignore -q "$MAESTRO_MAC_CONF_FOUND" 2>/dev/null; then
-        echo "WARNING: $MAESTRO_MAC_CONF_FOUND is NOT gitignored." >&2
-        echo "  Add this line to .gitignore:  .maestro-mac.conf" >&2
+    if [ -n "${MAESTRO_DRIVE_CONF_FOUND:-}" ] && git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+      if ! git -C "$DIR" check-ignore -q "$MAESTRO_DRIVE_CONF_FOUND" 2>/dev/null; then
+        echo "WARNING: $MAESTRO_DRIVE_CONF_FOUND is NOT gitignored." >&2
+        echo "  Add this line to .gitignore:  .maestro-drive.conf" >&2
         found=$((found + 1))
       fi
     fi

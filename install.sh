@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installer for maestro-remote-mac.
+# Installer for maestro-drive.
 #
 #   ./install.sh           install
 #   ./install.sh --link    symlink instead of copying, for working on the repo
@@ -23,7 +23,7 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 # Claude Code keeps mcpServers here, not in settings.json. The file also holds
 # project records and auth state, so it is never rewritten in place.
 CLAUDE_JSON="$HOME/.claude.json"
-LIB_DIR="$HOME/.local/share/maestro-remote-mac"
+LIB_DIR="$HOME/.local/share/maestro-drive"
 
 LINK=0; ASSUME_YES=0; DRY=0; BRIDGE_FLAG=ask
 for a in "$@"; do
@@ -97,9 +97,14 @@ if declare -F settings_merge >/dev/null; then
 
   # Remove this package's previous entries across every event, then let the
   # manifest add the current ones. That is what makes re-running safe.
+  #
+  # EVERY NAME, not just the current one: across the 21 Sep 2026 rename the
+  # entries already in the file say maestro-remote-mac, and a strip that knows
+  # only maestro-drive leaves them in place beside the new ones.
   tmp=$(mktemp)
-  jq --arg owns "$OWNS" '
-    def ours: (.command // "") | contains($owns);
+  names=$(printf '%s\n' "$OWNS" ${LEGACY_OWNS[@]+"${LEGACY_OWNS[@]}"} | jq -R . | jq -s .)
+  jq --argjson names "$names" '
+    def ours: (.command // "") as $c | any($names[]; . as $n | $c | contains($n));
     def strip_ours: map(.hooks |= map(select(ours | not))) | map(select((.hooks | length) > 0));
     if (.hooks | type) == "object" then
       .hooks |= with_entries(
@@ -193,6 +198,38 @@ if [ "$DRY" -eq 1 ]; then
   say; say "(dry run — nothing written)"; exit 0
 fi
 
+# The package was maestro-remote-mac until 21 Sep 2026 (BACKLOG item 98), and an
+# upgrade from before the rename leaves two of everything: a second copy of the
+# skill for Claude Code to load, with its own hooks, beside the one just
+# installed. The hook entries are already gone — the strip above matches every
+# name in LEGACY_OWNS — and this takes the directories.
+#
+# The lib directory is MOVED and not removed: it holds the install record and
+# the phase-A marker, which say what version is installed and that the SSH setup
+# was completed, and both are worth more than the thirty seconds it takes to
+# redo the second one.
+if [ "${#LEGACY_SKILL_DIRS[@]}" -gt 0 ] || [ "${#LEGACY_LIB_DIRS[@]}" -gt 0 ]; then
+  legacy_found=0
+  for d in ${LEGACY_LIB_DIRS[@]+"${LEGACY_LIB_DIRS[@]}"}; do
+    [ -d "$d" ] && [ "$d" != "$LIB_DIR" ] || continue
+    [ "$legacy_found" -eq 1 ] || { step "An earlier name is still installed"; legacy_found=1; }
+    mkdir -p "$LIB_DIR"
+    for f in "$d"/*; do
+      [ -e "$f" ] || continue
+      b=$(basename "$f")
+      # update-check.sh has just been written fresh; anything else is state.
+      [ "$b" = update-check.sh ] && continue
+      [ -e "$LIB_DIR/$b" ] || { mv "$f" "$LIB_DIR/$b" && ok "kept $b"; }
+    done
+    rm -rf "$d" && ok "removed $d"
+  done
+  for d in ${LEGACY_SKILL_DIRS[@]+"${LEGACY_SKILL_DIRS[@]}"}; do
+    [ -d "$d" ] && [ "$d" != "$CLAUDE_DIR/skills/$PKG" ] || continue
+    [ "$legacy_found" -eq 1 ] || { step "An earlier name is still installed"; legacy_found=1; }
+    rm -rf "$d" && ok "removed $d"
+  done
+fi
+
 if [ -x "$LIB_DIR/update-check.sh" ]; then
   step "Recording the installed version"
   "$LIB_DIR/update-check.sh" record-install "$VERSION" "$REPO"
@@ -215,7 +252,7 @@ fi
 # which is what the wizard is for. The marker is a phase A flag — networks
 # themselves are discoverable from the three files, so nothing else is tracked.
 step "SSH and network setup"
-WIZARD="$CLAUDE_DIR/skills/maestro-remote-mac/setup/wizard.sh"
+WIZARD="$CLAUDE_DIR/skills/maestro-drive/setup/wizard.sh"
 [ -x "$WIZARD" ] || WIZARD="$REPO/skill/setup/wizard.sh"
 if [ -e "$LIB_DIR/phase-a-done" ]; then
   ok "phase A done $(cat "$LIB_DIR/phase-a-done" 2>/dev/null)"

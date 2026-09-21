@@ -15,7 +15,7 @@
 # the dispatcher those seven call sites will use, and runners/flutter and
 # runners/ios are the worked examples that show the contract fits them.
 #
-# Which module is chosen comes from RUNNER and PLATFORM in .maestro-mac.conf,
+# Which module is chosen comes from RUNNER and PLATFORM in .maestro-drive.conf,
 # both defaulted in bin/config.sh to what this package does today.
 set -uo pipefail
 # shellcheck disable=SC1091
@@ -33,7 +33,7 @@ _module() {  # _module <framework|platform> -> path to the script
     platform)  name=${PLATFORM:-} ;;
     *) echo "runner: expected 'framework' or 'platform', got '$kind'" >&2; return 2 ;;
   esac
-  [ -n "$name" ] || { echo "runner: $kind module not set — RUNNER and PLATFORM live in .maestro-mac.conf" >&2; return 2; }
+  [ -n "$name" ] || { echo "runner: $kind module not set — RUNNER and PLATFORM live in .maestro-drive.conf" >&2; return 2; }
   if [ ! -x "$RUNNERS/$name/$kind.sh" ] && [ ! -r "$RUNNERS/$name/$kind.sh" ]; then
     echo "runner: no $kind module called '$name'." >&2
     echo "  looked for $RUNNERS/$name/$kind.sh" >&2
@@ -104,11 +104,11 @@ case "${1:-}" in
       1) printf 'RUNNER=%s   (%s)\n' "$(printf '%s' "$claims" | cut -f1)" "$(printf '%s' "$claims" | cut -f2)" ;;
       0) echo "runner detect: no framework module claims $REPO." >&2
          echo "  tried: $(_have framework)" >&2
-         echo "  set RUNNER in .maestro-mac.conf, or write a module: runners/README.md" >&2
+         echo "  set RUNNER in .maestro-drive.conf, or write a module: runners/README.md" >&2
          exit 1 ;;
       *) echo "runner detect: $n framework modules claim $REPO, so it is not decided:" >&2
          printf '%s\n' "$claims" | sed 's/^/  /' >&2
-         echo "  set RUNNER in .maestro-mac.conf." >&2
+         echo "  set RUNNER in .maestro-drive.conf." >&2
          exit 1 ;;
     esac
     ;;

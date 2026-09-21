@@ -22,21 +22,43 @@
 # strips every entry whose command contains OWNS before adding the current
 # ones, and both hook commands contain it by way of their skill path.
 
-PKG="maestro-remote-mac"
-OWNS="maestro-remote-mac"
+PKG="maestro-drive"
+OWNS="maestro-drive"
+
+# EVERY NAME THIS PACKAGE HAS HAD. It was maestro-remote-mac until 21 Sep 2026
+# (BACKLOG item 98), and an upgrade across a rename is the one case where the
+# OWNS strip above is not enough: the entries already in settings.json carry the
+# old name, so a strip that knows only the current one leaves them behind and
+# the user ends up with two gates on every Bash call and a SessionEnd hook
+# pointing into a directory that is no longer updated. install.sh and
+# uninstall.sh match a hook command against this list as well as against OWNS.
+LEGACY_OWNS=(
+  "maestro-remote-mac"
+)
+
+# Directories a previous name installed into. install.sh takes the skill
+# directory out once the new one is in place, and moves what the lib directory
+# held — the install record and the phase-A marker — across rather than losing
+# it. uninstall.sh sweeps both.
+LEGACY_SKILL_DIRS=(
+  "$CLAUDE_DIR/skills/maestro-remote-mac"
+)
+LEGACY_LIB_DIRS=(
+  "$HOME/.local/share/maestro-remote-mac"
+)
 
 # A skill installs as a whole directory. install.sh copies or symlinks it.
 DIRS=(
-  "skill:$CLAUDE_DIR/skills/maestro-remote-mac"
+  "skill:$CLAUDE_DIR/skills/maestro-drive"
 )
 FILES=()
 STATE_DIRS=()
 
 # Where the installed hooks live. install.sh resolves this at install time, so
 # a test run with CLAUDE_DIR redirected registers the temp path and never the
-# real one. Both commands contain "maestro-remote-mac" by way of that path,
+# real one. Both commands contain "maestro-drive" by way of that path,
 # which is what lets the OWNS strip in install.sh and uninstall.sh find them.
-HOOK_DIR="$CLAUDE_DIR/skills/maestro-remote-mac/hooks"
+HOOK_DIR="$CLAUDE_DIR/skills/maestro-drive/hooks"
 
 # "bash <path>" rather than the bare path: the sandbox refuses chmod +x under
 # ~/.claude, so a hook installed there cannot be relied on to carry its exec
@@ -76,7 +98,7 @@ settings_merge() {
 #
 # "bash" with the script as an argument, for the exec-bit reason above.
 MCP_NAME="maestro-mac"
-MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/mcp.sh"
+MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-drive/bin/mcp.sh"
 
 # The bridge server (BACKLOG item 96), which is optional and asked about at
 # install time. It starts and stops the helper that runs this package's scripts
@@ -87,7 +109,7 @@ MCP_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/mcp.sh"
 # python3 rather than bash, and the same exec-bit reasoning — the script is
 # named as an argument rather than run directly.
 MCP_BRIDGE_NAME="maestro-bridge"
-MCP_BRIDGE_SCRIPT="$CLAUDE_DIR/skills/maestro-remote-mac/bin/bridge-mcp.py"
+MCP_BRIDGE_SCRIPT="$CLAUDE_DIR/skills/maestro-drive/bin/bridge-mcp.py"
 
 # Reads $HOME/.claude.json on stdin and sets this package's servers, leaving
 # every other key and every other server untouched.
@@ -110,7 +132,7 @@ claude_json_merge() {
 }
 
 REGISTRATIONS=(
-  "skills/maestro-remote-mac"
+  "skills/maestro-drive"
   "settings.json  PreToolUse/Bash  hooks/gate-journey-first.sh"
   "settings.json  SessionEnd       hooks/rig-down-on-end.sh"
   ".claude.json   mcpServers       bin/mcp.sh as \"$MCP_NAME\""

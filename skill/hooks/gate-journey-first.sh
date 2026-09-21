@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse hook (matcher: Bash) — one speed bump per session on a
-# maestro-remote-mac driver call that taps literal coordinates.
+# maestro-drive driver call that taps literal coordinates.
 #
 # Why. Hand-walking a screen the project already has a journey for is the most
 # expensive habit in this workflow and the most repeated: raised 21 Aug, 3 Sep
@@ -30,8 +30,8 @@
 # session, so every distinct coordinate call gets its own bump.
 #
 # Ships with the skill. This script lives in the repo's skill/hooks/, which
-# install.sh puts at ~/.claude/skills/maestro-remote-mac/, so
-# ~/.claude/skills/maestro-remote-mac/hooks/gate-journey-first.sh is the
+# install.sh puts at ~/.claude/skills/maestro-drive/, so
+# ~/.claude/skills/maestro-drive/hooks/gate-journey-first.sh is the
 # installed copy the settings.json entry points at and it follows the skill. It
 # only ever fires on a command containing `driver.sh`, this skill's own binary,
 # so with the skill uninstalled it is dead weight — that is why it belongs to

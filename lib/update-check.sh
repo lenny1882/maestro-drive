@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily release check for maestro-remote-mac.
+# Daily release check for maestro-drive.
 #
 # Asks the GitHub Releases API what the latest release is, compares it against
 # the version recorded at install time, and writes the answer to a state file.
@@ -9,7 +9,7 @@
 # Releases are GitHub Releases tagged vX.Y.Z. The `/releases/latest` endpoint
 # is what decides "latest" here, so a release left as a draft or marked
 # pre-release is skipped automatically, no matter how its version number
-# sorts. update.sh downloads that release's maestro-remote-mac.tar.gz asset
+# sorts. update.sh downloads that release's maestro-drive.tar.gz asset
 # directly — no git involved, so this works the same whether the install
 # came from a git clone or a downloaded tarball.
 #
@@ -36,9 +36,9 @@
 
 set -uo pipefail
 
-PROJECT="maestro-remote-mac"
-DISPLAY_NAME="maestro-remote-mac"
-GITHUB_SLUG="lenny1882/maestro-remote-mac"
+PROJECT="maestro-drive"
+DISPLAY_NAME="maestro-drive"
+GITHUB_SLUG="lenny1882/maestro-drive"
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/$PROJECT"
 STAMP="$STATE/last-check"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Setup wizard for maestro-remote-mac — the SSH and network side.
+# Setup wizard for maestro-drive — the SSH and network side.
 #
 #   ./wizard.sh            run it
 #   ./wizard.sh --list     the networks configured, and which files know them
@@ -33,7 +33,7 @@
 
 set -euo pipefail
 
-LIB_DIR="${LIB_DIR:-$HOME/.local/share/maestro-remote-mac}"
+LIB_DIR="${LIB_DIR:-$HOME/.local/share/maestro-drive}"
 MARKER="$LIB_DIR/phase-a-done"
 SSH_CONFIG="${SSH_CONFIG:-$HOME/.ssh/config}"
 # Only a fallback for a machine with nothing configured yet. Once any Host block
@@ -275,10 +275,10 @@ phase_a() {
       # BatchMode=yes, under which a passphrase prompt is not a prompt but an
       # immediate failure with no explanation.
       if dry; then
-        would "create $key: ssh-keygen -t ed25519 -N '' -f $key -C maestro-remote-mac"
+        would "create $key: ssh-keygen -t ed25519 -N '' -f $key -C maestro-drive"
       else
         say "  Creating $key (ed25519, no passphrase)."
-        ssh-keygen -t ed25519 -N '' -f "$key" -C "maestro-remote-mac" >/dev/null
+        ssh-keygen -t ed25519 -N '' -f "$key" -C "maestro-drive" >/dev/null
         ok "created $key"
       fi
     fi
@@ -1729,7 +1729,7 @@ list_networks() {
 
 # --- main -------------------------------------------------------------------
 
-say "== maestro-remote-mac setup wizard"
+say "== maestro-drive setup wizard"
 dry && say "   --dry-run: everything is asked and read, nothing is written."
 
 command -v jq >/dev/null 2>&1 || {

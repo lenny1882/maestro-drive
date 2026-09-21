@@ -2,7 +2,7 @@
 # Launch the Maestro MCP server over SSH to the Mac.
 #
 # Replaces a bare `ssh <alias> maestro mcp` in the Claude config with a
-# launcher that picks the right SSH alias from .maestro-mac.conf, so the MCP
+# launcher that picks the right SSH alias from .maestro-drive.conf, so the MCP
 # server follows the Mac between networks the same way every bin/ script does.
 #
 # Claude config entry (settings.json or .claude.json):

@@ -4,9 +4,9 @@
 # The skill is used from any project, so the settings that vary — which Mac,
 # which app, which checkout — live with the project rather than with the skill:
 #
-#   1. $MAESTRO_MAC_CONF, if set
-#   2. .maestro-mac.conf, searched from $PWD upwards to /
-#   3. ~/.maestro-mac.conf
+#   1. $MAESTRO_DRIVE_CONF, if set
+#   2. .maestro-drive.conf, searched from $PWD upwards to /
+#   3. ~/.maestro-drive.conf
 #   4. the conf an earlier call in this session found by (2), remembered in
 #      $LDIR — see _CONF_CACHE below
 #
@@ -25,57 +25,57 @@
 # "not configured for this project" — which reads as a broken install rather
 # than a working one started from the wrong directory. Measured 15 Sep 2026: a
 # watcher died on exactly this and every relaunch afterwards had to carry
-# MAESTRO_MAC_CONF by hand (BACKLOG item 71).
+# MAESTRO_DRIVE_CONF by hand (BACKLOG item 71).
 #
 # The cache is per session, because $LDIR is ($TMPDIR is session-scoped in the
 # sandbox), and it is only ever written from a step-2 hit — an explicit
-# $MAESTRO_MAC_CONF is an override rather than a discovery, and ~/ is findable
+# $MAESTRO_DRIVE_CONF is an override rather than a discovery, and ~/ is findable
 # from anywhere already. A stale entry cannot mislead: the path is re-checked
 # for readability before it is used.
 _CONF_CACHE="${LDIR:-${TMPDIR:-/tmp}}/conf-path"
 
 _find_conf() {
-  if [ -n "${MAESTRO_MAC_CONF:-}" ]; then
-    [ -r "$MAESTRO_MAC_CONF" ] || {
-      echo "maestro-remote-mac: \$MAESTRO_MAC_CONF=$MAESTRO_MAC_CONF is not readable" >&2; return 1; }
-    echo "$MAESTRO_MAC_CONF"; return
+  if [ -n "${MAESTRO_DRIVE_CONF:-}" ]; then
+    [ -r "$MAESTRO_DRIVE_CONF" ] || {
+      echo "maestro-drive: \$MAESTRO_DRIVE_CONF=$MAESTRO_DRIVE_CONF is not readable" >&2; return 1; }
+    echo "$MAESTRO_DRIVE_CONF"; return
   fi
   local d="$PWD"
   while [ "$d" != "/" ]; do
-    [ -r "$d/.maestro-mac.conf" ] && {
-      printf '%s' "$d/.maestro-mac.conf" > "$_CONF_CACHE" 2>/dev/null
-      echo "$d/.maestro-mac.conf"; return; }
+    [ -r "$d/.maestro-drive.conf" ] && {
+      printf '%s' "$d/.maestro-drive.conf" > "$_CONF_CACHE" 2>/dev/null
+      echo "$d/.maestro-drive.conf"; return; }
     d=$(dirname "$d")
   done
-  [ -r "$HOME/.maestro-mac.conf" ] && { echo "$HOME/.maestro-mac.conf"; return; }
+  [ -r "$HOME/.maestro-drive.conf" ] && { echo "$HOME/.maestro-drive.conf"; return; }
   if [ -r "$_CONF_CACHE" ]; then
     local c; c=$(cat "$_CONF_CACHE" 2>/dev/null)
     [ -n "$c" ] && [ -r "$c" ] && { echo "$c"; return; }
   fi
 }
 
-MAESTRO_MAC_CONF_FOUND=$(_find_conf)
-if [ -n "$MAESTRO_MAC_CONF_FOUND" ]; then
+MAESTRO_DRIVE_CONF_FOUND=$(_find_conf)
+if [ -n "$MAESTRO_DRIVE_CONF_FOUND" ]; then
   # shellcheck disable=SC1090
-  . "$MAESTRO_MAC_CONF_FOUND"
+  . "$MAESTRO_DRIVE_CONF_FOUND"
   # Everything a project owns — its journeys, its app notes — is found relative
   # to the conf file, so a script run from a subdirectory still finds them.
-  PROJECT_DIR=$(cd "$(dirname "$MAESTRO_MAC_CONF_FOUND")" && pwd)
+  PROJECT_DIR=$(cd "$(dirname "$MAESTRO_DRIVE_CONF_FOUND")" && pwd)
 else
   PROJECT_DIR=$PWD
 fi
 
-# Named value sets: PROFILE=<name> layers .maestro-mac.conf.<name> over the
+# Named value sets: PROFILE=<name> layers .maestro-drive.conf.<name> over the
 # base, so a second store, tenant or region overrides only what differs.
 # The base conf sets the shared values (MAC_HOST, REPO, APP_ID); the profile
 # overrides the per-environment ones (APP_PIN, APP_STORE, APP_USER).
-if [ -n "${PROFILE:-}" ] && [ -n "$MAESTRO_MAC_CONF_FOUND" ]; then
-  _pfile="${MAESTRO_MAC_CONF_FOUND}.${PROFILE}"
+if [ -n "${PROFILE:-}" ] && [ -n "$MAESTRO_DRIVE_CONF_FOUND" ]; then
+  _pfile="${MAESTRO_DRIVE_CONF_FOUND}.${PROFILE}"
   if [ -r "$_pfile" ]; then
     # shellcheck disable=SC1090
     . "$_pfile"
   else
-    echo "maestro-remote-mac: profile '$PROFILE' not found — expected $_pfile" >&2
+    echo "maestro-drive: profile '$PROFILE' not found — expected $_pfile" >&2
     exit 1
   fi
 fi
@@ -106,7 +106,7 @@ fi
 case "$TRANSPORT" in
   ssh | local | bridge) ;;
   *)
-    echo "maestro-remote-mac: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
+    echo "maestro-drive: TRANSPORT='$TRANSPORT' is not a transport — use ssh, local or bridge." >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac
@@ -356,12 +356,12 @@ unset _n
 # because the conf search is the same in both.
 if [ "$TRANSPORT" = bridge ] && [ -n "$APP_ID" ] && [ -z "$BRIDGE_DIR" ]; then
   cat >&2 <<MSG
-maestro-remote-mac: TRANSPORT=bridge with no BRIDGE_DIR.
+maestro-drive: TRANSPORT=bridge with no BRIDGE_DIR.
 
 The device is on this machine and this process cannot reach it, so scripts go
 to a helper through a directory both sides can see. Nothing says where that is.
 
-  BRIDGE_DIR=<directory the helper serves>   in .maestro-mac.conf
+  BRIDGE_DIR=<directory the helper serves>   in .maestro-drive.conf
 
 The helper is remote/bridge.sh and it is started deliberately — it is not
 running in every session, by design.
@@ -379,10 +379,10 @@ fi
 if _fs_shared; then
   if [ -z "$APP_ID" ]; then
     cat >&2 <<MSG
-maestro-remote-mac: not configured for this project.
+maestro-drive: not configured for this project.
 
   TRANSPORT=$TRANSPORT  APP_ID=${APP_ID:-(unset)}
-  searched: \$MAESTRO_MAC_CONF, .maestro-mac.conf from \$PWD upwards, ~/.maestro-mac.conf,
+  searched: \$MAESTRO_DRIVE_CONF, .maestro-drive.conf from \$PWD upwards, ~/.maestro-drive.conf,
             and $_CONF_CACHE (this session's last find), which is $([ -r "$_CONF_CACHE" ] && cat "$_CONF_CACHE" || echo "empty")
 
 This transport drives a simulator or emulator on this machine, so MAC_HOST and
@@ -393,7 +393,7 @@ If this is a watcher, sampler or anything else started detached, the search is
 the problem and not the config: it walks up from \$PWD, and a detached process
 starts nowhere near the project. Pass the conf explicitly:
 
-  MAESTRO_MAC_CONF=<project>/.maestro-mac.conf <your command>
+  MAESTRO_DRIVE_CONF=<project>/.maestro-drive.conf <your command>
 
 Run the skill's bin/init.sh to write one. It asks this machine which toolchains
 and devices are here rather than guessing:
@@ -405,17 +405,17 @@ MSG
   fi
 elif [ -z "$MAC_HOST" ] || [ -z "$MAC_FQDN" ] || [ -z "$APP_ID" ]; then
   cat >&2 <<MSG
-maestro-remote-mac: not configured for this project.
+maestro-drive: not configured for this project.
 
   MAC_HOST=${MAC_HOST:-(unset)}  MAC_FQDN=${MAC_FQDN:-(unset)}  APP_ID=${APP_ID:-(unset)}
-  searched: \$MAESTRO_MAC_CONF, .maestro-mac.conf from \$PWD upwards, ~/.maestro-mac.conf,
+  searched: \$MAESTRO_DRIVE_CONF, .maestro-drive.conf from \$PWD upwards, ~/.maestro-drive.conf,
             and $_CONF_CACHE (this session's last find), which is $([ -r "$_CONF_CACHE" ] && cat "$_CONF_CACHE" || echo "empty")
 
 If this is a watcher, sampler or anything else started detached, the search is
 the problem and not the config: it walks up from \$PWD, and a detached process
 starts nowhere near the project. Pass the conf explicitly:
 
-  MAESTRO_MAC_CONF=<project>/.maestro-mac.conf <your command>
+  MAESTRO_DRIVE_CONF=<project>/.maestro-drive.conf <your command>
 
 Run the skill's bin/init.sh to write one. It can list the candidates for each
 value rather than guessing:
@@ -512,7 +512,7 @@ PY
   if [ -n "$_perm_missing" ]; then
     : > "$_PERM_WARNED"
     cat >&2 <<MSG
-maestro-remote-mac: no permission allow covers these calls, so each one will
+maestro-drive: no permission allow covers these calls, so each one will
 wait for a prompt:
 
 $(printf '%s\n' "$_perm_missing" | sed 's/^/  /; s/$/ .../')

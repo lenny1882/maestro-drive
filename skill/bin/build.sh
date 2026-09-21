@@ -46,7 +46,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 [ -n "${REPO:-}" ] || { echo "build: REPO is not set — the checkout on the Mac.
-  Add it to .maestro-mac.conf, or bin/init.sh --host <alias> --detect." >&2; exit 2; }
+  Add it to .maestro-drive.conf, or bin/init.sh --host <alias> --detect." >&2; exit 2; }
 
 detect=0; install_all=0; no_install=0; skip_build=0; artifact=; bargs=(); targets=()
 while [ $# -gt 0 ]; do
@@ -101,7 +101,7 @@ if [ "$detect" = 0 ] && [ "$no_install" = 0 ]; then
     targets+=("$DEV")
   else
     echo "build: no DEV, so nothing would be installed. Name one with DEV=<udid>,
-  pin it in .maestro-mac.conf, or pass --all for every booted simulator.
+  pin it in .maestro-drive.conf, or pass --all for every booted simulator.
   --no-install builds without installing." >&2
     exit 2
   fi
