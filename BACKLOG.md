@@ -1086,7 +1086,7 @@ three separate cases.
 Stage 4 unit is verified by stub and inventory only. 5.2 is where that is paid
 for.
 
-**5.2 One live run, end to end, against an emulator on this machine.** The
+**5.2 DONE 21 Sep — one live run, end to end, against an emulator on this machine.** The
 lesson item 87 paid for twice: a contract verified only on empty and error paths
 is not verified. `rig up`, a flow, a screenshot, `net.sh`, `prefs.sh`. The
 device is an Android emulator here rather than a simulator — this is a Linux
@@ -1094,7 +1094,38 @@ machine and there is no local iOS — so this unit runs `PLATFORM=android` and i
 the first caller `runners/android` has ever had. *Done when:* each has run
 locally and the result is recorded here, verb by verb.
 
-**5.3 `runners/android` stops being a stub, and 87's 4.4 is answered.** The
+**It ran, and not as this unit expected: through item 96's bridge.** Local
+transport as Stages 1 to 4 built it cannot reach a device from inside a Claude
+session on this machine — no `/dev/kvm`, its own PID and network namespaces —
+which is what item 96 exists for and what the run therefore exercised. On a Mac
+none of that applies and this unit's own transport is the one that runs.
+
+| verb | result |
+| --- | --- |
+| `platform.sh boot Pixel_6_Pro_API_34` | `emulator-5554` — the verb had to be written first |
+| `platform.sh devices --booted` | `emulator-5554  device  sdk_gphone64_x86_64` |
+| `bin/install.sh` | nothing copied, `/tmp/maestro-mac` made |
+| `bin/shot.sh` | 24KB and 47KB PNGs, pulled back and read |
+| `bin/prefs.sh` | the app's shared preferences, Flutter keys and all |
+| `bin/net.sh` | no VM service, correctly — the app was launched, not run under `flutter run` |
+| `bin/flow.sh` | `Launch app "com.prodirectsport.consumer.dev"... COMPLETED`, then the hierarchy and a screenshot |
+| `drivers.sh rig up` | not run: `driver-up` is item 87's 4.4, still unanswered |
+
+**The app was `com.prodirectsport.consumer.dev`**, the dev flavour of
+`pro-direct-flutter-consumer`, already installed on the emulator.
+
+**Three faults came out of it** — `nohup` where `setsid` was needed, `flow.sh`
+reading its flow after a round trip that ate it, and Maestro missing from the
+far side's PATH. Item 96's 3.2 has them in full; the third became item 95's
+third unit.
+
+**5.3 PART DONE 21 Sep — `runners/android` stops being a stub, and 87's 4.4 is
+answered.** Four verbs are now measured rather than documented: `boot` (written
+for 5.2, and rewritten once when its first emulator died), `devices --booted`,
+`screenshot` and `prefs-read`. The rest of the file, its banner and the driver
+trio are still as they were.
+
+ The
 module opens *NOTHING IN THIS FILE HAS BEEN RUN* and leaves three verbs
 unanswered on purpose, on the grounds that filling them in with something
 plausible is how somebody loses an afternoon. 5.2 gives it a caller, so this
