@@ -413,7 +413,7 @@ _up_one() {  # _up_one <udid> <live-map> <ports-map>
   # the URL to print is the relay's. Locally there is no relay and the driver's
   # own port is the address (item 94, 4.1) — printing a $DPORT here would name a
   # port nothing will ever listen on.
-  if [ "${TRANSPORT:-ssh}" = local ]; then
+  if _ports_here; then
     echo "$udid  driver:  DEV=$udid  ->  http://127.0.0.1:$port"
   else
     echo "$udid  relay:  DEV=$udid  ->  http://$(_urlhost):$(_dport_for "$port")"

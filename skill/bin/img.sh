@@ -142,7 +142,7 @@ _with_mac_sips() {
   # This backend means "send it to the machine that has sips". Locally that
   # machine is this one, and it has not got sips or it would have been chosen
   # two branches up. Say so rather than failing inside a sips that is not there.
-  if [ "$TRANSPORT" = local ]; then
+  if _fs_shared; then
     echo "img: no image tool on this machine — install ImageMagick (magick or convert)." >&2
     return 1
   fi

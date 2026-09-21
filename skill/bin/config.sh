@@ -112,6 +112,23 @@ case "$TRANSPORT" in
 esac
 export TRANSPORT
 
+# Two questions, not one, and most of the package cares about only one of them
+# (BACKLOG item 96). Local versus remote is really:
+#
+#   _fs_shared    the machine with the device shares this filesystem, so a push
+#                 is a copy and $RHELP is the checkout itself
+#                 ssh: no.  local: yes.  bridge: yes.
+#
+#   _ports_here   a port on that machine is reachable from THIS process without
+#                 a relay and without the proxy
+#                 ssh: no.  local: yes.  bridge: NO — the device is on this
+#                 machine and the sandbox is in the way, so the screen is
+#                 reached exactly as the Mac's is.
+#
+# Every branch that used to ask "is this local" is really asking one of these.
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
+
 # SSH host alias from ~/.ssh/config. It must be an alias with a Host block: a
 # bare name gets no ProxyCommand, and without one there is no route out of the
 # sandbox at all. Never a .local name. reference/setup.md §3.
@@ -191,7 +208,7 @@ export TRANSPORT
 #   local  RMODS=<checkout>/runners  RHELP=<checkout>/remote
 #
 # Both resolve across ssh to exactly what $RDIR resolved to before this split.
-if [ "$TRANSPORT" = local ]; then
+if _fs_shared; then
   _SKILL_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   : "${RMODS:=$_SKILL_DIR/runners}"
   : "${RHELP:=$_SKILL_DIR/remote}"
@@ -341,16 +358,23 @@ MSG
   return 1 2>/dev/null || exit 1
 fi
 
-if [ "$TRANSPORT" = local ] || [ "$TRANSPORT" = bridge ]; then
+# The address of the machine with the device, for the URLs this process builds
+# under TRANSPORT=bridge. The device is here, but this process reaches its ports
+# the way it reaches the Mac's — through the relay and the proxy — so it needs an
+# address that is routable from inside the sandbox rather than 127.0.0.1.
+# `hostname -I` reports it, and so does `ssh <mac> 'echo $SSH_CLIENT'`.
+: "${BRIDGE_HOST:=}"
+
+if _fs_shared; then
   if [ -z "$APP_ID" ]; then
     cat >&2 <<MSG
 maestro-remote-mac: not configured for this project.
 
-  TRANSPORT=local  APP_ID=${APP_ID:-(unset)}
+  TRANSPORT=$TRANSPORT  APP_ID=${APP_ID:-(unset)}
   searched: \$MAESTRO_MAC_CONF, .maestro-mac.conf from \$PWD upwards, ~/.maestro-mac.conf,
             and $_CONF_CACHE (this session's last find), which is $([ -r "$_CONF_CACHE" ] && cat "$_CONF_CACHE" || echo "empty")
 
-Local transport drives a simulator or emulator on this machine, so MAC_HOST and
+This transport drives a simulator or emulator on this machine, so MAC_HOST and
 MAC_FQDN are neither needed nor read. APP_ID is the only required value: the
 bundle id on iOS, the applicationId on Android.
 
@@ -424,7 +448,7 @@ fi
 # holding without anyone touching this block.
 _PERM_WARNED="${LDIR:-${TMPDIR:-/tmp}}/perm-warned"
 
-if [ "$TRANSPORT" != local ] && [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
+if [ "$TRANSPORT" = ssh ] && [ ! -e "$_PERM_WARNED" ] && command -v python3 >/dev/null 2>&1; then
   # First line is the wildcard to suggest; the rest are the uncovered commands.
   _perm_out=$(
     MAC_HOST="$MAC_HOST" PROJECT_DIR="$PROJECT_DIR" python3 - <<'PY' 2>/dev/null

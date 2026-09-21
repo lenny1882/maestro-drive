@@ -91,7 +91,7 @@ case "${1:-}" in
     # nothing leaves the box (item 94).
     claims=$(
       for n in $(_have framework); do
-        if [ "${TRANSPORT:-ssh}" = local ]; then
+        if _fs_shared; then
           out=$(sh "$RUNNERS/$n/framework.sh" claim "$REPO" 2>/dev/null)
         else
           out=$(_ssh "sh '$RRUNNERS/$n/framework.sh' claim '$REPO' 2>/dev/null")

@@ -45,7 +45,7 @@ _url() {
 # network this machine is sitting on. WALL_URL means the wall is reached some
 # other way — a tunnel, a reverse proxy — so it takes the open bind with it.
 _bind() {
-  if [ "${TRANSPORT:-ssh}" = local ] && [ -z "$WALL_URL" ]; then printf '127.0.0.1'
+  if _ports_here && [ -z "$WALL_URL" ]; then printf '127.0.0.1'
   else printf '0.0.0.0'
   fi
 }
