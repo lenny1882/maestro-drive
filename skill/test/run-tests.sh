@@ -57,6 +57,34 @@ for f in "$REPO"/runners/*/*.sh; do
   n="runners/$(basename "$(dirname "$f")")/$(basename "$f")"
   sh -n "$f" && ok "$n parses" || no "$n parses" "syntax error"
 done
+# A duplicate case label is silent: `case` takes the first arm and the second is
+# dead, so a verb the contract names answers "unknown verb" while the file looks
+# like it implements it. Both platform modules carried one until 21 Sep 2026 —
+# `container)` twice, with `data-container` unreachable behind it (item 94, 5.3).
+for f in "$REPO"/runners/*/platform.sh; do
+  [ -r "$f" ] || continue
+  n="runners/$(basename "$(dirname "$f")")/platform.sh"
+  dup=$(grep -oE '^[a-z][a-z0-9|-]*\)' "$f" | tr -d ')' | tr '|' '\n' | sort | uniq -d | tr '\n' ' ')
+  [ -z "$dup" ] && ok "$n has no duplicate case label" \
+    || no "$n has no duplicate case label" "these appear twice: $dup"
+done
+# Every verb runners/README.md's table names has to be reachable in the two
+# modules that claim to implement it. Refusing with exit 2 counts — answering
+# "unknown verb" does not.
+for m in ios ios-device android; do
+  f="$REPO/runners/$m/platform.sh"
+  [ -r "$f" ] || continue
+  have=$(grep -oE '^[a-z][a-z0-9|-]*\)' "$f" | tr -d ')' | tr '|' '\n')
+  miss=
+  for v in claim devices boot shutdown install installed-info container \
+           data-container prefs-read prefs-flush orientations screenshot \
+           driver-up driver-down driver-scan uninstall locked last-used \
+           capture-cmd; do
+    printf '%s\n' "$have" | grep -qx "$v" || miss="$miss $v"
+  done
+  [ -z "$miss" ] && ok "runners/$m/platform.sh answers every contract verb" \
+    || no "runners/$m/platform.sh answers every contract verb" "missing:$miss"
+done
 python3 -c "import py_compile,sys; py_compile.compile('$REPO/bin/resolve.py', doraise=True)" \
   && ok "resolve.py compiles" || no "resolve.py compiles" "syntax error"
 for f in ipad-landscape-keyboard-up ipad-landscape-system-alert iphone-portrait-keyboard-up; do

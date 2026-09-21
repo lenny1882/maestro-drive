@@ -107,25 +107,14 @@ container)
   xcrun simctl get_app_container "${1:?container <id> <app-id>}" "${2:?app-id}"
   ;;
 
-data-installed-info)
-  # A simulator can answer all four. The executable's mtime, NOT the bundle
-  # directory's: installing rewrites the directory, so the directory says when
-  # it was put there and the binary says what it is.
-  _id=${1:?installed-info <id> <app-id>}; _appid=${2:?app-id}
-  _c=$(xcrun simctl get_app_container "$_id" "$_appid" 2>/dev/null)
-  [ -n "$_c" ] && [ -d "$_c" ] || exit 1
-  echo "container=$_c"
-  _exe=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$_c/Info.plist" 2>/dev/null)
-  _bin=$_c; [ -n "$_exe" ] && [ -f "$_c/$_exe" ] && _bin=$_c/$_exe
-  _e=$(stat -f %m "$_bin" 2>/dev/null); [ -n "$_e" ] && echo "epoch=$_e"
-  _v=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$_c/Info.plist" 2>/dev/null)
-  _b=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$_c/Info.plist" 2>/dev/null)
-  [ -n "$_v" ] && echo "version=$_v"
-  [ -n "$_b" ] && echo "build=$_b"
-  exit 0
-  ;;
-
-container)
+data-container)
+  # HEADED `container)` A SECOND TIME UNTIL 21 Sep 2026, so `case` took the
+  # bundle container above and this was unreachable — `data-container`, which
+  # runners/README.md names and which bin/prefs.sh will call (item 87, unit 6),
+  # answered "unknown verb". Beside it sat `data-installed-info`, a verb the
+  # contract does not have, holding a second copy of `installed-info`'s body.
+  # Found in the Android module by running every contract verb against a device
+  # (item 94, 5.3); this module had the same pair, one line for one line.
   xcrun simctl get_app_container "${1:?data-container <id> <app-id>}" "${2:?app-id}" data
   ;;
 

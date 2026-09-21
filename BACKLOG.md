@@ -518,7 +518,7 @@ not run: an Apple or Temurin `.pkg` under `/Library/Java/JavaVirtualMachines`
 (rung 2) — there is no such Mac here — and Homebrew's keg-only `openjdk` reached
 by a `PATH` line, which rung 3 resolves through the keg symlink.
 
-## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep. Stages 1-3 built 18 Sep; Stage 4, 5.1, 5.2 and 5.4 on 21 Sep. 5.3 is part done and 5.5, the name, is untouched**
+## 94. Everything goes over SSH, including when the device is on this machine — **OPEN, raised 18 Sep. Stages 1-3 built 18 Sep; Stage 4 and all of Stage 5 but the name on 21 Sep. 5.5, the name, is the only unit left**
 
 The package is named for the case it was built for: a Linux box driving a Mac.
 A developer whose simulator or emulator is on the machine they are sitting at
@@ -1160,25 +1160,79 @@ reading its flow after a round trip that ate it, and Maestro missing from the
 far side's PATH. Item 96's 3.2 has them in full; the third became item 95's
 third unit.
 
-**5.3 PART DONE 21 Sep — `runners/android` stops being a stub, and 87's 4.4 is
-answered.** Four verbs are now measured rather than documented: `boot` (written
-for 5.2, and rewritten once when its first emulator died), `devices --booted`,
-`screenshot` and `prefs-read`. The rest of the file, its banner and the driver
-trio are still as they were.
+**5.3 DONE 21 Sep — `runners/android` stops being a stub, and 87's 4.4 is
+answered.** Every verb in the module has now run against `Pixel_6_Pro_API_34` —
+`sdk_gphone64_x86_64`, API 34 — over item 96's bridge, against Maestro 2.10.0
+and the SDK at `/mnt/sda/User/Programs/android-sdk`. The banner said *NOTHING IN
+THIS FILE HAS BEEN RUN*; it now says what ran and when.
 
- The
-module opens *NOTHING IN THIS FILE HAS BEEN RUN* and leaves three verbs
-unanswered on purpose, on the grounds that filling them in with something
-plausible is how somebody loses an afternoon. 5.2 gives it a caller, so this
-unit reads each verb against a real emulator and replaces what the documentation
-says with what the tool does. The verb that decides a contract rather than a
-line of code is the driver port: `bin/drivers.sh` exists only because Maestro's
-iOS client hardcodes 22087, and whether the Android client takes a port per
-device decides whether several-devices-at-once crosses platforms at all. Record
-the answer in item 87's 4.4, not here. *Files:*
-`skill/runners/android/platform.sh`. *Done when:* every verb in the module has
-run against a booted emulator, each one's header says measured rather than
-documented, and 4.4's question has an answer with the command that produced it.
+| verb | what running it showed |
+| --- | --- |
+| `claim` | `emulator-5554` claimed, `00008020-0011` refused |
+| `devices`, `--booted` | `emulator-5554  device  sdk_gphone64_x86_64` — the model key is the system image's name, never an id |
+| `boot` | 27s from kill to serial, the AVD name in and `emulator-5554` out |
+| `shutdown` | returns in 0.00s and the serial is still in `adb devices` 3s later |
+| `install` | `-r` over a 114MB APK in 1.1s; a wrong app-id exits 1 with the right sentence |
+| `installed-info` | `build=100`, `version=3.0.6-dev`, `when=2026-04-02 16:55:14` — dumpsys's order, not the awk's |
+| `container` | refuses, and now says why with the path it read |
+| `data-container` | **was unreachable**, see below |
+| `prefs-read` | 28 XML files concatenated, not one store |
+| `prefs-flush` | exit 0; nothing was pending, so it proves the keyevent and no more |
+| `orientations` | refuses: the answer is `aapt2 dump xmltree`, and it needs the APK |
+| `screenshot` | 1440x3120 8-bit RGBA PNG, 1.6MB |
+| `uninstall` | exit 0 whether the package was there or not |
+| `locked` | now implemented — 1 asleep, 1 awake, 2 for a serial that is not attached |
+| `last-used` | refuses; the qcow2 mtime answers a different question |
+| `capture-cmd` | prints a command whose binary is zero bytes on this machine |
+| driver trio | refuses; the port question is answered, in 87's 4.4 |
+
+**Three faults, each found by running the contract rather than reading it.**
+
+**Both platform modules had `container)` twice.** `case` takes the first arm, so
+the second was dead code — and the second was `data-container`, which
+`runners/README.md` names and which `bin/prefs.sh` will call in 87's unit 6. It
+answered *unknown verb* in `runners/ios` and `runners/android` alike. Beside it
+in both sat `data-installed-info`, a verb the contract does not have, holding a
+second copy of `installed-info`'s body. One line each to fix, and invisible to
+every reading either file has had.
+
+**`runners/ios-device` had no `uninstall` at all**, and `bin/driver.sh
+clearstate` calls it — against a phone that call was answering *unknown verb*
+rather than removing anything. Added from `devicectl`, marked not measured,
+because there is no phone on this machine.
+
+**`install` printed adb's chatter on stdout.** `adb install` says *Performing
+Streamed Install* and *Success*; `simctl install` says nothing. A caller reading
+this verb's stdout has to get the same thing from both, so adb's goes to stderr
+and the one line at the end stays.
+
+**Four verbs still refuse, and each refusal is now a measurement.** `container`
+— `pm path` returns a path with two hashed segments that every install
+regenerates, so it cannot stand in for a bundle identity, and
+`installed-info`'s `lastUpdateTime` is what appcheck is really asking for.
+`orientations` — `aapt dump badging` gives `supports-screens` and no
+orientation at all; `aapt2 dump xmltree --file AndroidManifest.xml` gives
+`android:screenOrientation=1`, so it needs aapt2 and the artifact, not aapt and
+a container path. `last-used` — a wrong answer would keep a forgotten emulator
+alive forever. The driver trio — 87's 4.4 to write, now that its question has an
+answer.
+
+**`locked` stopped refusing.** API 34 has no `mShowingLockscreen`; the keyguard's
+own state is `mIsShowing` under `KeyguardStateMonitor`, and `mDreamingLockscreen`
+is the screensaver. `mAwake` tracks the screen and not the lock — `KEYCODE_SLEEP`
+took `mAwake` false with `mIsShowing` still false — so reading `mAwake` would
+call a sleeping unlocked emulator locked, which is the mistake the verb exists to
+prevent. The true path is unmeasured and says so: this AVD has no secure lock.
+
+**Two tests, both regression guards for what was found.** No platform module may
+carry a duplicate case label, and `runners/ios`, `runners/ios-device` and
+`runners/android` must each answer every verb in the contract's table. Refusing
+with exit 2 counts; *unknown verb* does not.
+
+**Verified:** 555 passed, 0 failed in the skill's suite and 150 passed, 0 failed
+in the package's. *Files:* `skill/runners/android/platform.sh`,
+`skill/runners/ios/platform.sh`, `skill/runners/ios-device/platform.sh`,
+`skill/test/run-tests.sh`.
 
 **5.4 DONE 21 Sep — the docs stop describing a Mac across a network as the only
 shape.** A section in each of the three, not a rewrite.
@@ -2389,12 +2443,44 @@ answers `version`, `build` AND a timestamp through `dumpsys package`, which is
 more than a phone gives — so `container` being unanswerable there costs the
 check nothing. Written and unmeasured, like the rest of that module.
 
-**4.4 The Android driver trio.** Maestro's Android driver is an instrumented
-APK behind `adb forward`, sharing nothing with XCUITest. The question that
-decides the shape: **can its port be chosen per device?** `bin/drivers.sh`
-exists only because Maestro's iOS client hardcodes 22087, so if the Android
-client does the same, several-devices-at-once does not cross. *Needs an Android
-SDK and a booted emulator.*
+**4.4 The Android driver trio. THE QUESTION IS ANSWERED — 21 Sep 2026 — and the
+answer is yes.** Measured against Maestro 2.10.0 and `Pixel_6_Pro_API_34` over
+item 96's bridge, in item 94's 5.3. The three verbs are still to write; what
+follows is what they can be written against.
+
+**The port can be chosen, per run.** `maestro --driver-host-port <n>` is a
+global option — absent from `maestro --help`, present in `App.class` beside
+`--host` and `--port`. The default is `DEFAULT_DRIVER_HOST_PORT = 7001` in
+`maestro/android/AndroidDeviceConnection`, where `driverHostPort` is a
+constructor parameter rather than a literal at the call site, and it is
+validated at startup:
+
+```
+$ maestro --device emulator-5554 --driver-host-port 1 test flow.yaml
+Requested driver host port 1 is not available          # exit 1
+$ maestro --device emulator-5554 --driver-host-port 7099 test flow.yaml
+Launch app "com.prodirectsport.consumer.dev"... COMPLETED   # exit 0
+```
+
+So Android does **not** repeat the iOS client's hardcoded 22087, and several
+devices at once crosses platforms. `bin/drivers.sh`'s ports map has an Android
+half to allocate into.
+
+**The APKs are inside Maestro's own jar, not `~/.maestro/deps`.**
+`maestro-client.jar` carries `maestro-app.apk` (11.7MB) and `maestro-server.apk`
+(0.9MB). They install as `dev.mobile.maestro` and `dev.mobile.maestro.test` for
+the length of a run and are gone from `pm list packages` afterwards — so a scan
+for a resident package finds nothing between runs.
+
+**`adb forward --list` is not the `driver-scan` analogue.** It stayed empty for
+the whole of a flow, and no host socket appeared on 7001 or 7099 either:
+Maestro reaches the device through dadb, its own ADB client, so there is no
+forward registered with the adb server to scan for. Whatever `driver-scan`
+becomes on Android, it is not the iOS shape and it is not `adb forward`.
+
+**What is still unmeasured:** whether one emulator can hold one driver as one
+simulator does. There is a single emulator on this machine, so two at once could
+not be tried.
 
 **Stage 5 — what falls out once a second runner works.**
 
