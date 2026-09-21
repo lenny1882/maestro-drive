@@ -134,7 +134,7 @@ MSG
     echo "  a person folds this into reference/ and commits it."
     echo "  staging lives under the installed skill: safe across installs only"
     echo "  if this was installed with ./install.sh --link. Check with"
-    echo "  readlink -f ~/.claude/skills/maestro-remote-mac"
+    echo "  readlink -f ~/.claude/skills/maestro-drive"
     ;;
   *) echo "usage: $0 [path|init|add <section> <text> --measured|--once|--inferred|check|promote]" >&2; exit 2 ;;
 esac

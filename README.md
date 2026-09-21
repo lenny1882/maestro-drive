@@ -1,4 +1,4 @@
-# maestro-remote-mac
+# maestro-drive
 
 A Claude Code skill for driving a simulator or emulator — tapping, typing,
 swiping, reading the screen and running whole UI journeys — wherever the device
@@ -75,18 +75,18 @@ Needs `jq`. Install it on the machine you drive *from* — across a network that
 is the Linux box and not the Mac, where nothing is installed beyond Maestro
 itself; locally it is the one machine there is.
 
-    curl -fsSL https://github.com/lenny1882/maestro-remote-mac/releases/latest/download/maestro-remote-mac.tar.gz | tar -xz
-    cd maestro-remote-mac && ./install.sh
+    curl -fsSL https://github.com/lenny1882/maestro-drive/releases/latest/download/maestro-drive.tar.gz | tar -xz
+    cd maestro-drive && ./install.sh
 
 Or from a clone, if you intend to work on the toolkit:
 
-    git clone https://github.com/lenny1882/maestro-remote-mac && cd maestro-remote-mac
+    git clone https://github.com/lenny1882/maestro-drive && cd maestro-drive
     ./install.sh --link       # symlink, so edits in the checkout are live
     ./install.sh --dry-run    # show what would change, write nothing
     ./install.sh --yes        # no prompts
 
 **Prefer `--link` if you will ever edit the skill.** It puts a symlink at
-`~/.claude/skills/maestro-remote-mac` pointing at this repo's `skill/`, which
+`~/.claude/skills/maestro-drive` pointing at this repo's `skill/`, which
 means the live path and the source are the same directory. Without it they are
 not, and the failure that follows is a quiet one: three separate findings were
 once written straight into a published copy by sessions that believed it was the
@@ -136,7 +136,7 @@ Three details, if you are reading the entries it writes:
 
 `~/.claude.json` also holds your project records and login state. The installer
 never rewrites it in place: it writes a temp file beside it and renames, and
-keeps `~/.claude.json.bak-maestro-remote-mac`. Claude Code writes that file
+keeps `~/.claude.json.bak-maestro-drive`. Claude Code writes that file
 itself while running, and concurrent writes to it are a known way to corrupt it,
 so install from a terminal with no session running if you can.
 
@@ -156,7 +156,7 @@ from a downloaded tarball as well as a clone — no git needed.
     ./uninstall.sh                 ask before editing settings.json
     ./uninstall.sh --keep-settings leave settings.json alone
 
-Removes `~/.claude/skills/maestro-remote-mac`. If you added either hook to
+Removes `~/.claude/skills/maestro-drive`. If you added either hook to
 `settings.json` by hand, remove those entries yourself — the installer never put
 them there, so the uninstaller will not take them out.
 

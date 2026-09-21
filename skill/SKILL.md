@@ -1,5 +1,5 @@
 ---
-name: maestro-remote-mac
+name: maestro-drive
 description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-drive.conf.
 allowed-tools:
   - Bash
@@ -792,13 +792,13 @@ with this skill.
 Read the one that matches the problem; none of them are needed up front.
 
 **Where this skill lives, and where to write a finding about it.** The source is
-the `maestro-remote-mac` git repo, whose `skill/` directory is this one.
-`~/.claude/skills/maestro-remote-mac` is either a symlink to that `skill/`
+the `maestro-drive` git repo, whose `skill/` directory is this one.
+`~/.claude/skills/maestro-drive` is either a symlink to that `skill/`
 directory (`./install.sh --link`) or a copy of it taken from a release tarball
 (`./install.sh`). Check which before editing:
 
 ```sh
-readlink -f ~/.claude/skills/maestro-remote-mac
+readlink -f ~/.claude/skills/maestro-drive
 ```
 
 **If it is a copy, anything you write under the `~/.claude/skills` path is

@@ -1,4 +1,4 @@
-# maestro-remote-mac — backlog
+# maestro-drive — backlog
 
 One item remains — 87 — and it is not gated. **17 is done** — the package has a git
 repo, a version, a manifest, an installer and an update path. That releases
