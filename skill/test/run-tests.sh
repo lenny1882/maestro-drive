@@ -3213,6 +3213,41 @@ case "$mc_out" in
 esac
 
 echo
+echo "the helper stops when the session does (item 96, 2.2)"
+# A helper that outlives the session that asked for it is a shell channel into
+# this machine that nobody is watching — the thing the item's controls are
+# about. SessionEnd already takes down the rig; the bridge goes with it.
+mc_out=$(timeout 30 python3 "$REPO/bin/bridge-mcp.py" --status 2>&1)
+case "$mc_out" in
+  *"no helper"*) ok "the server answers on the command line, for a hook that is not a session" ;;
+  *) no "the server answers on the command line, for a hook that is not a session" "said: $mc_out" ;;
+esac
+
+mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
+mc_dir=$(printf '%s' "$mc_out" | sed -n 's/^serving //p' | head -1)
+if [ -n "$mc_dir" ] && [ -p "$mc_dir/control" ]; then
+  TRANSPORT=ssh MAESTRO_MAC_CONF=/dev/null timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
+  timeout 20 sh -c 'until [ ! -f "$1/pid" ]; do sleep 0.1; done' _ "$mc_dir" \
+    && ok "the SessionEnd hook stops it" \
+    || no "the SessionEnd hook stops it" "pid file still in $mc_dir"
+  # The log stays: what ran on this machine is the record, and a teardown that
+  # takes the evidence with it is worse than one that leaves a directory.
+  [ -s "$mc_dir/log" ] \
+    && ok "and leaves the log behind to be read" \
+    || no "and leaves the log behind to be read" "no log in $mc_dir"
+else
+  no "the SessionEnd hook stops it" "no helper started"
+  no "and leaves the log behind to be read" "no helper started"
+fi
+
+# The order matters: under the bridge, `rig down` travels through the helper.
+grep -n 'DRIVERS" rig down' "$REPO/hooks/rig-down-on-end.sh" | head -1 | cut -d: -f1 > "$TMP/rigline"
+grep -n 'BRIDGE_MCP" --stop' "$REPO/hooks/rig-down-on-end.sh" | head -1 | cut -d: -f1 > "$TMP/bridgeline"
+[ "$(cat "$TMP/rigline")" -lt "$(cat "$TMP/bridgeline")" ] 2>/dev/null \
+  && ok "and takes the rig down first, since the rig travels through it" \
+  || no "and takes the rig down first, since the rig travels through it" "wrong order in the hook"
+
+echo
 echo "the wall: MJPEG framing and the booted-device list (items 64, 65)"
 # The two pieces of remote/wall.py that are pure logic. Everything else in it
 # needs a Mac and a simulator, so it is exercised by running it, not here.

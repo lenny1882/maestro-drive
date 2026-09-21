@@ -287,8 +287,27 @@ the probe measured and what registering the server fixes.
 **Verified:** 536 passed, 0 failed, seven new; 145 passed, 0 failed in the
 package's suite.
 
-**2.2 It stops when the session does.** `rig-down-on-end.sh` is already the
+**2.2 DONE 21 Sep — it stops when the session does.** `rig-down-on-end.sh` is already the
 SessionEnd hook; the helper hangs off the same idea rather than inventing one.
+
+**The rig goes down first, and the order is the unit's one real decision.**
+Under `TRANSPORT=bridge` a `rig down` travels through the helper, so stopping
+the helper first would strand the very simulators the hook exists to take down.
+Both run in one detached subshell, in that order, so SessionEnd still never
+holds the terminal open.
+
+**Two entry points, one implementation.** A hook is not a Claude session and
+cannot call an MCP tool, so `bridge-mcp.py` answers `--stop`, `--status` and
+`--start` on the command line as well.
+
+**The log is left behind.** A teardown that takes the record of what ran on this
+machine with it would be worse than one that leaves a directory.
+
+**Stage 2 is complete.** The helper is started when asked, by one verb that
+takes no paths, and it ends with the session.
+
+**Verified:** 540 passed, 0 failed, four new; 145 passed, 0 failed in the
+package's suite.
 
 **Stage 3 — proof.**
 
