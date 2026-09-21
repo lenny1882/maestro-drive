@@ -29,7 +29,29 @@ if _fs_shared; then
 exec maestro mcp"
 fi
 
-_pick_host || exit 1
+# When no alias answers there is nothing to exec, and exiting here is what made
+# this failure unreadable: Claude Code reports CONNECTION_CLOSED, which names
+# the transport and not the Mac, the conf or the aliases tried. _pick_host
+# already writes the diagnosis; a process that has exited has no channel to
+# carry it. So the diagnosis becomes the server (BACKLOG item 97).
+#
+# stderr goes to a file rather than a $( ) capture because _pick_host sets
+# MAC_HOST in this shell, and a subshell would lose the alias it picked on the
+# path that works.
+_why=$(mktemp "${TMPDIR:-/tmp}/maestro-mcp-why.XXXXXX")
+if ! _pick_host 2>"$_why"; then
+  _msg="The Maestro device tools are not available: no ssh alias in this project's
+conf reached the Mac when the session started.
+
+$(cat "$_why")
+conf: ${MAESTRO_DRIVE_CONF_FOUND:-none found from $PWD}
+
+Fix the network or the conf's MAC_HOST list, then restart the session — this
+server cannot pick the connection up once the session is running."
+  rm -f "$_why"
+  exec python3 "$(dirname "$0")/unreachable-mcp.py" "$_msg"
+fi
+rm -f "$_why"
 
 exec ssh \
   -o BatchMode=yes \
