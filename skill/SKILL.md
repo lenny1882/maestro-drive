@@ -1,6 +1,6 @@
 ---
 name: maestro-remote-mac
-description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator app on the remote Mac. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-mac.conf.
+description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-mac.conf.
 allowed-tools:
   - Bash
   - Read
@@ -10,7 +10,18 @@ allowed-tools:
 
 # Maestro on a remote Mac
 
-Everything runs on the Mac; nothing is installed here. Two paths reach it:
+**Which machine has the device is a setting, not an assumption.** `TRANSPORT`
+in `.maestro-mac.conf` is `ssh` — a Mac across the network, what this package
+was built for and what everything below describes — or `local`, a simulator or
+emulator on the machine running the skill. In local transport `MAC_HOST` and
+`MAC_FQDN` are neither needed nor read, every URL is `127.0.0.1`, and the
+commands are the same ones. Where a line below says "on the Mac", read "on the
+machine with the device". `reference/setup.md` has what a local machine needs
+instead of the SSH setup; the local path is covered by the suite and has not yet
+driven a real device (BACKLOG item 94, 5.2).
+
+Across ssh, everything runs on the Mac and nothing is installed here. Two paths
+reach it:
 
 - **`bin/drivers.sh` and `bin/driver.sh`** — this toolkit runs its own
   XCUITest drivers, one per simulator, and talks straight to their HTTP API
