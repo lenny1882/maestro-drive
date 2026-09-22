@@ -1,11 +1,13 @@
 # maestro-drive — backlog
 
-**Four items are open — 87, 90, 93 and 97.** 87 is not gated; 90 waits on
+**Five items are open — 87, 90, 93, 97 and 99.** 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
-word of MCP. **17 is done** — the package has a git repo, a version, a manifest, an
-installer and an update path. That released **28**.
+word of MCP; 99 is gated on a second iPhone, and on one defect that makes the
+obvious two-phone command drive the wrong phone. **17 is done** — the package
+has a git repo, a version, a manifest, an installer and an update path. That
+released **28**.
 
 **70–82 were raised on 17 Sep** by an audit of the fourteen simulator-driving
 sessions of 15 and 16 Sep (PROJ-1812/1811 reproduction and fix verification).
@@ -93,6 +95,60 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 99. Two phones at once, and a phone with no cable — **OPEN, raised 22 Sep**
+
+Every physical-device measurement in `physical-device.md` is one phone on one
+cable: the XS Max, 21 Aug to 11 Sep. Two things have never been tried, and they
+fail differently, so they are two parts rather than one.
+
+**Part 1 — several connected devices at the same time.** The pieces are already
+per-device and none of them is a singleton. `runners/ios-device/iproxy.py` takes
+`<udid> <port>` and resolves a `DeviceID` per UDID, so one forwarder per phone
+shares `/var/run/usbmuxd`; `deviceup.sh` passes `TEST_RUNNER_PORT=$PORT` so each
+phone's on-device server binds its own port; `_dport_for` derives a distinct
+relay port; `DEVICE_MAP` is a multi-row file and `device.sh list` reads every
+row — the stdin trap fixed on 17 Sep was exactly the bug that hid the second
+row. So this is a test, not a build.
+
+**Except for one defect that makes the obvious command silently wrong.**
+`bin/device.sh:41` is `port=${3:-$DEVICE_PORT_BASE}` — a fixed 22187 with no
+free-port search, where simulators get one from `_port_for`
+(`bin/drivers.sh:78`). Bring a second phone up without naming a port and
+`deviceup.sh` finds `/status` already answering 200 on 22187, prints `already up
+on 22187`, starts nothing, and `_register` writes the second UDID onto the first
+phone's port. `DEV=<second-udid> bin/driver.sh tapon …` then taps the **first**
+phone and reports success. Give `device.sh` the same free-port walk, against
+`DEVICE_MAP` rather than the live runner map, before running the test.
+
+What the test has to answer, none of it guessable from one phone:
+
+- whether one Mac sustains two concurrent `xcodebuild test-without-building`
+  XCUITest sessions — item 74 found the simulator cost is a boot storm rather
+  than a steady-state load, and a device driver is a different shape
+- whether the tunnel drops of `physical-device.md` §5 get worse with two
+  tunnels, and whether the `lockState` keep-alive must run per device inside a
+  polling loop
+- whether `usbmuxd` multiplexes two forwarders cleanly, and whether bus power
+  through a hub is a factor
+
+**Part 2 — a device connected over wifi rather than USB.** This may not be a
+test at all. `iproxy.py` speaks to `/var/run/usbmuxd` and matches
+`SerialNumber` in a `ListDevices` reply; a network-paired device is reached
+through the CoreDevice tunnel, not necessarily through usbmuxd, so the forwarder
+may have no route to it and the whole §4 mechanism may need replacing rather
+than configuring. Establish that first — `ListDevices` with the cable out is a
+two-minute answer — before designing anything. If it is absent there, the
+question becomes whether `devicectl` exposes a forward, and §5's idling is the
+thing to expect to get worse, not better, with no cable holding the tunnel up.
+
+**Both parts are gated on hardware this machine does not have.** A second
+iPhone, and the wildcard development profile of §3 must list each device UDID —
+a phone not on the profile cannot run the re-signed driver at all. Part 2 also
+needs the phone and the Mac on one network that permits it, which is the same
+network the §97 aliases exist for.
 
 ---
 
