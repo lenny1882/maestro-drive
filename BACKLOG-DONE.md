@@ -174,6 +174,65 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 105. `settle` waits its full timeout on a screen that never reports static — **DONE 24 Sep: a dead driver is named in about 1 s, and a still tree settles when /isScreenStatic will not**
+
+Found during item 50's close. On the XS Max's home screen, where the App
+Library page was showing, the driver's `/isScreenStatic` answered `false` every
+time. So every action verb that settles afterwards waited its full 20 s and
+printed `settle: screen still moving after 20s`: three `driver.sh tap` calls
+took about 60 s. The driver was healthy the whole time: `/status` 200, no fatal.
+
+This is the same message a crashed driver produces first, which is why it read
+as item 50 again. That costs a misdiagnosis on top of the time.
+
+**Fix, to decide:**
+- When `settle` times out, say whether the driver is still answering, so a
+  screen that animates is not mistaken for a dead driver.
+- Consider a tree-comparison settle (two identical hierarchies in a row) as a
+  fallback when `/isScreenStatic` stays false. Measure it on the home screen
+  and on an app screen before adopting it.
+
+**Built 24 Sep, option (a) and one more.** `_settle` in `bin/driver.sh`:
+
+- stops after three empty answers from `/isScreenStatic` in a row and says
+  "the driver stopped answering after the last action — not a moving screen".
+  A dead driver used to be polled for the full limit and then reported as a
+  moving screen, which is how this morning's face-up crashes first read. It
+  now takes about 1 s.
+- on a real timeout, asks `/status`: "the driver is up, so the screen itself
+  keeps changing", with `SETTLE=0` named as the way past it, or "the driver is
+  not answering now".
+
+Four offline tests. Still open: option (b), the tree-comparison fallback, which
+would remove the wait rather than explain it; it needs measuring on a phone.
+
+Not checked: which element keeps the home screen moving (a widget, the clock,
+the App Library search field), and whether a simulator's home screen does the
+same.
+
+**Option (b) built 24 Sep, on measurements.** Twenty reads each on the XS Max,
+comparing parsed trees (the raw JSON differs read to read on an unchanged
+screen, so a byte hash says nothing):
+
+| screen | `/isScreenStatic` said moving | parsed tree same as the previous read | same while "moving" |
+| --- | --- | --- | --- |
+| Settings, still | 19 of 20 | 18 of 19 | 17 of 19 |
+| home screen, still | 17 of 20 | 19 of 19 | 16 of 19 |
+
+So on a phone `/isScreenStatic` is close to useless for a still screen, and the
+tree is not. After 2 s of "moving", `_settle` now reads the tree as well, and
+two identical parsed trees in a row count as settled — unless the tree holds an
+activity or progress indicator (element types 36 and 35), because a spinner
+can turn without changing the tree and settle is meant to wait for it. Live, on
+Settings: `settle` returned 0 in 7–9 s, three times of three, where it waited
+20 s and failed before. Two offline tests: a still tree settles in about 2 s,
+a tree with a spinner waits the limit.
+
+Not covered: a Flutter spinner that does not expose itself as an activity or
+progress indicator would be taken as settled.
+
+---
+
 ## 104. `driver.sh app` always answers springboard on a phone — **DONE 24 Sep: it was never a phone problem; the verb now names the app in front from the tree**
 
 Found during item 99. On both phones, `driver.sh app` returned

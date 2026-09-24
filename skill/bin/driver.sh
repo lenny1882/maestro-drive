@@ -364,13 +364,40 @@ _settle() {  # _settle [timeout-seconds]
   # permanent animation, a video, a spinner the app leaves running. Without
   # this every action would pay the full timeout and then report failure.
   [ "$limit" = 0 ] && return 0
-  local empty=0
-  while [ "$waited" -lt "$((limit * 5))" ]; do
+  local empty=0 deadline=$((SECONDS + limit)) tree prevtree=
+  while [ "$SECONDS" -lt "$deadline" ]; do
     case "$(curl -s -m 5 "$BASE/isScreenStatic" 2>/dev/null)" in
       *true*) return 0 ;;
       "")     empty=$((empty + 1)) ;;
       *)      empty=0 ;;
     esac
+    # After 2s of "moving", ask the tree too (BACKLOG item 105). On a phone
+    # /isScreenStatic said moving on 17-19 of 20 reads of a still screen, while
+    # the parsed tree was identical read to read on 16-17 of those — measured 24
+    # Sep 2026 on the XS Max, Settings and the home screen. Two identical trees
+    # count as settled, unless the tree holds an activity or progress indicator:
+    # a spinner can turn without changing the tree, and settle is meant to wait
+    # for it. A read costs about a second on a phone, so this only starts once
+    # the cheap answer has failed for a while.
+    if [ "$empty" = 0 ] && [ "$waited" -ge 10 ]; then
+      tree=$(curl -s -m 30 -X POST -H 'Content-Type: application/json' \
+               -d "{$_appids,\"excludeKeyboardElements\":true}" "$BASE/viewHierarchy" 2>/dev/null |
+             python3 -c '
+import hashlib, json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+def spins(n):
+    return n.get("elementType") in (35, 36) or any(spins(c) for c in n.get("children") or [])
+print("SPIN" if spins(d.get("axElement", d)) else
+      hashlib.md5(json.dumps(d, sort_keys=True).encode()).hexdigest())')
+      case "$tree" in
+        ""|SPIN) prevtree= ;;
+        "$prevtree") return 0 ;;
+        *) prevtree=$tree ;;
+      esac
+    fi
     # A dead driver answers nothing, and used to be waited out for the full
     # limit and then reported as a moving screen — the same words as a live
     # one, which sent a crashed phone back to be diagnosed as an animation

@@ -1737,6 +1737,33 @@ r4=$(rn)
 [ -z "$r4" ] && ok "restarts older than ten minutes do not count" || no "restarts older than ten minutes do not count" "got: $r4"
 
 echo
+echo "settle falls back to comparing trees, but not past a spinner (item 105)"
+# /isScreenStatic always false, as a still phone screen answered on 24 Sep; the
+# tree the same every read. Settles once the fallback starts (about 2s). With
+# an activity indicator (elementType 36) in the tree it must wait the limit.
+mkdir -p "$TMP/settle-tree" "$TMP/settle-spin"
+for kind in tree spin; do
+  et=9; [ "$kind" = spin ] && et=36
+  cat > "$TMP/settle-$kind/curl" <<CURL
+#!/usr/bin/env bash
+for a in "\$@"; do case "\$a" in http*) u=\$a;; esac; done
+case "\$u" in
+  */status) printf 200 ;;
+  */isScreenStatic) printf '%s' '{"isScreenStatic":false}' ;;
+  */viewHierarchy) printf '%s' '{"axElement":{"elementType":2,"label":"Settings","children":[{"elementType":$et,"label":"x"}]}}' ;;
+  *) printf '{}' ;;
+esac
+CURL
+  chmod +x "$TMP/settle-$kind/curl"
+done
+t0=$SECONDS; PATH="$TMP/settle-tree:$PATH" timeout 30 bash "$ADIR/driver.sh" settle 8 >/dev/null 2>&1; rc=$?; t=$((SECONDS - t0))
+[ "$rc" = 0 ] && [ "$t" -lt 7 ] && ok "a still tree settles although /isScreenStatic says moving (${t}s)" \
+  || no "a still tree settles although /isScreenStatic says moving" "rc=$rc after ${t}s"
+t0=$SECONDS; PATH="$TMP/settle-spin:$PATH" timeout 30 bash "$ADIR/driver.sh" settle 4 >/dev/null 2>&1; rc=$?; t=$((SECONDS - t0))
+[ "$rc" = 1 ] && [ "$t" -ge 4 ] && ok "a tree with a spinner is not taken as settled" \
+  || no "a tree with a spinner is not taken as settled" "rc=$rc after ${t}s"
+
+echo
 echo "deviceup.sh names the failure the log shows (item 103)"
 # _why is extracted and fed the lines each failure actually wrote on 24 Sep.
 why() { printf '%b' "$1" > "$TMP/why.log"

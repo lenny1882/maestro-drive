@@ -1,7 +1,7 @@
 # maestro-drive — backlog
 
-**Eight items are open — 87, 90, 93, 97, 99, 100, 105 and 106.** 101, 103 and 104 were
-done 24 Sep. 102 was done
+**Seven items are open — 87, 90, 93, 97, 99, 100 and 106.** 101, 103, 104 and 105
+were done 24 Sep. 102 was done
 24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
@@ -170,44 +170,6 @@ clean environment, capture it while a `driver.sh tree` loop runs.
 
 ---
 
-## 105. `settle` waits its full timeout on a screen that never reports static — **OPEN, raised 24 Sep; option (a) built 24 Sep, the tree-comparison fallback not started**
-
-Found during item 50's close. On the XS Max's home screen, where the App
-Library page was showing, the driver's `/isScreenStatic` answered `false` every
-time. So every action verb that settles afterwards waited its full 20 s and
-printed `settle: screen still moving after 20s`: three `driver.sh tap` calls
-took about 60 s. The driver was healthy the whole time: `/status` 200, no fatal.
-
-This is the same message a crashed driver produces first, which is why it read
-as item 50 again. That costs a misdiagnosis on top of the time.
-
-**Fix, to decide:**
-- When `settle` times out, say whether the driver is still answering, so a
-  screen that animates is not mistaken for a dead driver.
-- Consider a tree-comparison settle (two identical hierarchies in a row) as a
-  fallback when `/isScreenStatic` stays false. Measure it on the home screen
-  and on an app screen before adopting it.
-
-**Built 24 Sep, option (a) and one more.** `_settle` in `bin/driver.sh`:
-
-- stops after three empty answers from `/isScreenStatic` in a row and says
-  "the driver stopped answering after the last action — not a moving screen".
-  A dead driver used to be polled for the full limit and then reported as a
-  moving screen, which is how this morning's face-up crashes first read. It
-  now takes about 1 s.
-- on a real timeout, asks `/status`: "the driver is up, so the screen itself
-  keeps changing", with `SETTLE=0` named as the way past it, or "the driver is
-  not answering now".
-
-Four offline tests. Still open: option (b), the tree-comparison fallback, which
-would remove the wait rather than explain it; it needs measuring on a phone.
-
-Not checked: which element keeps the home screen moving (a widget, the clock,
-the App Library search field), and whether a simulator's home screen does the
-same.
-
----
-
 ## 100. Journeys are not Maestro tests — **OPEN, raised 24 Sep; gated on the setup screens until Flutter 3.49 is stable**
 
 The default driving path does not use Maestro. `driver.sh` talks straight to the
@@ -268,9 +230,20 @@ upstream report of it was found.
 - whether a journey → flow converter is worth writing, or flows are written by
   hand from here on
 - whether the byte-identical-tree check has a Maestro equivalent, since Maestro
-  reports COMPLETED for a tap that landed on nothing
+  reports COMPLETED for a tap that landed on nothing. **Partly answered 24
+  Sep from the 2.8.0 docs mirror:** `tapOn` takes `retryTapIfNoChange`, which
+  "retries the tap if the UI hierarchy does not change after the initial tap"
+  (`reference__commands-available__tapon.md`). That is the same check, used to
+  retry. The docs do not say whether the step then fails when the retry does
+  not change the hierarchy either; a flow would still need an assertion after
+  it. Note from item 105: the raw hierarchy JSON differs read to read on an
+  unchanged screen, so any comparison has to be of the parsed tree.
 - what the per-run startup costs a session that iterates on one flow, and
-  whether `maestro test --continuous` removes it
+  whether `maestro test --continuous` removes it. **Not answered:** the docs
+  mirror says only "Run tests in continuous mode"
+  (`maestro-cli__maestro-cli-commands-and-options.md`). Measuring it takes a
+  `maestro test` run, which stops that phone's driver (`bin/flow.sh:7-10`), so
+  it was left for a session that is not driving.
 - how `flow.sh` and several devices fit together, given each run takes that
   device's driver down
 
