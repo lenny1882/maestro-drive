@@ -1,6 +1,6 @@
 # maestro-drive — backlog
 
-**Ten items are open — 87, 90, 93, 97, 99, 100, 101, 103, 104 and 105.** 102 was done
+**Eleven items are open — 87, 90, 93, 97, 99, 100, 101 and 103–106.** 102 was done
 24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
@@ -86,7 +86,7 @@ It is in `BACKLOG-DONE.md`.
 **87 was raised on 18 Sep**, the first item about what this package is *for*
 rather than how it works. It is the oldest item still open here.
 
-**Next item number: 106.** Items 1–105 are allocated; new items start from 106.
+**Next item number: 107.** Items 1–106 are allocated; new items start from 107.
 
 **98 is done and is in `BACKLOG-DONE.md`.** The package is `maestro-drive`
 everywhere — the repo on GitHub, the conf, the installed skill and lib
@@ -98,6 +98,54 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 106. The test suites fail in a shell that has sourced a project conf — **OPEN, raised 24 Sep; reproduced, 9 tests named**
+
+Four times on 24 Sep a suite reported failures, and passed straight after when
+rerun alone:
+
+| run | in the same Bash call, before it | result | rerun alone |
+| --- | --- | --- | --- |
+| skill suite | `. bin/lib.sh` from the hugoboss project, then `device.sh list` | 562 passed, 9 failed | 571 passed, 0 failed |
+| packaging suite | the same call | 155 passed, 3 failed | 158 passed, 0 failed |
+| packaging suite | nothing; a `driver.sh tree` and `find` ran after it | 156 passed, 2 failed | 158 passed, 0 failed |
+| packaging suite | a stray, non-executable `skill/bin/device-old.sh` | 155 passed, 3 failed | 158 passed, 0 failed |
+
+The last row is explained. **The first two are probably environment, not
+concurrency:** sourcing `lib.sh` loads a project's conf into the shell — `DEV`,
+`APP_ID`, `MAC_HOST`, `LDIR`, `RDIR`, `SCREEN_W` and the rest — and the suites
+then ran with all of it set. A test that relies on a variable being unset, or
+on its own default, sees the project's value instead. The third row had nothing
+sourced; the phones were being driven in the same minute from other calls, so
+shared state (`LDIR`'s `devices.map`, the Mac's `RDIR`, a port) is the
+remaining suspect. The names of the failing tests were not captured in any of
+the four.
+
+A suite that is red only in some shells reads as "the change broke it", and
+costs a rerun at best.
+
+**Reproduced 24 Sep:** after `. bin/lib.sh` in the hugoboss project, the skill
+suite gives 568 passed, 9 failed, and the packaging suite 157 passed, 1 failed
+(its "the skill's own suite passes from the installed path", which is the same
+9). The conf sets values as `: "${APP_ID:=…}"`, so a value already in the
+environment wins, and the tests got `oneiota.e.hugoboss.runner.dev` where they
+expected their own. The nine:
+
+- `notes.sh init writes the file from the template`, `a measured note is
+  stamped measured`, `--once is recorded as seen once`, `--inferred is
+  recorded` — no `app-notes.md` was written in the test's project
+- `a local conf loads with APP_ID and nothing else`, `an unconfigured local
+  project is told the local shape` — "not configured for this project"
+- `and it is not asked for a Mac it does not have` — printed the ssh diagnostic
+- `conf: upward search still works`, `conf: a detached cwd falls back to the
+  cache` — got the hugoboss `APP_ID`
+
+**Fix:** have each suite start from a clean
+environment (unset every variable `config.sh` can set, or run under `env -i`
+with only `PATH` and `HOME`) and its own `LDIR`. If the third row recurs with a
+clean environment, capture it while a `driver.sh tree` loop runs.
 
 ---
 
