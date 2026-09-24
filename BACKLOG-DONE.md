@@ -174,6 +174,171 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 99. Two phones at once, and a phone with no cable — **DONE 24 Sep: two phones driven at once over USB, and a phone driven over wifi for 30 minutes**
+
+**Part 2, 24 Sep**, on the same two phones with both cables out. The Mac was
+on the office wired network (10.0.52.250), Xcode 27.0.
+
+- **usbmuxd lists nothing** once the cables are out, so `iproxy.py` has no
+  device id to connect to. CoreDevice still reaches both phones:
+  `transportType: localNetwork`, a point-to-point tunnel per phone (the phone
+  at `<prefix>::1`, the Mac at `::2` on a `utun`). The tunnel address changed
+  four times in the day, including across a `devicectl` call that woke it.
+- **The prebuilt driver cannot be reached over wifi.** It starts over wifi (6 s,
+  faster than USB), but its server listens on the phone's `127.0.0.1` only —
+  `XCTestHTTPServer.swift`: `.inet(ip4: "127.0.0.1", ...)`. The tunnel address
+  refused the connection. `devicectl` has no port forward.
+- **A driver built from source with one patch can.** The patch
+  (`runners/ios-device/driver/bind-address.patch`) takes the listen address
+  from `TEST_RUNNER_BIND`, falling back to `127.0.0.1`. Built from the
+  `cli-2.8.0` tag by `driver/build.sh` (35 s; Xcode 27 needs deployment target
+  15.0) and signed by `driver/sign.sh` with the same wildcard profile as the
+  prebuilt driver. Signing has to happen in Terminal on the Mac: over ssh every
+  `codesign` fails with `errSecInternalComponent`. Launched bound to the
+  iPhone 11's tunnel address: `/status` 200 in 7 s, `/viewHierarchy` (91 KB) in
+  1.0 s, `/touch` in 0.46 s, and the tap opened Weather on the phone.
+  WebDriverAgent is driven over wifi the same way (quern-dev/quern issue #163).
+  It listens on every interface; this listens on the tunnel only, so nothing
+  else on the Wi-Fi can drive the phone.
+- **Wired into the toolkit.** `deviceup.sh` asks `devicectl` for the transport.
+  Over wifi it uses the newest signed build from `build.sh`, reads the tunnel
+  address after the tunnel wake (read before it, the driver was given a gone
+  address: `Bind(49): Can't assign requested address`), starts `iproxy.py
+  --tunnel <address>` so everything downstream still talks to 127.0.0.1:port,
+  and runs only `testHttpServer`. `device.sh up <udid>` is the same command for
+  either transport.
+
+**Resolved the same afternoon — it was never wifi.** The 30–100 s deaths below
+were measured before `remoted` was restarted on the Mac (item 46). After it,
+the XS Max with no cable, three sessions in a row through `deviceup.sh`, each
+with `/status` every 5 s and the tunnel address read every 10 s:
+
+| session | came up | tunnel address | result |
+| --- | --- | --- | --- |
+| 1, 16:17 | 12 s | `fdc9:f26b:67b6::1` | alive at 600 s |
+| 2, 16:28 | 12 s | the same | alive at 600 s |
+| 3, 16:38 | 12 s | the same | alive at 600 s |
+
+The address held for all 30 minutes, so the tunnel being rebuilt was not the
+cause either. Wifi driving works end to end: the source-built driver listening
+on the tunnel address, `device.sh up` choosing wifi by itself, and sessions as
+long as over USB.
+
+**Before the restart (kept for the record): the XCTest session died within 30–100 s over
+wifi**, with `The connection was invalidated` (CoreDevice, Mercury error
+1001). It is not the rebuild: the prebuilt driver's session died the same way
+at 103 s. It is not idleness either: `/status` every 5 s through the tunnel did
+not keep it alive. Over USB the same drivers lived more than 6 minutes the
+same morning. Item 46's automatic restart revives it in 6–20 s, so every call
+after a death costs a restart. Apple's forums report the same error for wifi
+testing, with no fix found.
+
+**Open for Part 2:**
+- Why the session dies. Candidates: the tunnel being rebuilt (its address
+  changes), Wi-Fi power saving on the phone, or CoreDevice's own session
+  timeout. Watching `tunnelIPAddress` across a death would separate the first
+  from the others.
+- `build.sh` replaces its build directory, so `sign.sh` has to be rerun from
+  Terminal on the Mac after every build. The signed build now at
+  `~/maestro-drive-driver/build-2.8.0` is a copy of the first, hand-run build
+  (same tag, same patch), because `build.sh`'s own output was still unsigned.
+
+
+**Part 1, done 24 Sep** on an iPhone 11 (`00008030-001858493C91402E`, iOS
+26.5.2) and the XS Max (`00008020-000A396C3606002E`, iOS 18.7.9), both on USB
+to the Mac. Both UDIDs were already on the driver's profile, which expires 21
+Aug 2027.
+
+- **The fix.** `_device_port` (`bin/device.sh`) walks up from 22187 past every
+  port another phone holds, in `DEVICE_MAP` and in the live forwarders from
+  `platform.sh driver-scan`. A phone keeps its own port across restarts, and a
+  port asked for that belongs to another phone is refused. There are seven
+  offline tests. The defect was not reproduced on the old code first.
+- **Live:** with no port given, the iPhone 11 came up on 22187 in 11 s and the
+  XS Max on 22188 in 17 s. Each port drove only its own phone: Settings on one,
+  Calendar on the other. Every item 46 restart went back to the same port.
+- **Two drivers at once:** 30 rounds of reading both trees in parallel, 5 s
+  apart, all succeeded at 0.9–1.5 s per read. Both drivers were still up after
+  3 minutes idle. Parallel taps landed on both phones once they were upright.
+- **One log per phone.** `deviceup.sh` now writes `~/devdrv-<udid>.log`. The
+  shared `~/devdrv.log` was emptied by the second phone's bring-up while the
+  first phone's `xcodebuild` was still writing to it.
+
+**What the run turned up, not yet fixed — filed as items 101–104:**
+
+- **A forwarder that outlives a reconnect points at a dead phone.** `iproxy.py`
+  resolves the usbmux device id once, when it starts. The iPhone 11 got a new
+  id when it was stood up, and its forwarder kept sending to "device 5": the
+  runner said it was serving, and every connection was reset. `deviceup.sh`
+  keeps an existing forwarder, so item 46 restarts never replaced it; only
+  `device.sh down` then `up` did. `deviceup.sh` should check the forwarder's id
+  against a fresh `ListDevices` before it keeps the forwarder.
+- **`resolve.py` applies the Flutter 1/3-scale correction to native apps.**
+  Calendar's tree has a 1242×2688 node at −414,−896. `resolve.py` reads it as a
+  coordinate-space marker and moves Continue from y=781 to y=559. `tapon`
+  returned rc=0 for a tap that hit nothing. Item 50's 11 Sep "x=−892" was the
+  same mis-transform.
+- **The XS Max's driver install failed with `CoreDeviceError` 3002** (IXRemote
+  6, "Connection interrupted") four times in a row, at 72 s each, with nothing
+  else using its tunnel. A restart of the phone fixed it, and the install then
+  took 3 s. `deviceup.sh` reports this as the item 46 XCTest death, which it is
+  not: it fails while Xcode is installing the driver.
+- **`driver.sh app` answers `com.apple.springboard` on a phone** whatever is in
+  front, so it cannot tell two phones apart.
+
+
+Every physical-device measurement in `physical-device.md` is one phone on one
+cable: the XS Max, 21 Aug to 11 Sep. Two things have never been tried, and they
+fail differently, so they are two parts rather than one.
+
+**Part 1 — several connected devices at the same time.** The pieces are already
+per-device and none of them is a singleton. `runners/ios-device/iproxy.py` takes
+`<udid> <port>` and resolves a `DeviceID` per UDID, so one forwarder per phone
+shares `/var/run/usbmuxd`; `deviceup.sh` passes `TEST_RUNNER_PORT=$PORT` so each
+phone's on-device server binds its own port; `_dport_for` derives a distinct
+relay port; `DEVICE_MAP` is a multi-row file and `device.sh list` reads every
+row — the stdin trap fixed on 17 Sep was exactly the bug that hid the second
+row. So this is a test, not a build.
+
+**Except for one defect that makes the obvious command silently wrong.**
+`bin/device.sh:41` is `port=${3:-$DEVICE_PORT_BASE}` — a fixed 22187 with no
+free-port search, where simulators get one from `_port_for`
+(`bin/drivers.sh:78`). Bring a second phone up without naming a port and
+`deviceup.sh` finds `/status` already answering 200 on 22187, prints `already up
+on 22187`, starts nothing, and `_register` writes the second UDID onto the first
+phone's port. `DEV=<second-udid> bin/driver.sh tapon …` then taps the **first**
+phone and reports success. Give `device.sh` the same free-port walk, against
+`DEVICE_MAP` rather than the live runner map, before running the test.
+
+What the test has to answer, none of it guessable from one phone:
+
+- whether one Mac sustains two concurrent `xcodebuild test-without-building`
+  XCUITest sessions — item 74 found the simulator cost is a boot storm rather
+  than a steady-state load, and a device driver is a different shape
+- whether the tunnel drops of `physical-device.md` §5 get worse with two
+  tunnels, and whether the `lockState` keep-alive must run per device inside a
+  polling loop
+- whether `usbmuxd` multiplexes two forwarders cleanly, and whether bus power
+  through a hub is a factor
+
+**Part 2 — a device connected over wifi rather than USB.** This may not be a
+test at all. `iproxy.py` speaks to `/var/run/usbmuxd` and matches
+`SerialNumber` in a `ListDevices` reply; a network-paired device is reached
+through the CoreDevice tunnel, not necessarily through usbmuxd, so the forwarder
+may have no route to it and the whole §4 mechanism may need replacing rather
+than configuring. Establish that first — `ListDevices` with the cable out is a
+two-minute answer — before designing anything. If it is absent there, the
+question becomes whether `devicectl` exposes a forward, and §5's idling is the
+thing to expect to get worse, not better, with no cable holding the tunnel up.
+
+**Both parts are gated on hardware this machine does not have.** A second
+iPhone, and the wildcard development profile of §3 must list each device UDID —
+a phone not on the profile cannot run the re-signed driver at all. Part 2 also
+needs the phone and the Mac on one network that permits it, which is the same
+network the §97 aliases exist for.
+
+---
+
 ## 106. The test suites fail in a shell that has sourced a project conf — **DONE 24 Sep: a clean environment, and no pipe into grep -q that can lose its writer**
 
 Four times on 24 Sep a suite reported failures, and passed straight after when
