@@ -41,6 +41,15 @@ if [ -z "${MAESTRO_DRIVE_CLEAN_ENV:-}" ]; then
     bash "${BASH_SOURCE[0]}" "$@"
 fi
 
+# grep that reads its whole input (BACKLOG item 106). Under pipefail,
+# `writer | drain_grep -q` fails when grep matches, exits, and the writer — bash's
+# printf writes one line per write(2) into a pipe — is killed by SIGPIPE on its
+# next line: a false FAIL on text that matched. Rare, because it needs the
+# scheduler to run grep between two of the writer's writes; seen 24 Sep as two
+# different tests failing once each in five runs. Assertions on a variable use
+# a here-string instead; this is for the ones that pipe a command.
+drain_grep() { local r=0; grep "$@" || r=$?; cat > /dev/null; return "$r"; }
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
@@ -224,10 +233,10 @@ mkdir -p "$TMP/wiz"
 printf 'Host mac-somewhere\n\tHostname 10.9.9.9\n\tUser someone\n\tIdentityFile ~/.ssh/somekey\n' > "$TMP/wiz/ssh_config"
 touch "$HOME/.ssh_somekey"
 out=$(SSH_CONFIG="$TMP/wiz/ssh_config" LIB_DIR="$TMP/wiz/lib" "$W" --status 2>&1)
-printf '%s' "$out" | grep -q "mac-somewhere" \
+grep -q "mac-somewhere" <<< "$out" \
   && ok "--status finds a configured network" \
   || no "--status finds a configured network" "$out"
-printf '%s' "$out" | grep -q "no marker" \
+grep -q "no marker" <<< "$out" \
   && ok "--status reports phase A as not done when the marker is absent" \
   || no "--status reports phase A as not done when the marker is absent" "$out"
 [ ! -e "$TMP/wiz/lib/phase-a-done" ] \
@@ -320,31 +329,31 @@ fresh_rc=$?
   && ok "fresh machine: the wizard runs to completion" \
   || no "fresh machine: the wizard runs to completion" "exit $fresh_rc: $(printf '%s' "$fresh_out" | tail -3)"
 
-printf '%s' "$fresh_out" | grep -q "unbound variable" \
+grep -q "unbound variable" <<< "$fresh_out" \
   && no "fresh machine: no unbound variable" "$(printf '%s' "$fresh_out" | grep 'unbound')" \
   || ok "fresh machine: no unbound variable"
 
 # Nothing is configured, so nothing can be offered. A default here would be
 # invented rather than derived.
-printf '%s' "$fresh_out" | grep -q "the Mac's username:" \
+grep -q "the Mac's username:" <<< "$fresh_out" \
   && ok "fresh machine: no username default is invented" \
   || no "fresh machine: no username default is invented" "a default was offered"
 
-printf '%s' "$fresh_out" | grep -q "read as somemac.local" \
+grep -q "read as somemac.local" <<< "$fresh_out" \
   && ok "fresh machine: a short name gains .local" \
   || no "fresh machine: a short name gains .local" "$(printf '%s' "$fresh_out" | grep -i 'local name')"
 
 # settings.json is {} — the whole sandbox.network path has to be created, not
 # assumed to exist.
-printf '%s' "$fresh_out" | grep -q '"allowedDomains"' \
-  && printf '%s' "$fresh_out" | grep -q '"sandbox"' \
+grep -q '"allowedDomains"' <<< "$fresh_out" \
+  && grep -q '"sandbox"' <<< "$fresh_out" \
   && ok "fresh machine: the whole sandbox.network path is created" \
   || no "fresh machine: the whole sandbox.network path is created" "$(printf '%s' "$fresh_out" | grep -A6 'would change')"
 
 # The /etc/hosts step reads Host blocks off disk, and a dry run describes the
 # block rather than writing it — so on a fresh machine it saw nothing and said
 # "no configured networks" immediately after configuring one.
-printf '%s' "$fresh_out" | grep -q "10.1.1.5 somemac.local" \
+grep -q "10.1.1.5 somemac.local" <<< "$fresh_out" \
   && ok "fresh machine: /etc/hosts counts the network configured in this run" \
   || no "fresh machine: /etc/hosts counts the network configured in this run" "$(printf '%s' "$fresh_out" | sed -n '/etc\/hosts/,$p' | head -5)"
 
@@ -393,7 +402,7 @@ tt_count=$(grep -cE '(^|[^-[:alnum:]_])ssh -tt ' "$W")
 # and rewrites its mode and owner anyway, which on an Intel Mac would take
 # Homebrew's /usr/local/bin to root:wheel to fix nothing.
 printf '%s' "$(sed -n '/install_cmds="/,/bootstrap system/p' "$W")" \
-  | head -1 | grep -q '\[ -d .* \] || sudo install -d' \
+  | head -1 | drain_grep -q '\[ -d .* \] || sudo install -d' \
   && ok "install: the directory is created first, and only when it is missing" \
   || no "install: the directory is created first, and only when it is missing" \
         "$(sed -n '/install_cmds="/,+1p' "$W")"
@@ -486,9 +495,9 @@ diag() { # diag <ssh stderr> -> output; exit status is "the address is suspect"
 
 refused="ssh: connect to host 10.9.9.9 port 22: Connection refused"
 d=$(diag "$refused") || true
-printf '%s' "$d" | grep -q "Remote Login" \
-  && printf '%s' "$d" | grep -q "System Settings" \
-  && printf '%s' "$d" | grep -q "setremotelogin" \
+grep -q "Remote Login" <<< "$d" \
+  && grep -q "System Settings" <<< "$d" \
+  && grep -q "setremotelogin" <<< "$d" \
   && ok "a refused probe names Remote Login, the settings path and the command" \
   || no "a refused probe names Remote Login, the settings path and the command" "$d"
 
@@ -502,7 +511,7 @@ fi
 
 timedout="ssh: connect to host 10.9.9.9 port 22: Connection timed out"
 d=$(diag "$timedout") || true
-printf '%s' "$d" | grep -q "ipconfig getifaddr" \
+grep -q "ipconfig getifaddr" <<< "$d" \
   && ok "a timed-out probe says how to read the address off the Mac" \
   || no "a timed-out probe says how to read the address off the Mac" "$d"
 if diag "$timedout" >/dev/null; then
@@ -512,14 +521,14 @@ else
 fi
 
 d=$(diag "ssh: connect to host 10.9.9.9 port 22: Network is unreachable") || true
-printf '%s' "$d" | grep -q "no route" \
+grep -q "no route" <<< "$d" \
   && ok "an unreachable probe is a route, not a Mac that is switched off" \
   || no "an unreachable probe is a route, not a Mac that is switched off" "$d"
 
 # Never a confident wrong answer. An error this does not recognise has to say so
 # rather than pick the nearest arm.
 d=$(diag "ssh: something nobody has seen before") || true
-printf '%s' "$d" | grep -q "did not say why" \
+grep -q "did not say why" <<< "$d" \
   && ok "an unrecognised error says it is unrecognised" \
   || no "an unrecognised error says it is unrecognised" "$d"
 
@@ -530,8 +539,8 @@ printf '%s' "$d" | grep -q "did not say why" \
 # to the catch-all, which named the causes and gave no instructions at all.
 kex="kex_exchange_identification: Connection closed by remote host"
 d=$(diag "$kex") || true
-printf '%s' "$d" | grep -q "Remote Login" \
-  && printf '%s' "$d" | grep -q "access_ssh" \
+grep -q "Remote Login" <<< "$d" \
+  && grep -q "access_ssh" <<< "$d" \
   && ok "a connection closed mid-handshake names Remote Login and the allow list" \
   || no "a connection closed mid-handshake names Remote Login and the allow list" "$d"
 
@@ -546,8 +555,8 @@ fi
 # and the one a person cannot guess, so an error this cannot place still says
 # how to rule it out — it just does not claim that is the answer.
 d=$(diag "ssh: something nobody has seen before") || true
-printf '%s' "$d" | grep -q "setremotelogin" \
-  && printf '%s' "$d" | grep -q "did not say why" \
+grep -q "setremotelogin" <<< "$d" \
+  && grep -q "did not say why" <<< "$d" \
   && ok "an unrecognised error still says how to rule Remote Login out" \
   || no "an unrecognised error still says how to rule Remote Login out" "$d"
 
@@ -558,7 +567,7 @@ printf '%s' "$d" | grep -q "setremotelogin" \
 missing=""
 for e in "Connection refused" "$kex" "something nobody has seen before"; do
   d=$(diag "$e") || true
-  printf '%s' "$d" | grep -q "System Settings -> General -> Sharing -> Remote Login" \
+  grep -q "System Settings -> General -> Sharing -> Remote Login" <<< "$d" \
     || missing="$missing $e"
 done
 [ -z "$missing" ] \
@@ -571,8 +580,8 @@ done
 # socat before anything leaves this machine — and ssh reports that as
 # kex_exchange_identification, which reads as a Mac refusing a login.
 d=$(diag "socat[6] E CONNECT 10.9.9.9:22: Bad Gateway") || true
-printf '%s' "$d" | grep -q "sandbox proxy" \
-  && printf '%s' "$d" | grep -q "allowedDomains" \
+grep -q "sandbox proxy" <<< "$d" \
+  && grep -q "allowedDomains" <<< "$d" \
   && ok "a proxy refusal is named as this machine's allowlist, not the Mac" \
   || no "a proxy refusal is named as this machine's allowlist, not the Mac" "$d"
 
@@ -606,7 +615,7 @@ else
      "allowedDomains at line ${px_dom:-none}, probe at line ${px_probe:-none}"
 fi
 
-printf '%s' "$px" | grep -q "reads that list when it starts" \
+grep -q "reads that list when it starts" <<< "$px" \
   && ok "in a session: it says a running session will not see the new entry" \
   || no "in a session: it says a running session will not see the new entry" \
         "$(printf '%s' "$px" | head -20)"
@@ -616,7 +625,7 @@ printf '%s' "$px" | grep -q "reads that list when it starts" \
 npx=$(printf 'n\ny\nmac-proxy\n10.7.7.7\nn\nn\n' | \
   PATH="$PX/bin:$PATH" SSH_CONFIG="$PX/ssh_config" SETTINGS="$PX/settings.json" \
   HOSTS_FILE="$PX/hosts" LIB_DIR="$PX/lib" timeout 120 "$W" 2>&1)
-printf '%s' "$npx" | grep -q "sandbox proxy" \
+grep -q "sandbox proxy" <<< "$npx" \
   && no "outside a session: nothing is written before the probe" "it wrote allowedDomains first" \
   || ok "outside a session: nothing is written before the probe"
 
@@ -627,20 +636,20 @@ printf '%s' "$npx" | grep -q "sandbox proxy" \
 # station-to-station traffic, which nothing on either machine reveals — and
 # every arm above would have blamed the Mac.
 d=$(ARP_UNANSWERED=1 diag "ssh: connect to host 10.9.9.9 port 22: No route to host") || true
-printf '%s' "$d" | grep -q "does not answer ARP" \
-  && printf '%s' "$d" | grep -qi "isolation" \
+grep -q "does not answer ARP" <<< "$d" \
+  && grep -qi "isolation" <<< "$d" \
   && ok "same subnet with no ARP reply is named as the access point, not the Mac" \
   || no "same subnet with no ARP reply is named as the access point, not the Mac" "$d"
 
 # The useful part is that it says the Mac is fine, because the Mac is where an
 # afternoon goes otherwise.
-printf '%s' "$d" | grep -q "Nothing on the Mac" \
+grep -q "Nothing on the Mac" <<< "$d" \
   && ok "isolation says explicitly that nothing on the Mac is wrong" \
   || no "isolation says explicitly that nothing on the Mac is wrong" "$d"
 
 # It gives the confirming test, from the other end, with this machine's address
 # filled in — the check that distinguishes isolation from everything else.
-printf '%s' "$d" | grep -q "ping -c2 10.9.9.8" \
+grep -q "ping -c2 10.9.9.8" <<< "$d" \
   && ok "isolation names the ping to run from the Mac, with the address in it" \
   || no "isolation names the ping to run from the Mac, with the address in it" "$d"
 
@@ -655,7 +664,7 @@ fi
 # It is a measurement, so it outranks the message — "No route to host" with ARP
 # answering is a different fault and must not be read as isolation.
 d=$(diag "ssh: connect to host 10.9.9.9 port 22: No route to host") || true
-printf '%s' "$d" | grep -qi "isolation" \
+grep -qi "isolation" <<< "$d" \
   && no "an answered ARP is not read as isolation" "$d" \
   || ok "an answered ARP is not read as isolation"
 
@@ -664,15 +673,15 @@ printf '%s' "$d" | grep -qi "isolation" \
 # here because the retry loop is what sustains it: the dropped connection is
 # itself another failure, so firing straight back renews the penalty.
 d=$(diag "$kex") || true
-printf '%s' "$d" | grep -q "sshd -T | grep -i penal" \
-  && printf '%s' "$d" | grep -q "launchctl kickstart" \
+grep -q "sshd -T | grep -i penal" <<< "$d" \
+  && grep -q "launchctl kickstart" <<< "$d" \
   && ok "the closed handshake names source penalties and how to clear them" \
   || no "the closed handshake names source penalties and how to clear them" "$d"
 
 # A refusal is Remote Login off, not a penalty. Naming penalties there would
 # send someone to wait out a timer that is not running.
 d=$(diag "$refused") || true
-printf '%s' "$d" | grep -q "penal" \
+grep -q "penal" <<< "$d" \
   && no "a refusal is not read as a penalty" "$d" \
   || ok "a refusal is not read as a penalty"
 
@@ -707,11 +716,11 @@ retry_run() { # retry_run <how many probes fail> <answers>
 
 # One refusal, then the person turns Remote Login on and says yes.
 r=$(retry_run 1 'n\ny\nmac-probe\n10.9.9.9\ny\n\nn\nmac-probe\nn\n')
-printf '%s' "$r" | grep -q "Try again?" \
+grep -q "Try again?" <<< "$r" \
   && ok "retry: a failed probe offers the way back" \
   || no "retry: a failed probe offers the way back" "$(printf '%s' "$r" | tail -6)"
 
-printf '%s' "$r" | grep -q "ssh said: .*Connection refused" \
+grep -q "ssh said: .*Connection refused" <<< "$r" \
   && ok "retry: ssh's own line is printed, not just the verdict" \
   || no "retry: ssh's own line is printed, not just the verdict" "$(printf '%s' "$r" | tail -6)"
 
@@ -723,7 +732,7 @@ printf '%s' "$r" | grep -q "ssh said: .*Connection refused" \
   || no "retry: ssh's output is kept by the line, not just its last one" \
         "$(printf '%s' "$r" | head -20)"
 
-printf '%s' "$r" | grep -q "answers and the key works" \
+grep -q "answers and the key works" <<< "$r" \
   && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
   && ok "retry: saying yes re-probes, and the block is written verified" \
   || no "retry: saying yes re-probes, and the block is written verified" \
@@ -737,14 +746,14 @@ if grep -q "^Host mac-probe$" "$PRB/ssh_config"; then
 else
   ok "retry: declining both writes nothing"
 fi
-printf '%s' "$r" | grep -q "Nothing has been written yet" \
+grep -q "Nothing has been written yet" <<< "$r" \
   && ok "retry: it says nothing has been written, so the way back is free" \
   || no "retry: it says nothing has been written, so the way back is free" \
         "$(printf '%s' "$r" | tail -6)"
 
 # The unverified write is still reachable, and still says what it is.
 r=$(retry_run 99 'n\ny\nmac-probe\n10.9.9.9\nn\ny\n\nn\nmac-probe\nn\n')
-printf '%s' "$r" | grep -q "unverified" \
+grep -q "unverified" <<< "$r" \
   && grep -q "^Host mac-probe$" "$PRB/ssh_config" \
   && ok "retry: the unverified write is still offered, and named as unverified" \
   || no "retry: the unverified write is still offered, and named as unverified" \
@@ -790,12 +799,12 @@ rw_out=$(rw_run 1)
 # legitimately reports `ok    written (backup: ...)` in the same run, and that
 # line ends in a bracket. Not -qx either — confirm() leaves the prompt and the
 # result on one line, so there is no line that is only the result.
-printf '%s' "$rw_out" | grep -qE 'ok    written$' \
+grep -qE 'ok    written$' <<< "$rw_out" \
   && no "write path: a failed sudo is not reported as written" "it said written" \
   || ok "write path: a failed sudo is not reported as written"
 
-printf '%s' "$rw_out" | grep -q "UNCHANGED" \
-  && printf '%s' "$rw_out" | grep -q "two of three" \
+grep -q "UNCHANGED" <<< "$rw_out" \
+  && grep -q "two of three" <<< "$rw_out" \
   && ok "write path: a failed sudo names what is now inconsistent" \
   || no "write path: a failed sudo names what is now inconsistent" \
         "$(printf '%s' "$rw_out" | sed -n '/Apply that/,$p' | head -4)"
@@ -818,7 +827,7 @@ rm -f "$RW"/ssh_config.bak-*
 printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile %s\n' \
   "$TMP/fake-key" > "$RW/ssh_config"
 rw_ok=$(rw_run 0)
-printf '%s' "$rw_ok" | grep -qE 'ok    written$' \
+grep -qE 'ok    written$' <<< "$rw_ok" \
   && ok "write path: a working sudo does report the write" \
   || no "write path: a working sudo does report the write" \
         "$(printf '%s' "$rw_ok" | sed -n '/Apply that/,$p' | head -3)"
@@ -832,7 +841,7 @@ printf 'Host existing-mac\n  Hostname 10.0.0.10\n  User testuser\n  IdentityFile
 rw_noname=$(printf 'n\ny\nmac-test\n192.168.99.50\nn\ny\nn\nn\nn\nn\n' | \
   PATH="$RW/bin:$PATH" SSH_CONFIG="$RW/ssh_config" SETTINGS="$RW/settings.json" \
   HOSTS_FILE="$RW/hosts" LIB_DIR="$RW/lib" timeout 120 "$W" 2>&1)
-printf '%s' "$rw_noname" | grep -q "cannot be written" \
+grep -q "cannot be written" <<< "$rw_noname" \
   && ok "write path: an unknown .local name names what it costs" \
   || no "write path: an unknown .local name names what it costs" \
         "$(printf '%s' "$rw_noname" | sed -n '/etc\/hosts/,$p' | head -3)"
@@ -894,10 +903,10 @@ ls_wiz() { local answers="$1"; shift
 
 ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n'
 l=$(ls_wiz '' --list) || true
-printf '%s' "$l" | grep -qE '^ *mac-one +10\.0\.0\.1 +someuser +yes +yes +yes' \
+grep -qE '^ *mac-one +10\.0\.0\.1 +someuser +yes +yes +yes' <<< "$l" \
   && ok "list: a network in all three files reads yes three times" \
   || no "list: a network in all three files reads yes three times" "$l"
-printf '%s' "$l" | grep -q "every network is in all three files" \
+grep -q "every network is in all three files" <<< "$l" \
   && ok "list: it says so when nothing is missing" \
   || no "list: it says so when nothing is missing" "$l"
 
@@ -905,11 +914,11 @@ printf '%s' "$l" | grep -q "every network is in all three files" \
 # other two is not, which fails as something that names neither.
 ls_reset '["10.0.0.1"]' '10.0.0.1 the-mac.local\n'
 l=$(ls_wiz '' --list) || true
-printf '%s' "$l" | grep -qE '^ *mac-two +10\.0\.0\.2 +someuser +yes +NO +NO' \
+grep -qE '^ *mac-two +10\.0\.0\.2 +someuser +yes +NO +NO' <<< "$l" \
   && ok "list: a network missing from the other two files is marked NO" \
   || no "list: a network missing from the other two files is marked NO" "$l"
-printf '%s' "$l" | grep -q "the sandbox proxy refuses it" \
-  && printf '%s' "$l" | grep -q "will not resolve" \
+grep -q "the sandbox proxy refuses it" <<< "$l" \
+  && grep -q "will not resolve" <<< "$l" \
   && ok "list: it says what each missing file costs, not just that it is missing" \
   || no "list: it says what each missing file costs, not just that it is missing" "$l"
 
@@ -917,7 +926,7 @@ printf '%s' "$l" | grep -q "the sandbox proxy refuses it" \
 # one goes, so the list it prints is the same one --list prints.
 ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n10.0.0.2 the-mac.local\n'
 l=$(ls_wiz 'mac-two\ny\n\ny\ny\n' --remove) || true
-printf '%s' "$l" | grep -q "mac-one" \
+grep -q "mac-one" <<< "$l" \
   && grep -q '^Host mac-one$' "$LS/ssh_config" \
   && ok "remove: a bare --remove lists what there is and removes the pick" \
   || no "remove: a bare --remove lists what there is and removes the pick" \
@@ -930,14 +939,14 @@ grep -q '^Host mac-two$' "$LS/ssh_config" \
 ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n'
 l=$(ls_wiz '\n' --remove) || true
 grep -q '^Host mac-two$' "$LS/ssh_config" \
-  && printf '%s' "$l" | grep -q "nothing removed" \
+  && grep -q "nothing removed" <<< "$l" \
   && ok "remove: an empty pick removes nothing and says so" \
   || no "remove: an empty pick removes nothing and says so" "$(printf '%s' "$l" | tail -4)"
 
 # `--remove --dry-run` must not try to remove a network called --dry-run.
 ls_reset '["10.0.0.1","10.0.0.2"]' '10.0.0.1 the-mac.local\n'
 l=$(ls_wiz 'mac-two\nn\n' --remove --dry-run) || true
-printf '%s' "$l" | grep -q "nothing is written" \
+grep -q "nothing is written" <<< "$l" \
   && ok "remove: a flag after a bare --remove is a flag, not an alias" \
   || no "remove: a flag after a bare --remove is a flag, not an alias" \
         "$(printf '%s' "$l" | head -8)"
@@ -976,7 +985,7 @@ grep -q '10.0.0.2' "$HW/hosts" \
 # Anchored past the hosts prompt: settings.json reports `ok written` in the same
 # run, and matching that instead is how this check first passed while the hosts
 # file was untouched.
-printf '%s' "$hw" | sed -n '/with sudo?/,$p' | grep -qE 'ok    written' \
+printf '%s' "$hw" | sed -n '/with sudo?/,$p' | drain_grep -qE 'ok    written' \
   && ok "hosts: and it reports the write" \
   || no "hosts: and it reports the write" "$(printf '%s' "$hw" | tail -6)"
 
@@ -997,7 +1006,7 @@ printf '127.0.0.1 localhost\n\n# mac for ios simulator work\n10.0.0.1 the-mac.lo
 hwn=$(printf 'y\n\n\nn\n' | PATH="$HW/bin:$PATH" SSH_CONFIG="$HW/ssh_config" \
   SETTINGS="$HW/settings.json" HOSTS_FILE="$HW/hosts" LIB_DIR="$HW/lib" \
   timeout 60 "$W" --remove mac-two 2>&1)
-printf '%s' "$hwn" | grep -q -- "--hosts" \
+printf '%s' "$hwn" | drain_grep -q -- "--hosts" \
   && grep -q '10.0.0.2' "$HW/hosts" \
   && ok "hosts: declining leaves the file and says how to do it later" \
   || no "hosts: declining leaves the file and says how to do it later" \
@@ -1033,9 +1042,9 @@ ed_wiz() { # ed_wiz <answers> [args...]
 
 ed_reset
 e=$(ed_wiz 'n\nn\n')
-printf '%s' "$e" | grep -q "olduser" \
-  && printf '%s' "$e" | grep -q "old-mac.local" \
-  && printf '%s' "$e" | grep -qE "from Host mac-a" \
+grep -q "olduser" <<< "$e" \
+  && grep -q "old-mac.local" <<< "$e" \
+  && grep -qE "from Host mac-a" <<< "$e" \
   && ok "edit: a re-run shows the username, the name and where each came from" \
   || no "edit: a re-run shows the username, the name and where each came from" \
         "$(printf '%s' "$e" | head -14)"
@@ -1086,7 +1095,7 @@ ed_wiz 'y\nnewuser\n\n\nmac-a\n' --edit >/dev/null
 # quietly changed nothing would read as the edit having worked.
 ed_reset
 e=$(ed_wiz 'y\nnewuser\n\n\nmac-nope\n' --edit)
-printf '%s' "$e" | grep -q "ignored" \
+grep -q "ignored" <<< "$e" \
   && grep -q '	User olduser$' "$ED/ssh_config" \
   && ok "edit: a block name that is not on offer is named and ignored" \
   || no "edit: a block name that is not on offer is named and ignored" \
@@ -1104,7 +1113,7 @@ case " $ed_dom " in
     esac ;;
   *) no "edit: a new .local name replaces the old one" "not added: $ed_dom" ;;
 esac
-printf '%s' "$e" | grep -q "etc/hosts" \
+grep -q "etc/hosts" <<< "$e" \
   && ok "edit: renaming the Mac rewrites /etc/hosts, which maps that name" \
   || no "edit: renaming the Mac rewrites /etc/hosts, which maps that name" \
         "$(printf '%s' "$e" | tail -5)"
@@ -1123,7 +1132,7 @@ ed_reset
 # Captured, not piped: under pipefail the wizard's own exit status sinks the
 # pipeline whatever the grep found. Same trap as the diagnosis checks above.
 ed_status=$(ed_wiz '' --status) || true
-printf '%s' "$ed_status" | grep -q "as olduser" \
+grep -q "as olduser" <<< "$ed_status" \
   && ok "edit: --status prints the account it would connect as" \
   || no "edit: --status prints the account it would connect as" \
         "$(printf '%s' "$ed_status" | tail -4)"
@@ -1183,7 +1192,7 @@ diff -q "$RM/hosts.orig" "$RM/hosts" >/dev/null \
 # because both are read back FROM a Host block.
 rm_reset
 rm_last=$(rm_wiz 'y\n' --remove mac-keep); rm_last_rc=$?
-printf '%s' "$rm_last" | grep -q "only configured network" \
+grep -q "only configured network" <<< "$rm_last" \
   && [ "$rm_last_rc" != 0 ] \
   && ok "remove: the last network is refused" \
   || no "remove: the last network is refused" "rc=$rm_last_rc: $(printf '%s' "$rm_last" | tail -2 | tr '\n' '/')"
@@ -1194,7 +1203,7 @@ grep -q "^Host mac-keep$" "$RM/ssh_config" \
 # An alias that is not there is a typo, and the useful answer is the list.
 rm_unknown=$(rm_wiz '' --remove not-a-network); rm_unknown_rc=$?
 [ "$rm_unknown_rc" = 2 ] \
-  && printf '%s' "$rm_unknown" | grep -q "mac-keep" \
+  && grep -q "mac-keep" <<< "$rm_unknown" \
   && ok "remove: an unknown alias exits 2 and lists what is configured" \
   || no "remove: an unknown alias exits 2 and lists what is configured" "rc=$rm_unknown_rc"
 
@@ -1204,7 +1213,7 @@ rm_reset
 printf 'Host mac-a mac-b\n\tHostname 10.0.0.77\n\tUser testuser\n\tIdentityFile %s\n' \
   "$RM/key" >> "$RM/ssh_config"
 rm_multi=$(rm_wiz 'y\n' --remove mac-a); rm_multi_rc=$?
-printf '%s' "$rm_multi" | grep -q "names other aliases too" \
+grep -q "names other aliases too" <<< "$rm_multi" \
   && [ "$rm_multi_rc" != 0 ] \
   && ok "remove: a Host line naming several aliases is refused" \
   || no "remove: a Host line naming several aliases is refused" "rc=$rm_multi_rc"
@@ -1218,7 +1227,7 @@ case " $(rm_domains) " in
   *" 10.0.0.10 "*) ok "remove: an address another alias still uses is kept" ;;
   *) no "remove: an address another alias still uses is kept" "domains now: $(rm_domains)" ;;
 esac
-printf '%s' "$rm_shared" | grep -q "still uses it" \
+grep -q "still uses it" <<< "$rm_shared" \
   && ok "remove: it says which alias is keeping the address" \
   || no "remove: it says which alias is keeping the address" "$(printf '%s' "$rm_shared" | grep -A3 'What goes' | tr '\n' '/')"
 

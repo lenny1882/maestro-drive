@@ -37,6 +37,15 @@ if [ -z "${MAESTRO_DRIVE_CLEAN_ENV:-}" ]; then
     bash "${BASH_SOURCE[0]}" "$@"
 fi
 
+# grep that reads its whole input (BACKLOG item 106). Under pipefail,
+# `writer | drain_grep -q` fails when grep matches, exits, and the writer — bash's
+# printf writes one line per write(2) into a pipe — is killed by SIGPIPE on its
+# next line: a false FAIL on text that matched. Rare, because it needs the
+# scheduler to run grep between two of the writer's writes; seen 24 Sep as two
+# different tests failing once each in five runs. Assertions on a variable use
+# a here-string instead; this is for the ones that pipe a command.
+drain_grep() { local r=0; grep "$@" || r=$?; cat > /dev/null; return "$r"; }
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIX="$REPO/test/fixtures"
 
@@ -95,7 +104,7 @@ for m in ios ios-device android; do
            data-container prefs-read prefs-flush orientations screenshot \
            driver-up driver-down driver-scan uninstall locked last-used \
            capture-cmd; do
-    printf '%s\n' "$have" | grep -qx "$v" || miss="$miss $v"
+    printf '%s\n' "$have" | drain_grep -qx "$v" || miss="$miss $v"
   done
   [ -z "$miss" ] && ok "runners/$m/platform.sh answers every contract verb" \
     || no "runners/$m/platform.sh answers every contract verb" "missing:$miss"
@@ -119,7 +128,7 @@ got=$($R "^Allow$" $IPAD --point < "$FIX/ipad-landscape-system-alert.json" 2>&1)
   && ok "alert Allow resolves to the tap that works" \
   || no "alert Allow resolves to the tap that works" "got '$got', want '664.8 474.5'"
 
-$R "^Allow$" $IPAD --explain < "$FIX/ipad-landscape-system-alert.json" 2>&1 | grep -q "system space" \
+$R "^Allow$" $IPAD --explain < "$FIX/ipad-landscape-system-alert.json" 2>&1 | drain_grep -q "system space" \
   && ok "--explain shows the system-space step" || no "--explain shows the system-space step" "no mention of it"
 
 # The status bar is the tell, and the clock inside it is the checkable part:
@@ -134,7 +143,7 @@ awk -v c="$clock" 'BEGIN{split(c,p," "); exit !(p[2] > 0 && p[2] < 24)}' \
 got=$($R "^SCAN$" $IPHONE --point < "$FIX/iphone-portrait-keyboard-up.json" 2>&1)
 [ "$got" = "201 262.6" ] \
   && ok "iPhone frames are untouched" || no "iPhone frames are untouched" "got '$got', want '201 262.6'"
-$R "^SCAN$" $IPHONE --explain < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | grep -q "system space" \
+$R "^SCAN$" $IPHONE --explain < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | drain_grep -q "system space" \
   && no "iPhone gets no system transform" "one was applied" || ok "iPhone gets no system transform"
 
 echo
@@ -182,16 +191,16 @@ b=$(band "$TMP/kb-size.json" 1194 834)
 
 # The regression: SCAN sits at the very top of the iPad screen and was being
 # refused as covered, which made every keyboard screen on iPad undriveable.
-$R "^SCAN$" $IPAD < "$FIX/ipad-landscape-keyboard-up.json" 2>&1 | grep -q "UNDER THE KEYBOARD" \
+$R "^SCAN$" $IPAD < "$FIX/ipad-landscape-keyboard-up.json" 2>&1 | drain_grep -q "UNDER THE KEYBOARD" \
   && no "iPad: SCAN at the top is tappable" "still refused" || ok "iPad: SCAN at the top is tappable"
 $R "^SEARCH$" $IPAD --point < "$FIX/ipad-landscape-keyboard-up.json" >/dev/null 2>&1 \
   && ok "iPad: SEARCH above the keyboard is tappable" || no "iPad: SEARCH above the keyboard is tappable" "refused"
 
 # The other direction: the guard must still fire on something genuinely covered.
-$R "^SETTINGS" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | grep -q "UNDER THE KEYBOARD" \
+$R "^SETTINGS" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | drain_grep -q "UNDER THE KEYBOARD" \
   && no "iPhone: with the keyboard parked off-screen, the tab bar is not refused as covered (item 30)" "still refused" \
   || ok "iPhone: with the keyboard parked off-screen, the tab bar is not refused as covered (item 30)"
-$R "^SEARCH$" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | grep -q "UNDER THE KEYBOARD" \
+$R "^SEARCH$" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | drain_grep -q "UNDER THE KEYBOARD" \
   && no "iPhone: SEARCH above the keyboard is tappable" "wrongly refused" || ok "iPhone: SEARCH above the keyboard is tappable"
 
 # A refusal nobody believes is a refusal nobody obeys. On 12 Aug one was
@@ -819,11 +828,11 @@ echo "wall.sh label refuses a flag rather than wearing it (item 89)"
 LW() { MAC_HOST=x MAC_FQDN=x APP_ID=x MAESTRO_DRIVE_CONF=/dev/null "$REPO/bin/wall.sh" "$@" 2>&1; }
 
 lw_out=$(LW label --help); lw_rc=$?
-[ "$lw_rc" = 0 ] && printf '%s' "$lw_out" | grep -q "^usage: " \
+[ "$lw_rc" = 0 ] && grep -q "^usage: " <<< "$lw_out" \
   && ok "label --help prints the usage and exits 0" \
   || no "label --help prints the usage and exits 0" "rc=$lw_rc: $lw_out"
 
-printf '%s' "$lw_out" | grep -qi "ssh\|Host key\|Connection" \
+grep -qi "ssh\|Host key\|Connection" <<< "$lw_out" \
   && no "label --help never reaches a device" "it tried to connect" \
   || ok "label --help never reaches a device"
 
@@ -833,23 +842,23 @@ lw_out=$(LW label -h); lw_rc=$?
   || no "label -h is the same as --help" "rc=$lw_rc"
 
 lw_out=$(LW label --groupp brandco); lw_rc=$?
-[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q "unknown option --groupp" \
+[ "$lw_rc" = 2 ] && grep -q "unknown option --groupp" <<< "$lw_out" \
   && ok "label refuses an unknown flag instead of labelling with it" \
   || no "label refuses an unknown flag instead of labelling with it" "rc=$lw_rc: $lw_out"
 
 lw_out=$(LW label somename --group); lw_rc=$?
-[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q -- "--group needs a value" \
+[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | drain_grep -q -- "--group needs a value" \
   && ok "label refuses --group with nothing after it" \
   || no "label refuses --group with nothing after it" "rc=$lw_rc: $lw_out"
 
 # A label that really does start with a dash is still writable, after --.
 lw_out=$(LW label -- --odd-name); lw_rc=$?
-printf '%s' "$lw_out" | grep -q "unknown option" \
+grep -q "unknown option" <<< "$lw_out" \
   && no "label takes a dashed name after --" "it still refused it" \
   || ok "label takes a dashed name after --"
 
 lw_out=$(LW label); lw_rc=$?
-[ "$lw_rc" = 2 ] && printf '%s' "$lw_out" | grep -q "^usage: " \
+[ "$lw_rc" = 2 ] && grep -q "^usage: " <<< "$lw_out" \
   && ok "label with no name prints the usage" \
   || no "label with no name prints the usage" "rc=$lw_rc: $lw_out"
 
@@ -1165,7 +1174,7 @@ printf 'include-if "^SCAN$" incif-sub.journey\n' > "$jf"
 printf 'log included\n' > "$TMP/incif-sub.journey"
 : > "$TMP/curl.log"
 out=$(drv script "$jf" 2>&1); rc=$?
-if [ "$rc" = 0 ] && echo "$out" | grep -q 'included'; then
+if [ "$rc" = 0 ] && grep -q 'included' <<< "$out"; then
   ok "include-if runs the sub-journey when the pattern is visible"
 else
   no "include-if runs the sub-journey when the pattern is visible" "rc=$rc out=$out"
@@ -1176,7 +1185,7 @@ jf="$TMP/incif-skip.journey"
 printf 'include-if "^NoSuchElement$" incif-sub.journey\nlog continued\n' > "$jf"
 : > "$TMP/curl.log"
 out=$(drv script "$jf" 2>&1); rc=$?
-if [ "$rc" = 0 ] && echo "$out" | grep -q 'continued' && ! echo "$out" | grep -q 'included'; then
+if [ "$rc" = 0 ] && grep -q 'continued' <<< "$out" && ! grep -q 'included' <<< "$out"; then
   ok "include-if skips when the pattern is not visible"
 else
   no "include-if skips when the pattern is not visible" "rc=$rc out=$out"
@@ -1187,7 +1196,7 @@ jf="$TMP/incifnot.journey"
 printf 'include-if-not "^NoSuchElement$" incif-sub.journey\n' > "$jf"
 : > "$TMP/curl.log"
 out=$(drv script "$jf" 2>&1); rc=$?
-if [ "$rc" = 0 ] && echo "$out" | grep -q 'included'; then
+if [ "$rc" = 0 ] && grep -q 'included' <<< "$out"; then
   ok "include-if-not runs the sub-journey when the pattern is absent"
 else
   no "include-if-not runs the sub-journey when the pattern is absent" "rc=$rc out=$out"
@@ -1293,7 +1302,7 @@ out=$(drv expect '^SCAN$' 2>&1); rc=$?
   || no "expect passes at once when the element is present" "rc=$rc: $out"
 
 out=$(drv expect '^ZZNOPE$' 2>&1); rc=$?
-{ [ "$rc" = 1 ] && ! printf '%s' "$out" | grep -q 'waiting for'; } \
+{ [ "$rc" = 1 ] && ! grep -q 'waiting for' <<< "$out"; } \
   && ok "expect with no timeout fails immediately, with no heartbeat" \
   || no "expect with no timeout fails immediately, with no heartbeat" "rc=$rc: $out"
 
@@ -1307,22 +1316,22 @@ out=$(drv expect-not '^ZZNOPE$' 2>&1); rc=$?
 # before it sleeps.
 start=$(date +%s); out=$(drv expect '^ZZNOPE$' 2 2>&1); rc=$?
 elapsed=$(( $(date +%s) - start ))
-{ [ "$rc" = 1 ] && printf '%s' "$out" | grep -q '1/2s' \
-    && printf '%s' "$out" | grep -q 'not found after 2s' && [ "$elapsed" -ge 2 ]; } \
+{ [ "$rc" = 1 ] && grep -q '1/2s' <<< "$out" \
+    && grep -q 'not found after 2s' <<< "$out" && [ "$elapsed" -ge 2 ]; } \
   && ok "expect <timeout> polls with a per-second heartbeat, then fails naming the limit" \
   || no "expect <timeout> polls with a per-second heartbeat, then fails naming the limit" \
        "rc=$rc t=${elapsed}s: $(printf '%s' "$out" | tr '\n' '|')"
 
 out=$(drv expect-not '^SCAN$' 1 2>&1); rc=$?
-{ [ "$rc" = 1 ] && printf '%s' "$out" | grep -q 'to clear (1/1s)' \
-    && printf '%s' "$out" | grep -q 'is present after 1s'; } \
+{ [ "$rc" = 1 ] && grep -q 'to clear (1/1s)' <<< "$out" \
+    && grep -q 'is present after 1s' <<< "$out"; } \
   && ok "expect-not <timeout> waits for it to clear, then fails naming the limit" \
   || no "expect-not <timeout> waits for it to clear, then fails naming the limit" \
        "rc=$rc: $(printf '%s' "$out" | tr '\n' '|')"
 
 # A non-numeric timeout must not crash the step — treat it as no timeout.
 out=$(drv expect '^ZZNOPE$' notanumber 2>&1); rc=$?
-{ [ "$rc" = 1 ] && ! printf '%s' "$out" | grep -q 'waiting for'; } \
+{ [ "$rc" = 1 ] && ! grep -q 'waiting for' <<< "$out"; } \
   && ok "a non-numeric timeout is treated as zero, not a crash" \
   || no "a non-numeric timeout is treated as zero, not a crash" "rc=$rc: $out"
 
@@ -1430,14 +1439,14 @@ echo
 echo "compact tree mode (item 43)"
 # text mode filters keyboard/status-bar, dedupes, omits frames
 treeout=$(python3 "$REPO/bin/tree.py" text < "$FIX/iphone-portrait-keyboard-up.json" 2>&1)
-echo "$treeout" | grep -q "key " \
+grep -q "key " <<< "$treeout" \
   && no "text mode filters keyboard keys" "key still present" \
   || ok "text mode filters keyboard keys"
-echo "$treeout" | grep -q "statusbar" \
+grep -q "statusbar" <<< "$treeout" \
   && no "text mode filters the status bar" "statusbar still present" \
   || ok "text mode filters the status bar"
 # frames (the "1234,567 " column) should be absent
-echo "$treeout" | grep -qE '^ *[0-9]+,[0-9]' \
+grep -qE '^ *[0-9]+,[0-9]' <<< "$treeout" \
   && no "text mode omits frames" "frames present" \
   || ok "text mode omits frames"
 # an empty screen prints the hint
@@ -1516,8 +1525,8 @@ oks=$(printf '%s\n' "$out" | grep -c '  ok   ')
 # it too), and the line after the failure does not run.
 printf 'expect ^ZZNOPE$\nlog unreached\n' > "$TMP/fail.journey"
 out=$(drv script "$TMP/fail.journey" 2>&1); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'FAILED at' \
-    && ! printf '%s' "$out" | grep -q 'unreached'; } \
+{ [ "$rc" != 0 ] && grep -q 'FAILED at' <<< "$out" \
+    && ! grep -q 'unreached' <<< "$out"; } \
   && ok "a failing step stops the journey, returns non-zero, and runs no further" \
   || no "a failing step stops the journey, returns non-zero, and runs no further" "rc=$rc: $(printf '%s' "$out" | tr '\n' '|')"
 
@@ -1536,10 +1545,10 @@ if ( DEV=devudid
      _ssh(){ case "$*" in *locked*) return 1 ;; *devdrv-*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
-     printf '%s' "$out" | grep -q 'devdrv-devudid.log' &&
-     printf '%s' "$out" | grep -q 'connection was invalidated' &&
-     printf '%s' "$out" | grep -q 'item 46' &&
-     ! printf '%s' "$out" | grep -q 'LOCKED' ); then
+     grep -q 'devdrv-devudid.log' <<< "$out" &&
+     grep -q 'connection was invalidated' <<< "$out" &&
+     grep -q 'item 46' <<< "$out" &&
+     ! grep -q 'LOCKED' <<< "$out" ); then
   ok "an unlocked device with a dead driver surfaces ~/devdrv-<udid>.log and item 46"
 else
   no "an unlocked device with a dead driver surfaces ~/devdrv-<udid>.log and item 46" "hint missing or wrong"
@@ -1549,8 +1558,8 @@ if ( DEV=devudid
      _ssh(){ case "$*" in *locked*) return 0 ;; *devdrv-*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
-     printf '%s' "$out" | grep -q 'LOCKED' &&
-     printf '%s' "$out" | grep -qi 'unlock' ); then
+     grep -q 'LOCKED' <<< "$out" &&
+     grep -qi 'unlock' <<< "$out" ); then
   ok "a locked phone is named first — unlock it — ahead of the relay/log noise"
 else
   no "a locked phone is named first — unlock it — ahead of the relay/log noise" "lock hint missing"
@@ -1579,7 +1588,7 @@ if ( LDIR="$TMP/devseam"; mkdir -p "$LDIR"
      _driver_scan(){ cat "$DRIVER_MAP"; }               # no Mac
      source <(sed -n '/^_driver_map()/,/^}/p' "$REPO/bin/lib.sh")
      source <(sed -n '/^_dport_for()/,/^}/p' "$REPO/bin/lib.sh")
-     _driver_map | grep -q "DEVUDID 22187 device" &&
+     _driver_map | drain_grep -q "DEVUDID 22187 device" &&
      [ "$(_dport_for 22187)" = 9201 ] ); then
   ok "a device in DEVICE_MAP shows up in the driver map, with the right relay port"
 else
@@ -1764,6 +1773,23 @@ t0=$SECONDS; PATH="$TMP/settle-spin:$PATH" timeout 30 bash "$ADIR/driver.sh" set
   || no "a tree with a spinner is not taken as settled" "rc=$rc after ${t}s"
 
 echo
+echo "a pipe into grep -q can fail on text that matched; drain_grep cannot (item 106)"
+# The race made certain: the writer pauses between its first line, which
+# matches, and its second. grep -q has exited by then, so the second write dies
+# of SIGPIPE and pipefail fails the pipeline.
+if { echo match; sleep 0.3; echo rest; } | grep -q match; then
+  no "the race is real: grep -q fails a matching pipeline under pipefail" "it passed — has pipefail been turned off?"
+else
+  ok "the race is real: grep -q fails a matching pipeline under pipefail"
+fi
+{ echo match; sleep 0.3; echo rest; } | drain_grep -q match \
+  && ok "drain_grep passes the same pipeline" \
+  || no "drain_grep passes the same pipeline" "failed"
+{ echo other; sleep 0.3; echo rest; } | drain_grep -q match \
+  && no "drain_grep still fails when nothing matches" "passed" \
+  || ok "drain_grep still fails when nothing matches"
+
+echo
 echo "deviceup.sh names the failure the log shows (item 103)"
 # _why is extracted and fed the lines each failure actually wrote on 24 Sep.
 why() { printf '%b' "$1" > "$TMP/why.log"
@@ -1812,10 +1838,10 @@ for f in ipad-landscape-keyboard-up iphone-portrait-keyboard-up; do
 done
 # An unlabelled container has a frame and nothing else, so it is exactly what
 # `tree` drops and `nodes` keeps.
-python3 "$REPO/bin/tree.py" tree < "$FIX/ipad-landscape-system-alert.json" | grep -q 'Allow' \
+python3 "$REPO/bin/tree.py" tree < "$FIX/ipad-landscape-system-alert.json" | drain_grep -q 'Allow' \
   && ok "a labelled node survives the tree filter" \
   || no "a labelled node survives the tree filter" "Allow is missing"
-python3 "$REPO/bin/tree.py" nodes < "$FIX/ipad-landscape-system-alert.json" | grep -qE '^ *[0-9]+,[0-9-]+ +[0-9]+x[0-9]+ +[a-z]' \
+python3 "$REPO/bin/tree.py" nodes < "$FIX/ipad-landscape-system-alert.json" | drain_grep -qE '^ *[0-9]+,[0-9-]+ +[0-9]+x[0-9]+ +[a-z]' \
   && ok "every line carries a frame and a type" \
   || no "every line carries a frame and a type" "no line matched the shape"
 
@@ -2050,17 +2076,17 @@ bld(){ PATH="$TMP/xcstub:$PATH" $B --repo "$RP" --app-id com.example.app.dev \
          --flavor dev --install SIMUDID 2>&1; }
 
 out=$(XC_INSTALL_RC=1 bld); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'install failed: SIMUDID'; } \
+{ [ "$rc" != 0 ] && grep -q 'install failed: SIMUDID' <<< "$out"; } \
   && ok "a failed install makes the build exit non-zero" \
   || no "a failed install makes the build exit non-zero" "rc=$rc: $(printf '%s' "$out" | tr '\n' '|')"
 
 out=$(XC_INSTALL_RC=0 XC_CONTAINER_RC=1 bld); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'not on SIMUDID afterwards'; } \
+{ [ "$rc" != 0 ] && grep -q 'not on SIMUDID afterwards' <<< "$out"; } \
   && ok "install returning 0 but the app not resident is caught, not passed" \
   || no "install returning 0 but the app not resident is caught, not passed" "rc=$rc: $(printf '%s' "$out" | tr '\n' '|')"
 
 out=$(XC_INSTALL_RC=0 XC_CONTAINER_RC=0 bld); rc=$?
-{ [ "$rc" = 0 ] && printf '%s' "$out" | grep -q 'installed  SIMUDID'; } \
+{ [ "$rc" = 0 ] && grep -q 'installed  SIMUDID' <<< "$out"; } \
   && ok "a real install reports installed and exits 0" \
   || no "a real install reports installed and exits 0" "rc=$rc: $(printf '%s' "$out" | tr '\n' '|')"
 
@@ -2096,7 +2122,7 @@ esac
 # different thing from no service being found at all.
 out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" FRUN_LOG="$TMP/none2.log" \
       $VMS SIMUDID "$TMP/vmcache2" 2>&1); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "NOT the same as 'the app is not in debug'"; } \
+{ [ "$rc" != 0 ] && grep -q "NOT the same as 'the app is not in debug'" <<< "$out"; } \
   && ok "vmservice tells 'no service found' apart from 'not in debug'" \
   || no "vmservice tells 'no service found' apart from 'not in debug'" "rc=$rc: $out"
 
@@ -2153,13 +2179,13 @@ case "$out" in
 esac
 
 out=$(INSTALL_BUNDLE=com.example.app.dev DVB); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "not com.example.app.uat"; } \
+{ [ "$rc" != 0 ] && grep -q "not com.example.app.uat" <<< "$out"; } \
   && ok "a build that installs the wrong bundle id is caught, not passed (item 45)" \
   || no "a build that installs the wrong bundle id is caught, not passed (item 45)" "rc=$rc: $out"
 
 out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/runners/flutter/build.sh" \
         --repo "$DVREPO" --app-id com.example.app.uat --flavor uat --device DEVUDID 2>&1); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "no local provisioning profile"; } \
+{ [ "$rc" != 0 ] && grep -q "no local provisioning profile" <<< "$out"; } \
   && ok "the device build refuses when no profile covers the app (never touches the account)" \
   || no "the device build refuses when no profile covers the app (never touches the account)" "rc=$rc: $out"
 
@@ -2261,7 +2287,7 @@ done
 # appcheck has no device form, is the thing a reader needs told.
 for _v in container prefs-read orientations; do
   out=$(sh "$RS/ios-device/platform.sh" "$_v" x y 2>&1); rc=$?
-  { [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no readable app container'; } \
+  { [ "$rc" = 2 ] && grep -q 'no readable app container' <<< "$out"; } \
     && ok "ios-device $_v exits 2 naming the reason" \
     || no "ios-device $_v exits 2 naming the reason" "rc=$rc: $out"
 done
@@ -2365,7 +2391,7 @@ esac
 # $DEV does not cross an SSH boundary, so a device build that was not told which
 # device must refuse rather than build for an empty udid.
 out=$(FB --platform ios-device); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$out" | grep -q 'needs --device'; } \
+{ [ "$rc" != 0 ] && grep -q 'needs --device' <<< "$out"; } \
   && ok "a device build with no --device refuses rather than guessing" \
   || no "a device build with no --device refuses rather than guessing" "rc=$rc: $out"
 
@@ -2378,7 +2404,7 @@ esac
 # Flutter-on-Android is the combination the seam exists for, and remote/build.sh
 # has no android path. Exit 2 says "not this runner's job yet", not "failed".
 out=$(FB --platform android 2>&1); rc=$?
-{ [ "$rc" = 2 ] && printf '%s' "$out" | grep -q 'no android path'; } \
+{ [ "$rc" = 2 ] && grep -q 'no android path' <<< "$out"; } \
   && ok "an android build exits 2 saying why, rather than failing obscurely" \
   || no "an android build exits 2 saying why, rather than failing obscurely" "rc=$rc: $out"
 
@@ -2542,7 +2568,7 @@ if command -v git >/dev/null 2>&1; then
   # with it. Third instance of this shape: item 88, item 87's 1.3, and this.
   # Comment lines stripped first — flow.sh's own explanation of this bug names
   # the shape it is warning about, and would otherwise match the lint.
-  grep -v '^ *#' "$REPO/bin/flow.sh" | grep -qE "maestro .*test .*\| *grep" \
+  grep -v '^ *#' "$REPO/bin/flow.sh" | drain_grep -qE "maestro .*test .*\| *grep" \
     && no "flow.sh takes maestro's status before filtering the output" "it still pipes it" \
     || ok "flow.sh takes maestro's status before filtering the output"
   # flow.sh must END on that status. The first version of this test grepped for
@@ -2562,11 +2588,11 @@ if command -v git >/dev/null 2>&1; then
   # the module. A module that copied Flutter's wording would pass a "says
   # something" test and fail a reader.
   dso=$(sh "$REPO/runners/flutter/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
-  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'Driving still works'; } \
+  { [ "$rc" = 1 ] && grep -q 'Driving still works' <<< "$dso"; } \
     && ok "flutter devsession says driving is unaffected" \
     || no "flutter devsession says driving is unaffected" "rc=$rc: $dso"
   dso=$(sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
-  { [ "$rc" = 1 ] && printf '%s' "$dso" | grep -q 'may *not start'; } \
+  { [ "$rc" = 1 ] && grep -q 'may *not start' <<< "$dso"; } \
     && ok "react-native devsession says the app may not start at all" \
     || no "react-native devsession says the app may not start at all" "rc=$rc: $dso"
   grep -q 'DEVSESSION_PGREP' "$REPO/bin/preflight.sh" \
@@ -3045,7 +3071,7 @@ else
   no "and sets no MAC_HOST or MAC_FQDN" "no conf written"
 fi
 lp=$(cd "$LP" && MAESTRO_DRIVE_CONF= bash "$REPO/bin/init.sh" --local --host mac-x --app a 2>&1); rc=$?
-{ [ "$rc" != 0 ] && printf '%s' "$lp" | grep -q 'no --host or --fqdn'; } \
+{ [ "$rc" != 0 ] && grep -q 'no --host or --fqdn' <<< "$lp"; } \
   && ok "--host with --local is refused rather than silently dropped" \
   || no "--host with --local is refused rather than silently dropped" "rc=$rc: $lp"
 
@@ -3131,21 +3157,21 @@ mcpun=$(MAC_HOST="nope-alpha nope-beta" MAC_FQDN=nope.local TRANSPORT=ssh APP_ID
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"anything"}}
 RPC
 )
-printf '%s' "$mcpun" | grep -q '"protocolVersion"' \
+grep -q '"protocolVersion"' <<< "$mcpun" \
   && ok "an unreachable Mac leaves a server that answers initialize" \
   || no "an unreachable Mac leaves a server that answers initialize" "got: $(printf '%s' "$mcpun" | head -1)"
-printf '%s' "$mcpun" | grep -q '"why_unreachable"' \
+grep -q '"why_unreachable"' <<< "$mcpun" \
   && ok "and lists one tool, which says what it is for" \
   || no "and lists one tool, which says what it is for" "got: $(printf '%s' "$mcpun" | sed -n 2p)"
 # Any tool name, not just its own. A caller that guessed a Maestro tool name
 # would otherwise get a protocol error instead of the reason.
-printf '%s' "$mcpun" | sed -n 3p | grep -q '"isError": true' \
+printf '%s' "$mcpun" | sed -n 3p | drain_grep -q '"isError": true' \
   && ok "and answers a call it does not recognise with an error rather than a protocol fault" \
   || no "and answers a call it does not recognise with an error rather than a protocol fault" \
        "got: $(printf '%s' "$mcpun" | sed -n 3p)"
 # The aliases that were tried, by name. "could not connect" without them is the
 # sentence this whole item exists to replace.
-printf '%s' "$mcpun" | sed -n 3p | grep -q 'nope-alpha' \
+printf '%s' "$mcpun" | sed -n 3p | drain_grep -q 'nope-alpha' \
   && ok "and the reason names the aliases it tried" \
   || no "and the reason names the aliases it tried" "$(printf '%s' "$mcpun" | sed -n 3p)"
 
@@ -3162,7 +3188,7 @@ lp_before=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev
 lp=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$LPB" BRIDGE_HOST=10.0.0.9 MAESTRO_DRIVE_CONF=/dev/null \
   LDIR="$LP/ldir" RDIR="$LP/bridgescratch" timeout 60 bash "$REPO/bin/install.sh" 2>&1)
 lp_after=$(find "$REPO/remote" "$REPO/runners" -type f -exec md5sum {} + 2>/dev/null | LC_ALL=C sort | md5sum)
-{ [ "$lp_before" = "$lp_after" ] && printf '%s' "$lp" | grep -q "nothing was copied"; } \
+{ [ "$lp_before" = "$lp_after" ] && grep -q "nothing was copied" <<< "$lp"; } \
   && ok "install.sh over the bridge copies nothing and leaves the checkout alone" \
   || no "install.sh over the bridge copies nothing and leaves the checkout alone" "said: $(printf '%s' "$lp" | head -2)"
 [ -d "$LP/bridgescratch/flows" ] \
@@ -3423,7 +3449,7 @@ grep -q 'echo out-line' "$BR/log" 2>/dev/null \
 
 # A directory owned by somebody else is a door somebody else propped open.
 brout=$(sh "$REPO/remote/bridge.sh" /tmp 2>&1); brrc=$?
-{ [ "$brrc" != 0 ] && printf '%s' "$brout" | grep -q 'owned by'; } \
+{ [ "$brrc" != 0 ] && grep -q 'owned by' <<< "$brout"; } \
   && ok "it refuses a directory that is not ours" \
   || no "it refuses a directory that is not ours" "rc=$brrc: $brout"
 
@@ -3480,15 +3506,15 @@ kill $BR2_PID 2>/dev/null; wait $BR2_PID 2>/dev/null
 # run nothing, and do not retry — half of what goes through _ssh taps a screen.
 bx_out=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$TMP/no-such-bridge" MAESTRO_DRIVE_CONF=/dev/null bash -c \
   '. '"$REPO"'/bin/lib.sh 2>/dev/null; _ssh "echo SHOULD-NOT-RUN"' 2>&1); bx_rc=$?
-{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no bridge helper is serving' \
-  && ! printf '%s' "$bx_out" | grep -q 'SHOULD-NOT-RUN'; } \
+{ [ "$bx_rc" != 0 ] && grep -q 'no bridge helper is serving' <<< "$bx_out" \
+  && ! grep -q 'SHOULD-NOT-RUN' <<< "$bx_out"; } \
   && ok "no helper: it says so, runs nothing, and fails" \
   || no "no helper: it says so, runs nothing, and fails" "rc=$bx_rc: $bx_out"
 
 # The conf has to say where the helper serves; there is no sensible default.
 bx_out=$(TRANSPORT=bridge APP_ID=x MAESTRO_DRIVE_CONF=/dev/null bash -c \
   '. '"$REPO"'/bin/config.sh' 2>&1); bx_rc=$?
-{ [ "$bx_rc" != 0 ] && printf '%s' "$bx_out" | grep -q 'no BRIDGE_DIR'; } \
+{ [ "$bx_rc" != 0 ] && grep -q 'no BRIDGE_DIR' <<< "$bx_out"; } \
   && ok "a bridge conf without BRIDGE_DIR is refused, and says what to set" \
   || no "a bridge conf without BRIDGE_DIR is refused, and says what to set" "rc=$bx_rc: $(printf '%s' "$bx_out" | head -1)"
 
@@ -3840,7 +3866,7 @@ $R "ZZZ-NOTHING-MATCHES-THIS" $IPAD --point < "$FIX/ipad-landscape-keyboard-up.j
 
 # the keyboard fixture has nodes under the keyboard, so kbd must appear, and
 # every visibility token must be one of the four
-echo "$rows_ipad" | sed 1d | grep -q " kbd " \
+echo "$rows_ipad" | sed 1d | drain_grep -q " kbd " \
   && ok "rows: nodes under the keyboard are marked kbd" \
   || no "rows: nodes under the keyboard are marked kbd" "no kbd token"
 bad_tok=$(echo "$rows_ipad" | sed 1d | awk '{print $2}' | grep -vE '^(vis|off|kbd|zero)$' | head -1)
@@ -3937,7 +3963,7 @@ chmod +x "$W/stub.sh"; echo 0 > "$W/n"
 wout=$(python3 "$REPO/bin/watch.py" --rows-cmd "$W/stub.sh $W/n" --interval 0.05 \
          --cycles 6 --log "$W/log" --claim-file "$W/claim" --stop-file "$W/stop" 2>&1)
 
-echo "$wout" | grep -q "ERR  rows rc=1 driver gone" \
+grep -q "ERR  rows rc=1 driver gone" <<< "$wout" \
   && ok "watch: a failed read logs ERR" \
   || no "watch: a failed read logs ERR" "no ERR line"
 
@@ -3947,14 +3973,14 @@ echo "$wout" | grep -q "ERR  rows rc=1 driver gone" \
   && ok "watch: an ERR does not become a change" \
   || no "watch: an ERR does not become a change" "$(echo "$wout" | grep -c '>>> CHANGE') changes, expected 2"
 
-echo "$wout" | grep -q "added=\['D'\] removed=\['B', 'C'\]" \
+grep -q "added=\['D'\] removed=\['B', 'C'\]" <<< "$wout" \
   && ok "watch: names what arrived and what left" \
   || no "watch: names what arrived and what left" "$(echo "$wout" | grep '>>> CHANGE' | head -1)"
 
 # a list that has emptied is the finding, so it must be a change with n=0
-echo "$wout" | grep -q "OK n=0" && echo "$wout" | grep -q "removed=\['A', 'D'\]" \
+grep -q "OK n=0" <<< "$wout" && grep -q "removed=\['A', 'D'\]" <<< "$wout" \
   && ok "watch: an emptied list is a change, not silence" \
-  || no "watch: an emptied list is a change, not silence" "no n=0 change"
+  || no "watch: an emptied list is a change, not silence" "no n=0 change: $(echo "$wout" | tr '\n' '|')"
 
 # the claim is cleared on a clean exit, so a later call can tell it is over
 [ ! -e "$W/claim" ] && ok "watch: the claim is cleared on a clean exit" \
@@ -3982,7 +4008,7 @@ PYW
 echo 0 > "$W/n2"; : > "$W/stop2"
 wout2=$(python3 "$REPO/bin/watch.py" --rows-cmd "$W/stub.sh $W/n2" --interval 0.05 \
           --cycles 3 --log "$W/log2" --stop-file "$W/stop2" 2>&1)
-echo "$wout2" | grep -q "^0001 " \
+grep -q "^0001 " <<< "$wout2" \
   && ok "watch: a stale stop file does not kill the next run" \
   || no "watch: a stale stop file does not kill the next run" "took no samples"
 
@@ -4097,17 +4123,17 @@ case "$m1" in
 esac
 
 # rig down must only ever act on the claim file, never on the booted list
-sed -n '/^_rig_down()/,/^}/p' "$REPO/bin/drivers.sh" | grep -q '_rig_claimed' \
+sed -n '/^_rig_down()/,/^}/p' "$REPO/bin/drivers.sh" | drain_grep -q '_rig_claimed' \
   && ok "rig: teardown reads the claim, not the booted list" \
   || no "rig: teardown reads the claim, not the booted list" "no _rig_claimed"
-sed -n '/^_rig_down()/,/^}/p' "$REPO/bin/drivers.sh" | grep -q '_booted\|down-all' \
+sed -n '/^_rig_down()/,/^}/p' "$REPO/bin/drivers.sh" | drain_grep -q '_booted\|down-all' \
   && no "rig: teardown never walks every booted device" "it reads the booted list" \
   || ok "rig: teardown never walks every booted device"
 
 # boots are serialised and waited out (item 74), so _rig_up must settle in the
 # same loop that boots, and start drivers only afterwards
 rigup=$(sed -n '/^_rig_up()/,/^}/p' "$REPO/bin/drivers.sh")
-echo "$rigup" | grep -q '_rig_settle' && ok "rig: a boot is waited out" \
+grep -q '_rig_settle' <<< "$rigup" && ok "rig: a boot is waited out" \
                                       || no "rig: a boot is waited out" "no _rig_settle"
 [ "$(echo "$rigup" | grep -n '_rig_settle' | cut -d: -f1)" -lt "$(echo "$rigup" | grep -n '_up_one' | cut -d: -f1)" ] \
   && ok "rig: every boot settles before any driver starts" \
@@ -4115,7 +4141,7 @@ echo "$rigup" | grep -q '_rig_settle' && ok "rig: a boot is waited out" \
 
 # a device the rig booted gets its wall label written OVER — the stale-label
 # half of item 67. _label_default deliberately never overwrites.
-sed -n '/^_rig_rename()/,/^}/p' "$REPO/bin/drivers.sh" | grep -q "cat > '\$RDIR/labels" \
+sed -n '/^_rig_rename()/,/^}/p' "$REPO/bin/drivers.sh" | drain_grep -q "cat > '\$RDIR/labels" \
   && ok "rig: a booted device is renamed, not merely filled in if blank" \
   || no "rig: a booted device is renamed, not merely filled in if blank" "still conditional"
 
@@ -4139,7 +4165,7 @@ out=$(wcheck 1 "TREE" "DIFFERENT")
 case "$out" in *"seen=0"*) ok "wedge: a changed screen resets the count" ;;
                *) no "wedge: a changed screen resets the count" "$out" ;; esac
 # the probe must refuse to claim a pass it cannot prove
-sed -n '/^_probe()/,/^}/p' "$REPO/bin/driver.sh" | grep -q "did not change" \
+sed -n '/^_probe()/,/^}/p' "$REPO/bin/driver.sh" | drain_grep -q "did not change" \
   && ok "wedge: the probe reports an inconclusive result as inconclusive" \
   || no "wedge: the probe reports an inconclusive result as inconclusive" "claims a pass"
 
@@ -4151,7 +4177,7 @@ steps=$(printf '%s\n' 'tapon "^A$"; expect "^B$";; settle' | tr ';' '\n' | sed '
 grep -q 'script --steps' "$REPO/bin/driver.sh" && grep -q 'steps-XXXXXX.journey' "$REPO/bin/driver.sh" \
   && ok "steps: script --steps exists and builds a throwaway journey" \
   || no "steps: script --steps exists and builds a throwaway journey" "missing"
-sed -n '/--steps/,/^            fi/p' "$REPO/bin/driver.sh" | grep -q 'rm -f "\$_tmp_journey"' \
+sed -n '/--steps/,/^            fi/p' "$REPO/bin/driver.sh" | drain_grep -q 'rm -f "\$_tmp_journey"' \
   && ok "steps: the throwaway is removed" \
   || no "steps: the throwaway is removed" "left behind"
 
@@ -4163,7 +4189,7 @@ grep -q '  archive)' "$REPO/bin/notes.sh" \
   && ok "notes: there is an archive path" || no "notes: there is an archive path" "missing"
 # archive must never move anything on its own — losing a live note is worse
 # than a long file
-sed -n '/^  archive)/,/^    ;;/p' "$REPO/bin/notes.sh" | grep -qE '^\s*(mv|sed -i|rm) ' \
+sed -n '/^  archive)/,/^    ;;/p' "$REPO/bin/notes.sh" | drain_grep -qE '^\s*(mv|sed -i|rm) ' \
   && no "notes: archive moves nothing by itself" "it edits the notes" \
   || ok "notes: archive moves nothing by itself"
 
@@ -4258,30 +4284,30 @@ out=$(reap "" "" "$ROWS_OLD")
   && ok "reap: an unclaimed, driverless, stale boot is an orphan" \
   || no "reap: an unclaimed, driverless, stale boot is an orphan" "$(printf '%s' "$out" | tr '\n' '/')"
 
-printf '%s' "$out" | grep -q "Nothing has been shut down" \
+grep -q "Nothing has been shut down" <<< "$out" \
   && ok "reap: listing alone shuts nothing down" \
   || no "reap: listing alone shuts nothing down" "it did not say so"
 
 # Each of the three tests on its own has to be enough to keep a device.
 out=$(reap "AAAA" "" "$ROWS_OLD")
-printf '%s' "$out" | grep -q "AAAA.*keep — a session claims it" \
+grep -q "AAAA.*keep — a session claims it" <<< "$out" \
   && ok "reap: a device its session still claims is kept" \
   || no "reap: a device its session still claims is kept" "$(printf '%s' "$out" | grep AAAA)"
 
 out=$(reap "" "AAAA 22087" "$ROWS_OLD")
-printf '%s' "$out" | grep -q "AAAA.*keep — a driver is live on 22087" \
+grep -q "AAAA.*keep — a driver is live on 22087" <<< "$out" \
   && ok "reap: a device with a live driver is kept" \
   || no "reap: a device with a live driver is kept" "$(printf '%s' "$out" | grep AAAA)"
 
 out=$(reap "" "" "$ROWS_TODAY")
-printf '%s' "$out" | grep -q "AAAA.*keep — used today" \
+grep -q "AAAA.*keep — used today" <<< "$out" \
   && ok "reap: a device used today is kept, whoever booted it" \
   || no "reap: a device used today is kept, whoever booted it" "$(printf '%s' "$out" | grep AAAA)"
 
 # Calendar day, not an hour count: yesterday at 23:00 is yesterday's work.
 out=$(reap "" "" "AAAA|$(date -d yesterday +%Y%m%d 2>/dev/null || date -v-1d +%Y%m%d)|yesterday 23:00|$TDY
 BBBB|$TDY|today|$TDY")
-printf '%s' "$out" | grep -q "AAAA.*ORPHAN" \
+grep -q "AAAA.*ORPHAN" <<< "$out" \
   && ok "reap: the rule is the calendar day, not a count of hours" \
   || no "reap: the rule is the calendar day, not a count of hours" "$(printf '%s' "$out" | grep AAAA)"
 
@@ -4289,7 +4315,7 @@ printf '%s' "$out" | grep -q "AAAA.*ORPHAN" \
 # One udid per line, as `cat $RIG_OWNED/*` yields them — grep -qx is strict
 # about that on purpose, so a space-separated list matches nothing.
 out=$(reap "$(printf 'AAAA\nBBBB\n')" "" "$ROWS_OLD")
-printf '%s' "$out" | grep -q "nothing to reap" \
+grep -q "nothing to reap" <<< "$out" \
   && ok "reap: nothing to reap says so" \
   || no "reap: nothing to reap says so" "$(printf '%s' "$out" | tail -2 | tr '\n' '/')"
 
@@ -4345,7 +4371,7 @@ fi
   || no "label: a recently-named peer survives a torn-down driver" "renamed too eagerly"
 # a session-id mismatch alone must NOT be sufficient — two live sessions share
 # this Mac routinely (item 80)
-sed -n '/^_label_default()/,/^}/p' "$REPO/bin/drivers.sh" | grep -q 'AGE' \
+sed -n '/^_label_default()/,/^}/p' "$REPO/bin/drivers.sh" | drain_grep -q 'AGE' \
   && ok "label: the reclaim needs age, not just a mismatch" \
   || no "label: the reclaim needs age, not just a mismatch" "mismatch alone would rename"
 
@@ -4443,13 +4469,13 @@ perm_set() { printf '%s' "$2" > "$1"; }
 perm_set "$PA/home/.claude/settings.json" '{}'
 rm -f "$PA/proj/.claude/settings.local.json"
 out=$(perm_run none)
-printf '%s' "$out" | grep -q "ssh mac-a" && printf '%s' "$out" | grep -q "ssh mac-b" \
+grep -q "ssh mac-a" <<< "$out" && grep -q "ssh mac-b" <<< "$out" \
   && ok "allows: nothing configured names every uncovered call" \
   || no "allows: nothing configured names every uncovered call" "$out"
-printf '%s' "$out" | grep -q 'Bash(ssh mac-\*:\*)' \
+grep -q 'Bash(ssh mac-\*:\*)' <<< "$out" \
   && ok "allows: the suggestion uses the aliases' common prefix" \
   || no "allows: the suggestion uses the aliases' common prefix" "$out"
-printf '%s' "$out" | grep -q "settings.local.json" \
+grep -q "settings.local.json" <<< "$out" \
   && ok "allows: both candidate files are named" \
   || no "allows: both candidate files are named" "$out"
 
@@ -4466,8 +4492,8 @@ perm_set "$PA/home/.claude/settings.json" '{}'
 perm_set "$PA/proj/.claude/settings.local.json" \
   '{"permissions":{"allow":["Bash(ssh mac-a:*)","Bash(scp mac-a:*)"]}}'
 out=$(perm_run partial)
-printf '%s' "$out" | grep -q "ssh mac-b" \
-  && ! printf '%s' "$out" | grep -q "ssh mac-a " \
+grep -q "ssh mac-b" <<< "$out" \
+  && ! grep -q "ssh mac-a " <<< "$out" \
   && ok "allows: a narrow project entry covers its own alias only" \
   || no "allows: a narrow project entry covers its own alias only" "$out"
 
