@@ -1,6 +1,7 @@
 # maestro-drive — backlog
 
-**Six items are open — 87, 90, 93, 97, 99 and 100.** 87 is not gated; 90 waits on
+**Seven items are open — 50, 87, 90, 93, 97, 99 and 100.** 50 was reopened 24 Sep:
+its face-up diagnosis had been unreachable since 11 Sep. 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
@@ -95,6 +96,42 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED 24 Sep: the diagnosis built on 11 Sep had been unreachable since the same day; fixed again 24 Sep, the phone-side crash itself still open**
+
+The 11 Sep entry is in `BACKLOG-DONE.md`. What it built was a message, not a
+guard: `_devdrv_hint` reads the phone's driver log and, on a
+`ScreenSizeHelper.swift:99: Fatal error: Not implemented yet`, says "FACE-UP
+crash (item 50) … STAND THE PHONE UPRIGHT". The crash cannot be prevented from
+this side, because nothing the driver serves says which way the phone is lying.
+
+**Why it never printed.** `_start` calls the hint only after item 46's restart
+has failed. On 11 Sep the restart always failed, with `device.sh: Permission
+denied`, so the hint always ran. The same day that call was changed to `bash
+"$HERE/device.sh"`, and from then on the restart succeeded, emptied the log, and
+the hint was never reached. The test for it passed throughout, because its stub
+restart never brought the driver back.
+
+**Found 24 Sep, driving two phones for item 99.** Both lay flat on the desk.
+Every tap took about 20 s ("settle: screen still moving"), then the next call
+printed only `restarting it (item 46)`. The cause was found by tapping once and
+reading `~/devdrv-<udid>.log` on the Mac before anything restarted it.
+
+**Fixed 24 Sep:** `_ensure_device` (`bin/driver.sh`) calls `_devdrv_hint`
+before it restarts, so the cause is read from the log while it is still there.
+A new test gives the stub restart a working driver (`/status` answers 200 once
+`device.sh` has run) and fails on the old order.
+
+**Still open:**
+- The crash itself. The on-device runner is built from older source than the
+  Maestro jar ships (item 55); the jar's `ScreenSizeHelper.swift` handles
+  `.faceUp`. Rebuilding the device driver from the jar's source would remove
+  the fault rather than name it.
+- A flat phone still crashes and restarts on every touch. After the hint has
+  named the crash once, the restart could be refused until the phone is
+  upright, but there is no way to read "upright" before the next touch.
 
 ---
 

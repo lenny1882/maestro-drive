@@ -3472,7 +3472,7 @@ wants: a new journey only when there is no other file, with a header saying what
 adds and why. Kept as the worked example of good judgement, against `5827cb0e`'s
 dodge-a-bug fork.
 
-## 50. A flat phone crashes the driver on the first touch, silently — **CONFIRMED LIVE + diagnosis BUILT IN src/ 11 Sep, shipped 11 Sep (a pre-touch refusal is not possible — no readable posture; found a separate item-46 recovery bug in passing)**
+## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED 24 Sep — see BACKLOG.md; CONFIRMED LIVE + diagnosis BUILT IN src/ 11 Sep, shipped 11 Sep (a pre-touch refusal is not possible — no readable posture; found a separate item-46 recovery bug in passing)**
 
 **Session K**, from resuming physical-device work cold (device already upright
 in a prior session, so nothing carried the constraint forward). `driver.sh
