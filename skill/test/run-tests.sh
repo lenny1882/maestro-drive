@@ -22,6 +22,21 @@
 #                                crop's rectangle can both be read back exactly
 set -uo pipefail
 
+# Start from a clean environment (BACKLOG item 106). A shell that has sourced a
+# project's lib.sh carries that project's conf — APP_ID, DEV, MAC_HOST, LDIR
+# and the rest — and config.sh keeps any value already set, so nine tests saw
+# the hugoboss app instead of their own and failed. Rather than unset a list
+# that has to follow config.sh, run once more under env -i, keeping only what
+# the tests need from outside: PATH, HOME (redirected below, but the real one
+# is kept for the cases that ask a login shell), TMPDIR (the only writable
+# scratch inside a sandbox), TERM and the locale.
+if [ -z "${MAESTRO_DRIVE_CLEAN_ENV:-}" ]; then
+  exec env -i MAESTRO_DRIVE_CLEAN_ENV=1 PATH="$PATH" HOME="$HOME" \
+    ${TMPDIR:+TMPDIR="$TMPDIR"} ${TERM:+TERM="$TERM"} \
+    ${LANG:+LANG="$LANG"} ${LC_ALL:+LC_ALL="$LC_ALL"} \
+    bash "${BASH_SOURCE[0]}" "$@"
+fi
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIX="$REPO/test/fixtures"
 

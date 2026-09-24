@@ -101,7 +101,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 106. The test suites fail in a shell that has sourced a project conf — **OPEN, raised 24 Sep; reproduced, 9 tests named**
+## 106. The test suites fail in a shell that has sourced a project conf — **OPEN, raised 24 Sep; the conf cause FIXED 24 Sep, one unexplained run left**
 
 Four times on 24 Sep a suite reported failures, and passed straight after when
 rerun alone:
@@ -142,7 +142,13 @@ expected their own. The nine:
 - `conf: upward search still works`, `conf: a detached cwd falls back to the
   cache` — got the hugoboss `APP_ID`
 
-**Fix:** have each suite start from a clean
+**Fixed 24 Sep:** both `run-tests.sh` files re-run themselves once under `env
+-i`, keeping only `PATH`, `HOME` (redirected straight after, the real one kept
+for the login-shell cases), `TMPDIR`, `TERM` and the locale. In the same shell
+with the hugoboss conf sourced, the skill suite now gives 577 passed, 0 failed
+and the packaging suite 158 passed, 0 failed.
+
+**The fix as first proposed:** have each suite start from a clean
 environment (unset every variable `config.sh` can set, or run under `env -i`
 with only `PATH` and `HOME`) and its own `LDIR`. If the third row recurs with a
 clean environment, capture it while a `driver.sh tree` loop runs.
