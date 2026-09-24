@@ -1,6 +1,7 @@
 # maestro-drive — backlog
 
-**Seven items are open — 50, 87, 90, 93, 97, 99 and 100.** 50 was reopened 24 Sep:
+**Eleven items are open — 50, 87, 90, 93, 97, 99, 100 and 101–104.** 101–104 came out
+of item 99's two-phone run on 24 Sep. 50 was reopened 24 Sep:
 its face-up diagnosis had been unreachable since 11 Sep. 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
@@ -84,7 +85,7 @@ It is in `BACKLOG-DONE.md`.
 **87 was raised on 18 Sep**, the first item about what this package is *for*
 rather than how it works. It is the oldest item still open here.
 
-**Next item number: 101.** Items 1–100 are allocated; new items start from 101.
+**Next item number: 105.** Items 1–104 are allocated; new items start from 105.
 
 **98 is done and is in `BACKLOG-DONE.md`.** The package is `maestro-drive`
 everywhere — the repo on GitHub, the conf, the installed skill and lib
@@ -96,6 +97,105 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 104. `driver.sh app` always answers springboard on a phone — **OPEN, raised 24 Sep**
+
+Found during item 99. On both phones, `driver.sh app` returned
+`"runningAppBundleId" : "com.apple.springboard"`. That was true before and
+after `launch com.apple.Preferences` on the iPhone 11 and `launch
+com.apple.mobilecal` on the XS Max, while the trees' root nodes read `app
+Settings` and `app Calendar`. So on a phone the verb cannot confirm which app is
+in front, and it cannot tell two phones apart. The tree could: the root node
+names the app.
+
+**Fix:** on a physical device, answer from the tree's root node instead. At
+minimum, say the driver's answer is not reliable there rather than print it as
+fact. Not checked: whether a simulator gives the right answer, and whether this
+is the old on-device runner (item 55).
+
+---
+
+## 103. An install failure is reported as the XCTest session dying — **OPEN, raised 24 Sep**
+
+Found during item 99. On the XS Max, `device.sh up` failed four times in a row,
+72 s each. `~/devdrv.log` showed `Installing built products Finished with
+error: Connection with the remote side was unexpectedly closed`,
+`IXRemoteErrorDomain` code 6, "Connection interrupted", and `xcrun devicectl
+device install app` gave the same thing directly as `CoreDeviceError` 3002.
+`deviceup.sh` printed item 46's message instead: "the on-device XCTest session
+dying … Retry". Retrying did nothing.
+
+Restarting the phone fixed it; the next install took 3 s. On 10 Sep the same
+3002 was caused by a second process using the phone's tunnel (a `lockState`
+keep-alive loop, `BACKLOG-DONE.md` item 46). This time nothing else on the Mac
+was touching the phone. Once the error had occurred, one attempt came back
+instead with `CoreDeviceError` 4000, "The device disconnected immediately after
+connecting".
+
+**Fix:** in `deviceup.sh`, when the log has `Installing built products …
+Finished with error`, say the driver could not be installed on the phone. Name
+3002 and 4000, and say that restarting the phone is what cleared it on 24 Sep.
+Keep item 46's message for a runner that installed and then died.
+
+---
+
+## 102. The 1/3-scale correction is applied to anything that looks like a marker — **OPEN, raised 24 Sep**
+
+`resolve.py` treats any node whose frame is the screen size divided by some
+factor as a marker, and rescales that node's siblings. The factor can also be
+below 1. On the XS Max, Calendar's tree has a 1242×2688 node at −414,−896,
+which is exactly the phone's pixel size from `/deviceInfo`
+(`widthPixels 1242, heightPixels 2688`). `resolve.py` read it as a marker
+(`find --explain`: "marker 1242x2688 at -414,-896 -> scale 0.3333 offset
++138,+298.67") and moved Continue from y=781, where the tree has it, to y=559.
+`tapon` then returned rc=0 for a tap that hit nothing. Item 50's 11 Sep note of
+a target resolved to x=−892 on the home screen was probably the same thing.
+
+The correction exists for one Flutter bug on iOS, where frames come back at 1/3
+scale (item 100, and `hugoboss-flutter-runner`'s backlog item 999.16). Applying
+it to a native app is guessing.
+
+**Requirement: nothing is corrected automatically.** A transform is applied only
+when it passes a check against the real screen, and when it doesn't, the raw
+frame is used and `--explain` says which check failed. Checks to build:
+
+- **Against the screen size.** Read `/deviceInfo` (points and pixels) and
+  compare the candidate marker's frame with it. A node the size of the screen in
+  pixels is pixel space, not a scale marker, and is never taken as one.
+- **Against the content.** Under a genuine 1/3 marker, the siblings' raw frames
+  fit inside the marker's scaled region. Siblings that already span the screen
+  in points, as Calendar's did (Continue at 44,756 on an 896-point screen),
+  refute the marker.
+- **Against the result.** A transformed point that lands outside every visible
+  node, or off the screen, refutes the transform rather than getting tapped.
+
+**Done when:** Calendar's Continue on the XS Max resolves to (207, 781) with no
+marker applied, and the Flutter store screen's 1/3 case from
+`hugoboss-flutter-runner` still resolves correctly. Both need to be fixtures in
+`test/fixtures/`.
+
+---
+
+## 101. A forwarder that outlives a reconnect sends to a dead connection — **OPEN, raised 24 Sep**
+
+Found during item 99. `iproxy.py` looks up the phone's usbmux device id once,
+when it starts. The iPhone 11 was stood upright, which apparently reconnected
+it and gave it a new id; its forwarder kept sending to the old one ("device 5").
+The on-device driver logged `starting server 127.0.0.1:22187`, and `curl` on
+the Mac got `Connection reset by peer`. `deviceup.sh` keeps a forwarder that is
+already running for that phone and port (`pgrep -f "iproxy.py $UDID $PORT"`),
+so item 46's automatic restart replaced the driver three times and never the
+forwarder. Only `device.sh down` then `up` fixed it; that bring-up took 11 s.
+
+**Fix, one of:**
+- `deviceup.sh` checks the running forwarder's id against a fresh
+  `ListDevices` before it keeps it, and replaces it on a mismatch.
+- `iproxy.py` resolves the id on each connection rather than once.
+
+The second also covers a reconnect mid-session with no restart in between. It
+costs one usbmuxd query per connection; measure that before choosing it.
 
 ---
 
@@ -225,7 +325,7 @@ Aug 2027.
   shared `~/devdrv.log` was emptied by the second phone's bring-up while the
   first phone's `xcodebuild` was still writing to it.
 
-**What the run turned up, not yet fixed:**
+**What the run turned up, not yet fixed — filed as items 101–104:**
 
 - **A forwarder that outlives a reconnect points at a dead phone.** `iproxy.py`
   resolves the usbmux device id once, when it starts. The iPhone 11 got a new
