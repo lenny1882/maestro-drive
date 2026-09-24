@@ -1341,6 +1341,36 @@ case "$expout" in
 esac
 
 echo
+echo "a marker is used only after it passes a check against the screen (item 102)"
+# Three fixtures rebuilt from recorded frames (each says so in its _note): a
+# pixel-sized node that is not a marker, and three real markers that must still
+# be applied. Before item 102, Calendar's Continue resolved to y=559.3.
+mk=$($R '^Continue$' --width 414 --height 896 --point --index 0 < "$FIX/marker-calendar-pixel-node.json" 2>&1)
+[ "$mk" = "207 781" ] && ok "a node the size of the screen in pixels is not taken as a 1/3 marker" \
+  || no "a node the size of the screen in pixels is not taken as a 1/3 marker" "got: $mk"
+mk=$($R '^Continue$' --width 414 --height 896 --explain --index 0 < "$FIX/marker-calendar-pixel-node.json" 2>&1)
+case "$mk" in *"refused marker 1242x2688 at -414,-896: larger than the screen"*) ok "--explain names the refused marker and why" ;;
+  *) no "--explain names the refused marker and why" "got: $mk" ;; esac
+mk=$($R '^THIRD SCALE LABEL$' --width 402 --height 874 --point < "$FIX/marker-flutter-third-scale.json" 2>&1)
+[ "$mk" = "200.7 146.1" ] && ok "Flutter's 1/3-scale marker is still applied" \
+  || no "Flutter's 1/3-scale marker is still applied" "got: $mk"
+mk=$($R '^42 - Camden' --width 402 --height 874 --point < "$FIX/marker-flutter-third-scale.json" 2>&1)
+[ "$mk" = "200.6 331" ] && ok "an overlay's offset marker is still applied" \
+  || no "an overlay's offset marker is still applied" "got: $mk"
+mk=$($R '^App Library$' --width 414 --height 896 --point < "$FIX/marker-home-paged-scroll.json" 2>&1)
+[ "$mk" = "207 90" ] && ok "a paged scroll view's offset marker is still applied" \
+  || no "a paged scroll view's offset marker is still applied" "got: $mk"
+# A 1/3 marker whose sibling already lies in screen points is refuted by the
+# sibling: 44,756 cannot be inside a 138x298.7 space.
+mk=$(printf '%s' '{"axElement":{"elementType":0,"frame":{"X":0,"Y":0,"Width":414,"Height":896},"children":[
+ {"elementType":1,"frame":{"X":0,"Y":0,"Width":414,"Height":896},"children":[
+  {"elementType":1,"frame":{"X":0,"Y":0,"Width":138,"Height":298.667}},
+  {"elementType":9,"label":"GO","frame":{"X":44,"Y":756,"Width":326,"Height":50}}]}]}}' |
+  $R '^GO$' --width 414 --height 896 --point 2>&1)
+[ "$mk" = "207 781" ] && ok "a 1/3 marker is refused when a sibling lies outside it" \
+  || no "a 1/3 marker is refused when a sibling lies outside it" "got: $mk"
+
+echo
 echo "partial keyboard coverage noted (item 35)"
 # An element whose top (y=540) is above the keyboard (top=569) but centre
 # (y=580) is below it should note the partial coverage.

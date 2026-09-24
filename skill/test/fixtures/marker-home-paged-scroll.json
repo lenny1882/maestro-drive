@@ -1,0 +1,6 @@
+{"_note":"Reconstructed from a tree captured 24 Sep 2026 on an iPhone XS Max's home screen, showing the App Library page of a paged scroll view. The offset marker is real and must still be applied (BACKLOG item 102). Other home-screen content is left out.",
+ "axElement":{"elementType":0,"frame":{"X":0,"Y":0,"Width":414,"Height":896},"children":[
+  {"elementType":1,"frame":{"X":0,"Y":0,"Width":414,"Height":896},"children":[
+   {"elementType":1,"frame":{"X":828,"Y":0,"Width":414,"Height":896}},
+   {"elementType":1,"identifier":"dewey-search-bar","frame":{"X":828,"Y":0,"Width":414,"Height":138},"children":[
+    {"elementType":49,"identifier":"dewey-search-field","label":"App Library","frame":{"X":855,"Y":66,"Width":360,"Height":48}}]}]}]}}
