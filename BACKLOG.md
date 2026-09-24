@@ -1,11 +1,12 @@
 # maestro-drive — backlog
 
-**Five items are open — 87, 90, 93, 97 and 99.** 87 is not gated; 90 waits on
+**Six items are open — 87, 90, 93, 97, 99 and 100.** 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
 word of MCP; 99 is gated on a second iPhone, and on one defect that makes the
-obvious two-phone command drive the wrong phone. **17 is done** — the package
+obvious two-phone command drive the wrong phone; 100 is gated on the setup
+screens until Flutter 3.49 is stable. **17 is done** — the package
 has a git repo, a version, a manifest, an installer and an update path. That
 released **28**.
 
@@ -83,7 +84,7 @@ It is in `BACKLOG-DONE.md`.
 **87 was raised on 18 Sep**, the first item about what this package is *for*
 rather than how it works. It is the oldest item still open here.
 
-**Next item number: 99.** Items 1–98 are allocated; new items start from 99.
+**Next item number: 101.** Items 1–100 are allocated; new items start from 101.
 
 **98 is done and is in `BACKLOG-DONE.md`.** The package is `maestro-drive`
 everywhere — the repo on GitHub, the conf, the installed skill and lib
@@ -95,6 +96,74 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 100. Journeys are not Maestro tests — **OPEN, raised 24 Sep; gated on the setup screens until Flutter 3.49 is stable**
+
+The default driving path does not use Maestro. `driver.sh` talks straight to the
+XCUITest runner's HTTP API on 22087 (`skill/SKILL.md:28-46`), and a journey is
+this toolkit's own step language, interpreted line by line in
+`bin/driver.sh:818-925`, with `resolve.py` turning each pattern into a point.
+The only part of Maestro in the loop is the runner binary. Found by a
+`hugoboss-flutter-runner` session on 23 Sep (`8fe2598c`, recorded in that repo's
+`maestro/tooling-findings.md` and its backlog item 999.16).
+
+**The step language is not the difference.** Almost every verb has a one-line
+Maestro equivalent: `tapon` → `tapOn`, `text` → `inputText`, `key return` →
+`pressKey: Enter`, `expect X 15` → `extendedWaitUntil`, `include-if` →
+`runFlow` with `when: visible`. What differs is:
+
+- **Who picks the point.** `resolve.py` corrects frames it knows are wrong,
+  including the 1/3 scale. Maestro taps the centre of the frame as reported,
+  after settling and re-resolving the element in a fresh tree
+  (`Maestro.kt:216-255` in `mobile-dev-inc/maestro`).
+- **Where it runs.** A journey runs only through this toolkit and its relay. A
+  flow runs in CI, on Codemagic, in Maestro Studio, and on another developer's
+  machine. Nothing a session learns by driving currently becomes a test anyone
+  else can run.
+- **What it costs.** A journey keeps the driver up: the setup journey is about
+  9 s. Every `maestro test` pays 15–30 s of startup and kills that device's
+  driver (`bin/flow.sh:7-10`).
+- **What Maestro has that journeys lack.** `id:` selectors, relational
+  selectors (`below:`, `childOf:`), `retryTapIfNoChange`, `repeat`, JavaScript,
+  `launchApp` with `arguments` and `clearState`, JUnit and HTML reports. Parts of
+  its settle-then-re-resolve are rebuilt here: `_settle`, the byte-identical-tree
+  check, and the keyboard guard.
+
+**Why it cannot simply switch.** Measured 23 Sep with Maestro 2.8.0 against the
+app built on Flutter 3.41.9: once the store dropdown closes, every Flutter node
+reports at 1/3 scale until the process restarts, and a restart loses the chosen
+store. No Maestro command acts on correct frames between closing the dropdown
+and tapping SUBMIT; only a hard-coded `point:` works. `resolve.py`'s correction
+is the only reason journeys pass that screen. On the 3.49.0-0.1.pre beta the
+scale is fixed and a selector-only flow passed end to end, as long as it
+committed the store by filtering and pressing Enter. A second bug survives the
+beta. Rows of a `DropdownMenu` whose field moves after it opens keep their old
+frame, so a row tap still misses. That bug is isolated in a stock app, and no
+upstream report of it was found.
+
+**The shape, as proposed, not decided:**
+
+1. `driver.sh` stays the way to read, look and explore: it is 0.28 s against
+   7.7 s for a hierarchy, and it drives several devices.
+2. What gets kept and replayed becomes a Maestro flow, run with `maestro test`.
+3. Screens after setup can convert now. The setup screens wait for 3.49 stable
+   or a launch argument that skips them. Otherwise they need `point:` taps,
+   which is the brittleness this exists to remove.
+4. When 3.49 is stable, `resolve.py`'s scale correction comes out rather than
+   staying as a permanent layer.
+
+**Open before building anything:**
+
+- whether a journey → flow converter is worth writing, or flows are written by
+  hand from here on
+- whether the byte-identical-tree check has a Maestro equivalent, since Maestro
+  reports COMPLETED for a tap that landed on nothing
+- what the per-run startup costs a session that iterates on one flow, and
+  whether `maestro test --continuous` removes it
+- how `flow.sh` and several devices fit together, given each run takes that
+  device's driver down
 
 ---
 
