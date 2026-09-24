@@ -1,6 +1,6 @@
 # maestro-drive — backlog
 
-**Eleven items are open — 87, 90, 93, 97, 99, 100, 101 and 103–106.** 102 was done
+**Ten items are open — 87, 90, 93, 97, 99, 100 and 103–106.** 101 was done 24 Sep. 102 was done
 24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
@@ -217,27 +217,6 @@ connecting".
 Finished with error`, say the driver could not be installed on the phone. Name
 3002 and 4000, and say that restarting the phone is what cleared it on 24 Sep.
 Keep item 46's message for a runner that installed and then died.
-
----
-
-## 101. A forwarder that outlives a reconnect sends to a dead connection — **OPEN, raised 24 Sep**
-
-Found during item 99. `iproxy.py` looks up the phone's usbmux device id once,
-when it starts. The iPhone 11 was stood upright, which apparently reconnected
-it and gave it a new id; its forwarder kept sending to the old one ("device 5").
-The on-device driver logged `starting server 127.0.0.1:22187`, and `curl` on
-the Mac got `Connection reset by peer`. `deviceup.sh` keeps a forwarder that is
-already running for that phone and port (`pgrep -f "iproxy.py $UDID $PORT"`),
-so item 46's automatic restart replaced the driver three times and never the
-forwarder. Only `device.sh down` then `up` fixed it; that bring-up took 11 s.
-
-**Fix, one of:**
-- `deviceup.sh` checks the running forwarder's id against a fresh
-  `ListDevices` before it keeps it, and replaces it on a mismatch.
-- `iproxy.py` resolves the id on each connection rather than once.
-
-The second also covers a reconnect mid-session with no restart in between. It
-costs one usbmuxd query per connection; measure that before choosing it.
 
 ---
 

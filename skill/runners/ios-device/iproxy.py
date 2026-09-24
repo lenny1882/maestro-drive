@@ -13,7 +13,7 @@
 # the UDID to a DeviceID, then Connect with the port in network byte order, then
 # pipes bytes both ways. Keep it running for the whole session; it prints
 # "forwarding ..." when it binds.
-import socket, struct, plistlib, threading, select, sys
+import os, socket, struct, plistlib, threading, select, sys
 
 # --tunnel <address>: a phone on wifi (BACKLOG item 99, Part 2). usbmuxd lists
 # nothing for it, so there is no DeviceID to Connect to. Instead the phone's
@@ -23,7 +23,18 @@ import socket, struct, plistlib, threading, select, sys
 # address; the prebuilt driver listens on the phone's loopback alone.
 if len(sys.argv) not in (3, 5) or (len(sys.argv) == 5 and sys.argv[3] != "--tunnel"):
     raise SystemExit("usage: iproxy.py <udid> <port> [--tunnel <address>]")
-UDID = sys.argv[1]; LPORT = DPORT = int(sys.argv[2]); SOCK = "/var/run/usbmuxd"
+UDID = sys.argv[1]; LPORT = DPORT = int(sys.argv[2])
+# A path, or host:port for a usbmuxd over TCP as libimobiledevice allows. The
+# tests use the TCP form for a fake, because a sandbox may forbid Unix sockets.
+SOCK = os.environ.get("USBMUXD_SOCKET", "/var/run/usbmuxd")
+
+
+def mux_socket():
+    if not SOCK.startswith("/") and ":" in SOCK:
+        host, port = SOCK.rsplit(":", 1)
+        return socket.create_connection((host, int(port)))
+    s = socket.socket(socket.AF_UNIX); s.connect(SOCK)
+    return s
 TUNNEL = sys.argv[4] if len(sys.argv) == 5 else None
 BASE = {"ClientVersionString": "maestro-fwd", "ProgName": "maestro-fwd",
         "kLibUSBMuxVersion": 3}
@@ -45,18 +56,26 @@ def mux_recv(s):
     return plistlib.loads(body)
 
 
-def device_id():
-    s = socket.socket(socket.AF_UNIX); s.connect(SOCK)
+def find_device_id():
+    """The phone's current usbmux DeviceID, or None if usbmuxd does not list it."""
+    s = mux_socket()
     mux_send(s, dict(BASE, MessageType="ListDevices"))
     r = mux_recv(s); s.close()
     for d in r.get("DeviceList", []):
         if d["Properties"]["SerialNumber"] == UDID:
             return d["DeviceID"]
-    raise SystemExit("device %s not on usbmuxd" % UDID)
+    return None
+
+
+def device_id():
+    did = find_device_id()
+    if did is None:
+        raise SystemExit("device %s not on usbmuxd" % UDID)
+    return did
 
 
 def connect_device(did):
-    s = socket.socket(socket.AF_UNIX); s.connect(SOCK)
+    s = mux_socket()
     be = ((DPORT << 8) & 0xFF00) | (DPORT >> 8)     # network byte order
     mux_send(s, dict(BASE, MessageType="Connect", DeviceID=did, PortNumber=be))
     if mux_recv(s).get("Number") != 0:
@@ -91,7 +110,24 @@ else:
 while True:
     c, _ = srv.accept()
     try:
-        d = connect_tunnel() if TUNNEL else connect_device(did)
+        if TUNNEL:
+            d = connect_tunnel()
+        else:
+            try:
+                d = connect_device(did)
+            except Exception:
+                # The DeviceID is usbmuxd's, and a phone gets a new one each
+                # time it reconnects: standing it up, a cable wiggle. Looked up
+                # once at start, a forwarder kept sending to the gone id and
+                # reset every connection, and a driver restart never replaced
+                # it (BACKLOG item 101, 24 Sep 2026: id 5, then 8, then 10).
+                # So on a failed connect, look again and retry once.
+                fresh = find_device_id()
+                if fresh is None or fresh == did:
+                    raise
+                print("device id %d -> %d (reconnected)" % (did, fresh), flush=True)
+                did = fresh
+                d = connect_device(did)
         d.settimeout(None)
     except Exception:
         c.close(); continue

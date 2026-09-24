@@ -174,6 +174,41 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 101. A forwarder that outlives a reconnect sends to a dead connection — **DONE 24 Sep: the forwarder looks the device id up again when a connect fails**
+
+Found during item 99. `iproxy.py` looks up the phone's usbmux device id once,
+when it starts. The iPhone 11 was stood upright, which apparently reconnected
+it and gave it a new id; its forwarder kept sending to the old one ("device 5").
+The on-device driver logged `starting server 127.0.0.1:22187`, and `curl` on
+the Mac got `Connection reset by peer`. `deviceup.sh` keeps a forwarder that is
+already running for that phone and port (`pgrep -f "iproxy.py $UDID $PORT"`),
+so item 46's automatic restart replaced the driver three times and never the
+forwarder. Only `device.sh down` then `up` fixed it; that bring-up took 11 s.
+
+**Fix, one of:**
+- `deviceup.sh` checks the running forwarder's id against a fresh
+  `ListDevices` before it keeps it, and replaces it on a mismatch.
+- `iproxy.py` resolves the id on each connection rather than once.
+
+The second also covers a reconnect mid-session with no restart in between. It
+costs one usbmuxd query per connection; measure that before choosing it.
+
+**Done 24 Sep.** `iproxy.py` now keeps the id it found at start, and when a
+`Connect` to it fails, lists the devices again; if the phone has a new id it
+says `device id <old> -> <new> (reconnected)` and retries once. A healthy
+connection costs nothing extra. Over wifi the forwarder is replaced on every
+bring-up anyway (item 99 Part 2).
+
+`USBMUXD_SOCKET` can point the forwarder at another usbmuxd, as a path or as
+`host:port` the way libimobiledevice allows. The test uses a TCP fake, because
+the sandbox forbids creating Unix sockets: the fake lists the phone as id 5,
+then as 8 before the first connection. Two tests. Both fail against the old
+logic, and pass with the fix (579 passed, 0 failed). Live on the Mac the new
+forwarder carried the iPhone 11 on id 10 over USB; a live unplug and replug was
+not done.
+
+---
+
 ## 102. The 1/3-scale correction is applied to anything that looks like a marker — **DONE 24 Sep: a marker is used only after it passes two checks against the screen**
 
 `resolve.py` treats any node whose frame is the screen size divided by some
