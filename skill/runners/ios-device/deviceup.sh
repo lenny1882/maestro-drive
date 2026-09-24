@@ -43,21 +43,35 @@ except Exception:
 }
 set -- $(_link); LINK=${1:-?}; TUNNEL=${2:-}
 
+# Which driver. The one built from source (driver/build.sh, signed by
+# driver/sign.sh) whenever a signed one exists: it is the only one reachable
+# over wifi, and over USB it is the only one that survives a touch on a phone
+# lying flat — the prebuilt driver crashes in ScreenSizeHelper.swift:99 on the
+# first touch (item 50). Measured 24 Sep 2026 on the XS Max reporting faceUp:
+# prebuilt, dead on touch 1; source build, 5 touches of 5. The prebuilt driver
+# is the fallback, for USB only.
+SRCXCTR=${DRIVER_XCTESTRUN:-$(ls -t "$HOME"/maestro-drive-driver/build-*/Build/Products/*.xctestrun 2>/dev/null | head -1)}
+SRCOK=
+[ -r "$SRCXCTR" ] &&
+  codesign --verify --deep --strict "$(dirname "$SRCXCTR")/Debug-iphoneos/maestro-driver-iosUITests-Runner.app" 2>/dev/null &&
+  SRCOK=1
+
 if [ "$LINK" = localNetwork ]; then
   [ -n "$TUNNEL" ] || { echo "the phone is on wifi but devicectl gives no tunnel address — is it paired and awake?" >&2; exit 1; }
-  XCTR=${WIFI_XCTESTRUN:-$(ls -t "$HOME"/maestro-drive-driver/build-*/Build/Products/*.xctestrun 2>/dev/null | head -1)}
-  [ -r "$XCTR" ] || { echo "the phone is on wifi, and that needs the driver built from source:" >&2
+  [ -n "$SRCOK" ] || { echo "the phone is on wifi, and that needs the driver built from source and signed:" >&2
     echo "  sh $HERE/driver/build.sh" >&2
     echo "  then, from Terminal on the Mac: $HERE/driver/sign.sh '<identity>' <profile> <build-dir>" >&2
     echo "The prebuilt driver listens on the phone's loopback only, which wifi cannot reach." >&2
     exit 1; }
-  codesign --verify --deep --strict "$(dirname "$XCTR")/Debug-iphoneos/maestro-driver-iosUITests-Runner.app" 2>/dev/null ||
-    { echo "the wifi driver at $(dirname "$XCTR") is not signed — run driver/sign.sh from Terminal on the Mac" >&2; exit 1; }
+  XCTR=$SRCXCTR
+elif [ -n "$SRCOK" ]; then
+  XCTR=$SRCXCTR
 else
-  [ -r "$XCTR" ] || { echo "no re-signed device driver at:" >&2
+  [ -r "$XCTR" ] || { echo "no device driver: neither a signed build from driver/build.sh nor the prebuilt one at" >&2
     echo "  $XCTR" >&2
-    echo "It is the prebuilt driver-iphoneos, re-signed by hand — see physical-device.md §3." >&2
+    echo "Build one (driver/build.sh, then driver/sign.sh), or re-sign the prebuilt — physical-device.md §3." >&2
     exit 1; }
+  echo "note: using the prebuilt driver, which crashes on a phone lying flat (item 50) — driver/build.sh replaces it" >&2
 fi
 
 # A locked phone cannot run XCUITest and fails as a connection error, not a lock
@@ -111,12 +125,13 @@ fi
 # failure on either named the other's lines (BACKLOG item 99).
 LOG="$HOME/devdrv-$UDID.log"; : > "$LOG"
 # TEST_RUNNER_BIND only over wifi: an empty one would be an address to bind.
-# Over wifi the xctestrun is build.sh's, which runs every test in the bundle,
-# so name the server test; the prebuilt one already skips the rest.
+# build.sh's xctestrun runs every test in the bundle, so name the server test;
+# the prebuilt one already skips the rest.
 BIND=; ONLY=
+[ "$XCTR" = "$SRCXCTR" ] &&
+  ONLY=-only-testing:maestro-driver-iosUITests/maestro_driver_iosUITests/testHttpServer
 if [ "$LINK" = localNetwork ]; then
   BIND=$TUNNEL
-  ONLY=-only-testing:maestro-driver-iosUITests/maestro_driver_iosUITests/testHttpServer
   pkill -f "xcodebuild test-without-building.*$UDID" 2>/dev/null
 fi
 env ${BIND:+TEST_RUNNER_BIND=$BIND} TEST_RUNNER_PORT=$PORT \
