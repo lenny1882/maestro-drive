@@ -2581,6 +2581,22 @@ case "$dout" in
   *"XCTest session dying"*) no "the face-up hint replaces the misleading XCTest-death message" "both were printed" ;;
   *) ok "the face-up hint replaces the misleading XCTest-death message" ;;
 esac
+# The case above only reaches the hint because its stub restart never brings
+# the driver back. A real restart does, and it empties the log it would have
+# read, so the hint has to come BEFORE the restart. Regressed from 11 Sep to
+# 24 Sep: two phones lying flat crashed on every tap and restarted silently,
+# the crash never named (items 50, 46). Here the restart works: /status answers
+# 200 once device.sh has run.
+printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) [ -f "$DEVMARK" ] && printf 200 || printf 500;; *) printf "{}";; esac\n' > "$DSTUB/curl"
+rm -f "$TMP/devmark"
+dout=$(DEVMARK="$TMP/devmark" PATH="$DSTUB:$PATH" timeout 30 bash "$DDIR/driver.sh" nodes 2>&1)
+case "$dout" in
+  *"FACE-UP crash (item 50)"*) ok "a restart that brings the driver back still names the face-up crash first" ;;
+  *) no "a restart that brings the driver back still names the face-up crash first" "got: $(printf '%s' "$dout" | tail -3)" ;;
+esac
+[ "$(cat "$TMP/devmark" 2>/dev/null)" = ran ] \
+  && ok "and the restart still happens" \
+  || no "and the restart still happens" "device.sh did not run"
 
 echo
 echo "local transport: no relay, and the driver's own port (item 94, 4.1)"
