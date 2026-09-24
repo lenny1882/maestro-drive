@@ -1724,6 +1724,19 @@ case "$sout" in *"driver stopped answering"*"not a moving screen"*) ok "a driver
   || no "and it stops in seconds, not after the 20s limit" "took ${t1}s"
 
 echo
+echo "a third restart in ten minutes names the remoted restart (item 46)"
+rn() { ( LDIR="$TMP/rn"; DEV=PHONE; mkdir -p "$LDIR"
+  source <(sed -n '/^_restarts_note()/,/^}/p' "$REPO/bin/driver.sh"); _restarts_note 2>&1 ); }
+rm -rf "$TMP/rn"
+r1=$(rn); r2=$(rn); r3=$(rn)
+[ -z "$r1$r2" ] && ok "the first two restarts say nothing extra" || no "the first two restarts say nothing extra" "got: $r1$r2"
+case "$r3" in *"restart 3 for PHONE in 10 minutes"*"sudo killall -9 remoted"*) ok "the third names sudo killall -9 remoted" ;;
+  *) no "the third names sudo killall -9 remoted" "got: $r3" ;; esac
+old=$(( $(date +%s) - 3600 )); printf '%s\n%s\n' "$old" "$old" > "$TMP/rn/restarts-PHONE"
+r4=$(rn)
+[ -z "$r4" ] && ok "restarts older than ten minutes do not count" || no "restarts older than ten minutes do not count" "got: $r4"
+
+echo
 echo "deviceup.sh names the failure the log shows (item 103)"
 # _why is extracted and fed the lines each failure actually wrote on 24 Sep.
 why() { printf '%b' "$1" > "$TMP/why.log"

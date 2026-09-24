@@ -163,13 +163,32 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
   echo "  session dying (item 46), not the relay. Measured on Xcode 26.6 it lasts only" >&2
   echo "  ~40-70s even with the CoreDevice tunnel still 'connected', so a full driver" >&2
   echo "  restart is the fix (bin/device.sh up <udid>) — a tunnel wake does nothing." >&2
-  echo "  driver.sh restarts a registered device itself; if it keeps dying that fast," >&2
-  echo "  the toolchain is suspect (item 55: a newer Maestro, or a different Xcode version)." >&2
+  echo "  driver.sh restarts a registered device itself. If it keeps dying within a couple" >&2
+  echo "  of minutes, restart CoreDevice on the Mac: sudo killall -9 remoted. On 24 Sep that" >&2
+  echo "  took sessions from under 2 minutes to over 10; retrying and restarting the phone" >&2
+  echo "  did not (item 46)." >&2
 }
 
 # Is DEV a physical device this session brought up (bin/device.sh), rather than a
 # simulator? Devices are in the registry; simulators are found by the process scan.
 _is_device() { [ -n "${DEV:-}" ] && grep -q "^$DEV " "$DEVICE_MAP" 2>/dev/null; }
+
+# Count this phone's automatic restarts, and on the third within ten minutes
+# say what fixed that on 24 Sep: restarting CoreDevice on the Mac. Retrying,
+# restarting the phone and changing the driver all left sessions dying within
+# two minutes; `sudo killall -9 remoted` took them past ten (item 46). It needs
+# the Mac user's password, so it is said, not done.
+_restarts_note() {
+  local f="${LDIR:-${TMPDIR:-/tmp}}/restarts-$DEV" now n
+  now=$(date +%s)
+  { cat "$f" 2>/dev/null; echo "$now"; } | awk -v t="$now" '$1 > t - 600' > "$f.tmp" &&
+    mv -f "$f.tmp" "$f"
+  n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+  [ "${n:-0}" -ge 3 ] || return 0
+  echo "note: this is restart $n for $DEV in 10 minutes. Sessions this short came from the" >&2
+  echo "  Mac's CoreDevice service on 24 Sep, not the phone or the driver. Restart it on the" >&2
+  echo "  Mac, which needs its password:  sudo killall -9 remoted   (item 46)" >&2
+}
 
 # Ensure-driver, item 46. A registered device's driver dies mid-session and the
 # failure reads as a dead relay on this side. When the phone's driver is not
@@ -188,6 +207,7 @@ _ensure_device() {
   # working, until 24 Sep, a phone lying flat crashed on every tap and came back
   # silently, and the face-up crash was never named (items 50, 46).
   _devdrv_hint
+  _restarts_note
   # bash <script>, not the path alone. device.sh used to ship without an execute
   # bit — the old rsync-to-build/ publish did not chmod and ~/.claude refuses
   # chmod +x — so a direct "$HERE/device.sh" failed with "Permission denied" and
