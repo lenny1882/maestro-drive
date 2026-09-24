@@ -3029,6 +3029,23 @@ was restarted, and there were many driver launches. Next: restart the phone and
 rerun (`~/claude-lifetime.sh` on the Mac); if that does not bring it back,
 restart CoreDevice on the Mac (`sudo killall -9 remoted`) and rerun.
 
+**Resolved the same afternoon: it was the Mac's CoreDevice service.** The same
+four-session run was repeated twice:
+
+| after | sessions | came up | died after |
+| --- | --- | --- | --- |
+| restarting the iPhone 11 | prebuilt, source, prebuilt, source | never, 6 s, 9 s, 4 s | —, 108 s, 73 s, 57 s |
+| `sudo killall -9 remoted` on the Mac | prebuilt, source, prebuilt, source | 6 s, 6 s, 10 s, 4 s | alive at 600 s, all four |
+
+Same phone, cable and drivers each time. The phone restart changed nothing;
+restarting `remoted` (it comes back by itself in seconds) took every session
+from under two minutes to the full ten. What had built up in it is not known;
+the day had wifi tunnels to both phones, a phone restart, and dozens of driver
+launches. **So when a phone's sessions keep dying within a couple of minutes,
+restart `remoted` on the Mac before anything else** — retrying, restarting the
+phone and changing the driver all failed to help. It needs the Mac user's
+password, so a session has to ask for it.
+
 **Now that item 45's device path exists, the recovery was built (F23/F24, 10 Sep).**
 - `driver.sh` `_ensure_device`: when a **registered** device's driver stops answering,
   it restarts it through `bin/device.sh up` (idempotent) and retries once per
