@@ -1,8 +1,8 @@
 # maestro-drive — backlog
 
-**Eleven items are open — 50, 87, 90, 93, 97, 99, 100 and 101–104.** 101–104 came out
-of item 99's two-phone run on 24 Sep. 50 was reopened 24 Sep:
-its face-up diagnosis had been unreachable since 11 Sep. 87 is not gated; 90 waits on
+**Eleven items are open — 87, 90, 93, 97, 99, 100 and 101–105.** 101–104 came out
+of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
+reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
@@ -85,7 +85,7 @@ It is in `BACKLOG-DONE.md`.
 **87 was raised on 18 Sep**, the first item about what this package is *for*
 rather than how it works. It is the oldest item still open here.
 
-**Next item number: 105.** Items 1–104 are allocated; new items start from 105.
+**Next item number: 106.** Items 1–105 are allocated; new items start from 106.
 
 **98 is done and is in `BACKLOG-DONE.md`.** The package is `maestro-drive`
 everywhere — the repo on GitHub, the conf, the installed skill and lib
@@ -97,6 +97,30 @@ say `BACKLOG 88` and `BACKLOG 89`, and both of those were already allocated and
 done — 88 is the rig-reap item, 89 is `wall.sh label` swallowing its flags. The
 work in them is real and is now filed as **91** and **92** below. The commit
 messages are left alone rather than rewriting the branch's history for a label.
+
+---
+
+## 105. `settle` waits its full timeout on a screen that never reports static — **OPEN, raised 24 Sep**
+
+Found during item 50's close. On the XS Max's home screen, where the App
+Library page was showing, the driver's `/isScreenStatic` answered `false` every
+time. So every action verb that settles afterwards waited its full 20 s and
+printed `settle: screen still moving after 20s`: three `driver.sh tap` calls
+took about 60 s. The driver was healthy the whole time: `/status` 200, no fatal.
+
+This is the same message a crashed driver produces first, which is why it read
+as item 50 again. That costs a misdiagnosis on top of the time.
+
+**Fix, to decide:**
+- When `settle` times out, say whether the driver is still answering, so a
+  screen that animates is not mistaken for a dead driver.
+- Consider a tree-comparison settle (two identical hierarchies in a row) as a
+  fallback when `/isScreenStatic` stays false. Measure it on the home screen
+  and on an app screen before adopting it.
+
+Not checked: which element keeps the home screen moving (a widget, the clock,
+the App Library search field), and whether a simulator's home screen does the
+same.
 
 ---
 
@@ -196,54 +220,6 @@ forwarder. Only `device.sh down` then `up` fixed it; that bring-up took 11 s.
 
 The second also covers a reconnect mid-session with no restart in between. It
 costs one usbmuxd query per connection; measure that before choosing it.
-
----
-
-## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED 24 Sep: the diagnosis built on 11 Sep had been unreachable since the same day; fixed again 24 Sep, the phone-side crash itself still open**
-
-The 11 Sep entry is in `BACKLOG-DONE.md`. What it built was a message, not a
-guard: `_devdrv_hint` reads the phone's driver log and, on a
-`ScreenSizeHelper.swift:99: Fatal error: Not implemented yet`, says "FACE-UP
-crash (item 50) … STAND THE PHONE UPRIGHT". The crash cannot be prevented from
-this side, because nothing the driver serves says which way the phone is lying.
-
-**Why it never printed.** `_start` calls the hint only after item 46's restart
-has failed. On 11 Sep the restart always failed, with `device.sh: Permission
-denied`, so the hint always ran. The same day that call was changed to `bash
-"$HERE/device.sh"`, and from then on the restart succeeded, emptied the log, and
-the hint was never reached. The test for it passed throughout, because its stub
-restart never brought the driver back.
-
-**Found 24 Sep, driving two phones for item 99.** Both lay flat on the desk.
-Every tap took about 20 s ("settle: screen still moving"), then the next call
-printed only `restarting it (item 46)`. The cause was found by tapping once and
-reading `~/devdrv-<udid>.log` on the Mac before anything restarted it.
-
-**Fixed 24 Sep:** `_ensure_device` (`bin/driver.sh`) calls `_devdrv_hint`
-before it restarts, so the cause is read from the log while it is still there.
-A new test gives the stub restart a working driver (`/status` answers 200 once
-`device.sh` has run) and fails on the old order.
-
-**24 Sep, later: both of the old blockers moved.**
-- Posture can now be read before a touch. Xcode 27's `devicectl device
-  orientation get` works on a physical phone: the flat XS Max answered
-  `faceUp` with `Non-flat Orientation: portrait`, the upright iPhone 11
-  `portrait`. So `driver.sh` can refuse to touch a flat phone and say so,
-  instead of crashing the driver.
-- The driver built from source (item 99 Part 2, `driver/build.sh`) did not
-  crash on a flat phone: on the XS Max reporting `faceUp`, three orientation
-  reads logged no fatal and the first touch returned 200 with the driver still
-  up. One run, over wifi, where the session died soon after for an unrelated
-  reason, so not yet proven.
-
-**Still open:**
-- The crash itself. The on-device runner is built from older source than the
-  Maestro jar ships (item 55); the jar's `ScreenSizeHelper.swift` handles
-  `.faceUp`. Rebuilding the device driver from the jar's source would remove
-  the fault rather than name it.
-- A flat phone still crashes and restarts on every touch. After the hint has
-  named the crash once, the restart could be refused until the phone is
-  upright, but there is no way to read "upright" before the next touch.
 
 ---
 

@@ -28,13 +28,17 @@ app *on* a device is still by hand (the signing gate, item 45).
   mid-session and killed the run. `bin/device.sh`/`deviceup.sh` refuse with "the
   phone is LOCKED — unlock it" when they find it locked, rather than letting it
   read as a relay fault.
-- **The phone must be UPRIGHT**, not lying flat — a face-up phone reports
-  `.faceUp` and crashes the on-device runner on the first `/touch`
-  (`ScreenSizeHelper.swift: Not implemented yet`). Reads work flat, so it looks
-  like a relay fault; confirmed live 11 Sep 2026 on the XS Max. `driver.sh` now
-  reads this from `devdrv.log` and says "STAND THE PHONE UPRIGHT" rather than
-  blaming the relay, but it cannot prevent the crash — no read route exposes the
-  device's posture before a touch — so stand it up first (item 50).
+- **Flat is fine with the driver built from source; the prebuilt one needs
+  the phone UPRIGHT.** The prebuilt driver crashes on the first `/touch` when
+  the phone reports `.faceUp` (`ScreenSizeHelper.swift:99: Fatal error: Not
+  implemented yet`), because it was compiled from older source than the jar
+  ships. The driver from `runners/ios-device/driver/build.sh` handles it: on 24
+  Sep 2026 the flat XS Max took 5 touches of 5 on it, and died on touch 1 with
+  the prebuilt one. `deviceup.sh` starts the source build whenever a signed one
+  exists (item 50). On the prebuilt fallback, `driver.sh` names the crash from
+  `~/devdrv-<udid>.log` and says "STAND THE PHONE UPRIGHT". Posture can be read
+  before a touch with `xcrun devicectl device orientation get --device <udid>`
+  (Xcode 27).
 
 ## 1. Nothing signs from an SSH session
 
@@ -148,6 +152,14 @@ leave it alone or wrap it in a reattach loop.
 available that way.
 
 ## 3. Maestro 2.8.0 cannot build its own device driver
+
+**Superseded 24 Sep 2026 by building from source** (BACKLOG items 99 and 50).
+Maestro's git tag has the `MaestroDriverLib` target the jar leaves out, so
+`runners/ios-device/driver/build.sh` (on the Mac) builds the driver from it,
+and `driver/sign.sh` (from Terminal on the Mac) signs it with the wildcard
+profile described below. That build is the only one reachable over wifi and
+the only one that survives a flat phone, and `deviceup.sh` prefers it. The
+re-sign below is the fallback when no signed build exists.
 
 Maestro **does** support a connected iPhone, despite its own documentation. The
 mirror in `docs/pages/` says the opposite in two places and is wrong:

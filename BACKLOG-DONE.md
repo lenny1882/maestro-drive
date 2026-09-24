@@ -3472,7 +3472,70 @@ wants: a new journey only when there is no other file, with a header saying what
 adds and why. Kept as the worked example of good judgement, against `5827cb0e`'s
 dodge-a-bug fork.
 
-## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED 24 Sep — see BACKLOG.md; CONFIRMED LIVE + diagnosis BUILT IN src/ 11 Sep, shipped 11 Sep (a pre-touch refusal is not possible — no readable posture; found a separate item-46 recovery bug in passing)**
+## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED 24 Sep, CLOSED 24 Sep: the hint is reachable again, and the driver built from source does not crash**
+
+The 11 Sep entry is in `BACKLOG-DONE.md`. What it built was a message, not a
+guard: `_devdrv_hint` reads the phone's driver log and, on a
+`ScreenSizeHelper.swift:99: Fatal error: Not implemented yet`, says "FACE-UP
+crash (item 50) … STAND THE PHONE UPRIGHT". The crash cannot be prevented from
+this side, because nothing the driver serves says which way the phone is lying.
+
+**Why it never printed.** `_start` calls the hint only after item 46's restart
+has failed. On 11 Sep the restart always failed, with `device.sh: Permission
+denied`, so the hint always ran. The same day that call was changed to `bash
+"$HERE/device.sh"`, and from then on the restart succeeded, emptied the log, and
+the hint was never reached. The test for it passed throughout, because its stub
+restart never brought the driver back.
+
+**Found 24 Sep, driving two phones for item 99.** Both lay flat on the desk.
+Every tap took about 20 s ("settle: screen still moving"), then the next call
+printed only `restarting it (item 46)`. The cause was found by tapping once and
+reading `~/devdrv-<udid>.log` on the Mac before anything restarted it.
+
+**Fixed 24 Sep:** `_ensure_device` (`bin/driver.sh`) calls `_devdrv_hint`
+before it restarts, so the cause is read from the log while it is still there.
+A new test gives the stub restart a working driver (`/status` answers 200 once
+`device.sh` has run) and fails on the old order.
+
+**24 Sep, later: both of the old blockers moved.**
+- Posture can now be read before a touch. Xcode 27's `devicectl device
+  orientation get` works on a physical phone: the flat XS Max answered
+  `faceUp` with `Non-flat Orientation: portrait`, the upright iPhone 11
+  `portrait`. So `driver.sh` can refuse to touch a flat phone and say so,
+  instead of crashing the driver.
+- The driver built from source (item 99 Part 2, `driver/build.sh`) did not
+  crash on a flat phone: on the XS Max reporting `faceUp`, three orientation
+  reads logged no fatal and the first touch returned 200 with the driver still
+  up. One run, over wifi, where the session died soon after for an unrelated
+  reason, so not yet proven.
+
+**Closed 24 Sep.** Measured over USB on the XS Max lying flat and reporting
+`faceUp`, with the same tap from the Mac to the phone's 127.0.0.1:22188:
+
+| driver | result |
+| --- | --- |
+| prebuilt, from `maestro-ios-driver.jar` | dead on touch 1: `ScreenSizeHelper.swift:99: Fatal error: Not implemented yet` |
+| built from `cli-2.8.0` source (`runners/ios-device/driver/build.sh`) | 5 touches of 5 answered 200, no fatal, session still up |
+
+The same run through the toolkit — `device.sh up`, then three `driver.sh tap`
+calls — kept the driver up with no fatal. `deviceup.sh` now starts the source
+build whenever a signed one exists (`e73ae45`) and uses the prebuilt one only
+as a fallback, with a note that it crashes on a flat phone. What is left is
+only for that fallback: refusing to touch a phone that
+`devicectl device orientation get` reports as `faceUp`, before the touch.
+
+**What was open before the source build, kept for the record:**
+- The crash itself. The on-device runner is built from older source than the
+  Maestro jar ships (item 55); the jar's `ScreenSizeHelper.swift` handles
+  `.faceUp`. Rebuilding the device driver from the jar's source would remove
+  the fault rather than name it.
+- A flat phone still crashes and restarts on every touch. After the hint has
+  named the crash once, the restart could be refused until the phone is
+  upright, but there is no way to read "upright" before the next touch.
+
+---
+
+## 50. A flat phone crashes the driver on the first touch, silently — **REOPENED and CLOSED 24 Sep — see the entry above; CONFIRMED LIVE + diagnosis BUILT IN src/ 11 Sep, shipped 11 Sep (a pre-touch refusal is not possible — no readable posture; found a separate item-46 recovery bug in passing)**
 
 **Session K**, from resuming physical-device work cold (device already upright
 in a prior session, so nothing carried the constraint forward). `driver.sh
@@ -3859,6 +3922,14 @@ Related: item 45 (the same read works on hardware via `devicectl`) and item 31
 rather than assuming it).
 
 ## 55. The shipped docs mirror is stale and actively wrong about physical iOS — **rule 9 SHIPPED 10 Sep; docs-mirror known-wrong list BUILT IN src/ 11 Sep, shipped 11 Sep**
+
+**24 Sep 2026: the device driver no longer has to be the prebuilt one.** Item
+50's crash came from the prebuilt device driver being compiled from older
+source than the jar ships. `runners/ios-device/driver/build.sh` now builds the
+driver from the matching Maestro git tag, which has the `MaestroDriverLib`
+target the jar leaves out, and `sign.sh` signs it with the same wildcard
+profile. `deviceup.sh` prefers that build (item 99 Part 2, item 50).
+Re-signing the prebuilt driver (`physical-device.md` §3) is now the fallback.
 
 **Session `480adcc1`, 21 Aug.** The skill ships a Maestro docs mirror under
 `docs/pages` (2.8.0, taken 11 Aug). On physical iOS it flatly contradicts the
