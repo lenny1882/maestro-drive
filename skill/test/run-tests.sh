@@ -1488,20 +1488,20 @@ echo "a dead device driver names the real cause, not the relay (item 46)"
 DRVLOG='Testing started\nThe connection was invalidated\n** TEST EXECUTE FAILED **\n'
 if ( DEV=devudid
      PLATFORM_SH=/x/platform.sh
-     _ssh(){ case "$*" in *locked*) return 1 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     _ssh(){ case "$*" in *locked*) return 1 ;; *devdrv-*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
-     printf '%s' "$out" | grep -q 'devdrv.log' &&
+     printf '%s' "$out" | grep -q 'devdrv-devudid.log' &&
      printf '%s' "$out" | grep -q 'connection was invalidated' &&
      printf '%s' "$out" | grep -q 'item 46' &&
      ! printf '%s' "$out" | grep -q 'LOCKED' ); then
-  ok "an unlocked device with a dead driver surfaces ~/devdrv.log and item 46"
+  ok "an unlocked device with a dead driver surfaces ~/devdrv-<udid>.log and item 46"
 else
-  no "an unlocked device with a dead driver surfaces ~/devdrv.log and item 46" "hint missing or wrong"
+  no "an unlocked device with a dead driver surfaces ~/devdrv-<udid>.log and item 46" "hint missing or wrong"
 fi
 if ( DEV=devudid
      PLATFORM_SH=/x/platform.sh
-     _ssh(){ case "$*" in *locked*) return 0 ;; *devdrv.log*) printf "$DRVLOG" ;; esac; }
+     _ssh(){ case "$*" in *locked*) return 0 ;; *devdrv-*) printf "$DRVLOG" ;; esac; }
      source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
      out=$(_devdrv_hint 2>&1)
      printf '%s' "$out" | grep -q 'LOCKED' &&
@@ -1540,6 +1540,40 @@ if ( LDIR="$TMP/devseam"; mkdir -p "$LDIR"
 else
   no "a device in DEVICE_MAP shows up in the driver map, with the right relay port" "seam broken"
 fi
+
+echo
+echo "a second phone gets its own port (item 99)"
+# _device_port against a DEVICE_MAP and a canned driver-scan (`<udid> <port>
+# <pid>`, one row per live forwarder on the Mac). Extracted, so no Mac.
+_dp() {  # _dp <map-rows> <live-rows> <udid> [asked]
+  ( DEVICE_MAP="$TMP/dp.map"; DEVICE_PORT_BASE=22187
+    printf '%b' "$1" > "$DEVICE_MAP"
+    source <(sed -n '/^_device_port()/,/^}/p' "$REPO/bin/device.sh")
+    _device_port "$3" "${4:-}" "$(printf '%b' "$2")" 2>/dev/null )
+}
+[ "$(_dp '' '' PHONE1)" = 22187 ] \
+  && ok "the first phone gets the base port" \
+  || no "the first phone gets the base port" "got $(_dp '' '' PHONE1)"
+[ "$(_dp 'PHONE1 22187 device\n' 'PHONE1 22187 111\n' PHONE2)" = 22188 ] \
+  && ok "a second phone with no port asked for gets the next port, not the first phone's" \
+  || no "a second phone with no port asked for gets the next port, not the first phone's" "got $(_dp 'PHONE1 22187 device\n' 'PHONE1 22187 111\n' PHONE2)"
+[ "$(_dp '' 'PHONE1 22187 111\n' PHONE2)" = 22188 ] \
+  && ok "a live forwarder nobody registered still keeps its port" \
+  || no "a live forwarder nobody registered still keeps its port" "got $(_dp '' 'PHONE1 22187 111\n' PHONE2)"
+[ "$(_dp 'PHONE1 22187 device\nPHONE2 22190 device\n' '' PHONE2)" = 22190 ] \
+  && ok "a phone keeps its registered port" \
+  || no "a phone keeps its registered port" "got $(_dp 'PHONE1 22187 device\nPHONE2 22190 device\n' '' PHONE2)"
+[ "$(_dp 'PHONE2 22187 device\n' 'PHONE1 22187 111\n' PHONE2)" = 22188 ] \
+  && ok "a registered port another phone's forwarder now holds is given up" \
+  || no "a registered port another phone's forwarder now holds is given up" "got $(_dp 'PHONE2 22187 device\n' 'PHONE1 22187 111\n' PHONE2)"
+_dp 'PHONE1 22187 device\n' '' PHONE2 22187 >/dev/null; rc=$?
+[ "$rc" = 2 ] \
+  && ok "asking for another phone's port is refused" \
+  || no "asking for another phone's port is refused" "rc=$rc"
+[ "$(_dp '' '' PHONE2 22300)" = 22300 ] \
+  && ok "a free port asked for is used as given" \
+  || no "a free port asked for is used as given" "got $(_dp '' '' PHONE2 22300)"
+
 # The ensure-driver recovery (item 46) must fire only for a registered phone, and
 # never reach bin/device.sh for a simulator.
 if ( LDIR="$TMP/ensure1"; mkdir -p "$LDIR"; DEVICE_MAP="$LDIR/devices.map"

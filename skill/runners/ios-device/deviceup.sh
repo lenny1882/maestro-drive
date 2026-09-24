@@ -55,7 +55,10 @@ if [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/stat
   echo "already up on $PORT"; exit 0
 fi
 
-LOG="$HOME/devdrv.log"; : > "$LOG"
+# One log per phone. A shared ~/devdrv.log was truncated by the second phone's
+# bring-up while the first phone's xcodebuild was still appending to it, so a
+# failure on either named the other's lines (BACKLOG item 99).
+LOG="$HOME/devdrv-$UDID.log"; : > "$LOG"
 TEST_RUNNER_PORT=$PORT nohup xcodebuild test-without-building \
   -xctestrun "$XCTR" \
   -destination "id=$UDID" \
@@ -69,7 +72,7 @@ for _ in $(seq 1 60); do
     echo "up on $PORT"; exit 0
   fi
   if grep -qE "Testing failed|TEST EXECUTE FAILED|error:" "$LOG" 2>/dev/null; then
-    echo "the device driver failed to start; ~/devdrv.log ends:" >&2
+    echo "the device driver failed to start; $LOG ends:" >&2
     tail -5 "$LOG" >&2
     echo "'TEST EXECUTE FAILED' / 'connection was invalidated' with the phone unlocked and" >&2
     echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
@@ -79,6 +82,6 @@ for _ in $(seq 1 60); do
   fi
   sleep 2
 done
-echo "the device driver did not answer on $PORT within ~120s; ~/devdrv.log ends:" >&2
+echo "the device driver did not answer on $PORT within ~120s; $LOG ends:" >&2
 tail -5 "$LOG" >&2
 exit 1
