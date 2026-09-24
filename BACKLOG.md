@@ -1,6 +1,6 @@
 # maestro-drive — backlog
 
-**Ten items are open — 87, 90, 93, 97, 99, 100 and 103–106.** 101 was done 24 Sep. 102 was done
+**Nine items are open — 87, 90, 93, 97, 99, 100 and 104–106.** 101 and 103 were done 24 Sep. 102 was done
 24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
@@ -193,30 +193,6 @@ names the app.
 minimum, say the driver's answer is not reliable there rather than print it as
 fact. Not checked: whether a simulator gives the right answer, and whether this
 is the old on-device runner (item 55).
-
----
-
-## 103. An install failure is reported as the XCTest session dying — **OPEN, raised 24 Sep**
-
-Found during item 99. On the XS Max, `device.sh up` failed four times in a row,
-72 s each. `~/devdrv.log` showed `Installing built products Finished with
-error: Connection with the remote side was unexpectedly closed`,
-`IXRemoteErrorDomain` code 6, "Connection interrupted", and `xcrun devicectl
-device install app` gave the same thing directly as `CoreDeviceError` 3002.
-`deviceup.sh` printed item 46's message instead: "the on-device XCTest session
-dying … Retry". Retrying did nothing.
-
-Restarting the phone fixed it; the next install took 3 s. On 10 Sep the same
-3002 was caused by a second process using the phone's tunnel (a `lockState`
-keep-alive loop, `BACKLOG-DONE.md` item 46). This time nothing else on the Mac
-was touching the phone. Once the error had occurred, one attempt came back
-instead with `CoreDeviceError` 4000, "The device disconnected immediately after
-connecting".
-
-**Fix:** in `deviceup.sh`, when the log has `Installing built products …
-Finished with error`, say the driver could not be installed on the phone. Name
-3002 and 4000, and say that restarting the phone is what cleared it on 24 Sep.
-Keep item 46's message for a runner that installed and then died.
 
 ---
 

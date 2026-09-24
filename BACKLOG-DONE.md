@@ -174,6 +174,46 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 103. An install failure is reported as the XCTest session dying — **DONE 24 Sep: deviceup.sh names the failure its log shows**
+
+Found during item 99. On the XS Max, `device.sh up` failed four times in a row,
+72 s each. `~/devdrv.log` showed `Installing built products Finished with
+error: Connection with the remote side was unexpectedly closed`,
+`IXRemoteErrorDomain` code 6, "Connection interrupted", and `xcrun devicectl
+device install app` gave the same thing directly as `CoreDeviceError` 3002.
+`deviceup.sh` printed item 46's message instead: "the on-device XCTest session
+dying … Retry". Retrying did nothing.
+
+Restarting the phone fixed it; the next install took 3 s. On 10 Sep the same
+3002 was caused by a second process using the phone's tunnel (a `lockState`
+keep-alive loop, `BACKLOG-DONE.md` item 46). This time nothing else on the Mac
+was touching the phone. Once the error had occurred, one attempt came back
+instead with `CoreDeviceError` 4000, "The device disconnected immediately after
+connecting".
+
+**Fix:** in `deviceup.sh`, when the log has `Installing built products …
+Finished with error`, say the driver could not be installed on the phone. Name
+3002 and 4000, and say that restarting the phone is what cleared it on 24 Sep.
+Keep item 46's message for a runner that installed and then died.
+
+**Done 24 Sep.** `_why` in `runners/ios-device/deviceup.sh` reads the driver's
+log on both failure paths — a failed start and no answer in 120 s — and prints
+one of four explanations, in this order:
+
+- an install failure (`Installing built products … Finished with error`, or
+  `Failed to install the app`), with the `CoreDeviceError` and IXRemote codes
+  it finds, and that restarting the phone cleared it on 24 Sep
+- a tunnel address that was gone before the driver listened (`Bind(49)`), which
+  a retry fixes because the address is read again (item 99 Part 2)
+- the face-up crash on the prebuilt driver (item 50)
+- otherwise item 46's session death, now with 24 Sep's measurements (60–104 s
+  on a cable with either driver, 30–100 s over wifi) instead of Xcode 26.6's
+
+Five tests feed it the lines each failure actually wrote. Not tried live: no
+install failure occurred after the fix.
+
+---
+
 ## 101. A forwarder that outlives a reconnect sends to a dead connection — **DONE 24 Sep: the forwarder looks the device id up again when a connect fails**
 
 Found during item 99. `iproxy.py` looks up the phone's usbmux device id once,
@@ -2940,6 +2980,24 @@ with `devicectl`, not through the driver — not yet wired into a device driving
 helper.
 
 ## 46. The device driver dies mid-session and every error blames the relay — **Scripts BUILT IN src/ 10 Sep (ensure-driver recovery, relay-target fix, devdrv.log + locked-phone + XCTest-session surfacing), offline-tested; surfacing live-verified. F27 measured the death: the on-device XCTest session dies every ~40-70s with the tunnel still connected — item 46's CORE is that instability (a toolchain question, item 55), which the scripts mitigate (restart) but cannot fix.**
+
+**24 Sep 2026: measured again, with both drivers, and it is not the driver.**
+On the iPhone 11 (iOS 26.5.2, Xcode 27.0), wired and listed on usbmuxd,
+alternating 10-minute sessions with `/status` every 15 s and no touches:
+
+| driver | came up | died after | reason |
+| --- | --- | --- | --- |
+| prebuilt | never, in 120 s | — | — |
+| source build (item 99, `driver/build.sh`) | 6 s | 60 s | connection was invalidated |
+| prebuilt | 5 s | 104 s | connection was invalidated |
+| source build | never, in 120 s | — | — |
+
+The same morning, the prebuilt driver on the same phone and cable lasted more
+than 6 minutes (item 99 Part 1). So the lifetime moved during the day, not with
+the driver. Between the two, both phones spent time on wifi tunnels, the XS Max
+was restarted, and there were many driver launches. Next: restart the phone and
+rerun (`~/claude-lifetime.sh` on the Mac); if that does not bring it back,
+restart CoreDevice on the Mac (`sudo killall -9 remoted`) and rerun.
 
 **Now that item 45's device path exists, the recovery was built (F23/F24, 10 Sep).**
 - `driver.sh` `_ensure_device`: when a **registered** device's driver stops answering,
