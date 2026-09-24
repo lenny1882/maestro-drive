@@ -1,0 +1,24 @@
+diff --git a/maestro-ios-xctest-runner/maestro-driver-iosUITests/Routes/XCTestHTTPServer.swift b/maestro-ios-xctest-runner/maestro-driver-iosUITests/Routes/XCTestHTTPServer.swift
+index a6382ff..5c56475 100644
+--- a/maestro-ios-xctest-runner/maestro-driver-iosUITests/Routes/XCTestHTTPServer.swift
++++ b/maestro-ios-xctest-runner/maestro-driver-iosUITests/Routes/XCTestHTTPServer.swift
+@@ -28,8 +28,17 @@ enum Route: String, CaseIterable {
+ 
+ struct XCTestHTTPServer {
+     func start() async throws {
+-        let port = ProcessInfo.processInfo.environment["PORT"]?.toUInt16()
+-        let server = HTTPServer(address: try .inet(ip4: "127.0.0.1", port: port ?? 22087), timeout: 100)
++        let port = ProcessInfo.processInfo.environment["PORT"]?.toUInt16() ?? 22087
++        // BIND (TEST_RUNNER_BIND to xcodebuild) listens on that address instead
++        // of the phone's loopback: the CoreDevice tunnel address, so the Mac
++        // can reach a phone with no cable. Unset, nothing changes.
++        let bind = ProcessInfo.processInfo.environment["BIND"] ?? "127.0.0.1"
++        let server: HTTPServer
++        if bind.contains(":") {
++            server = HTTPServer(address: try .inet6(ip6: bind, port: port), timeout: 100)
++        } else {
++            server = HTTPServer(address: try .inet(ip4: bind, port: port), timeout: 100)
++        }
+         
+         for route in Route.allCases {
+             let handler = await RouteHandlerFactory.createRouteHandler(route: route)

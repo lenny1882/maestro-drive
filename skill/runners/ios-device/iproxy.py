@@ -15,9 +15,16 @@
 # "forwarding ..." when it binds.
 import socket, struct, plistlib, threading, select, sys
 
-if len(sys.argv) != 3:
-    raise SystemExit("usage: iproxy.py <udid> <port>")
+# --tunnel <address>: a phone on wifi (BACKLOG item 99, Part 2). usbmuxd lists
+# nothing for it, so there is no DeviceID to Connect to. Instead the phone's
+# CoreDevice tunnel address — `devicectl device info details`'
+# tunnelIPAddress — is reached over plain TCP, which works only for a driver
+# built from driver/build.sh and started with TEST_RUNNER_BIND set to that
+# address; the prebuilt driver listens on the phone's loopback alone.
+if len(sys.argv) not in (3, 5) or (len(sys.argv) == 5 and sys.argv[3] != "--tunnel"):
+    raise SystemExit("usage: iproxy.py <udid> <port> [--tunnel <address>]")
 UDID = sys.argv[1]; LPORT = DPORT = int(sys.argv[2]); SOCK = "/var/run/usbmuxd"
+TUNNEL = sys.argv[4] if len(sys.argv) == 5 else None
 BASE = {"ClientVersionString": "maestro-fwd", "ProgName": "maestro-fwd",
         "kLibUSBMuxVersion": 3}
 
@@ -70,14 +77,22 @@ def pump(a, b):
         a.close(); b.close()
 
 
-did = device_id()
+def connect_tunnel():
+    return socket.create_connection((TUNNEL, DPORT), timeout=10)
+
+
+did = None if TUNNEL else device_id()
 srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 srv.bind(("127.0.0.1", LPORT)); srv.listen(64)
-print("forwarding 127.0.0.1:%d -> device %d port %d" % (LPORT, did, DPORT), flush=True)
+if TUNNEL:
+    print("forwarding 127.0.0.1:%d -> tunnel [%s] port %d" % (LPORT, TUNNEL, DPORT), flush=True)
+else:
+    print("forwarding 127.0.0.1:%d -> device %d port %d" % (LPORT, did, DPORT), flush=True)
 while True:
     c, _ = srv.accept()
     try:
-        d = connect_device(did)
+        d = connect_tunnel() if TUNNEL else connect_device(did)
+        d.settimeout(None)
     except Exception:
         c.close(); continue
     threading.Thread(target=pump, args=(c, d), daemon=True).start()
