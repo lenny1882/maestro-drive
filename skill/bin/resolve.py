@@ -20,7 +20,9 @@ an ancestor of it — which is why walking the parent chain looking for a
 transform finds nothing but full-screen containers, and why measuring a
 screenshot felt like the only option.
 
-A marker is any node whose frame is the screen divided by some factor k. It
+A marker candidate is any node whose frame is the screen divided by some
+factor k, and it is used only if it passes `refute_marker`'s checks against the
+screen (BACKLOG item 102). It
 sets the transform for its container's children to
 `absolute = reported * k - markerOrigin * k`. Both of the misreported spaces
 above are that one rule:
@@ -103,6 +105,42 @@ def space_factor(w, h, screen_w, screen_h):
     return None
 
 
+def refute_marker(children, k, screen_w, screen_h):
+    """Why the first of `children` is not a marker, or None if it passes.
+
+    Nothing is transformed on shape alone (BACKLOG item 102). A candidate has to
+    pass a check against the real screen before its siblings are moved:
+
+    - It may not be larger than the screen (k < 1). Every marker observed is
+      the screen divided by 3 (Flutter's 1/3 space) or the screen itself with
+      an offset (an overlay, a paged scroll view). On 24 Sep 2026 Calendar's
+      What's New screen on an XS Max had a first child of 1242x2688 at
+      -414,-896 — the screen's size in pixels — and taking it as k = 1/3 moved
+      Continue from y=781 to y=559, where a tap hit nothing and reported rc=0.
+    - Under a scaling marker (k > 1), the siblings' own frames have to fit
+      inside the marker, because that is the space they are drawn in. A
+      sibling outside it is already in screen points, so the marker is wrong.
+
+    A scroll view's offset marker (k = 1) is not checked against its siblings:
+    rows below the fold legitimately lie outside it, and are refused later as
+    off-screen rather than tapped.
+    """
+    mx, my, mw, mh = frame(children[0])
+    if k < 1.0 - 1e-6:
+        return "larger than the screen (%gx%g against %gx%g), so not a scale" % (
+            mw, mh, screen_w, screen_h)
+    if k > 1.0 + 1e-6:
+        for c in children[1:]:
+            x, y, w, h = frame(c)
+            if w <= 0 or h <= 0:
+                continue
+            if (x < mx - TOL or y < my - TOL or
+                    x + w > mx + mw + TOL or y + h > my + mh + TOL):
+                return ("a sibling at %g,%g %gx%g lies outside it, so the siblings "
+                        "are not in its 1/%.4g space" % (x, y, w, h, k))
+    return None
+
+
 def walk(node, screen_w, screen_h):
     """Yield (node, absolute_frame, transform_chain) for every node.
 
@@ -121,6 +159,10 @@ def walk(node, screen_w, screen_h):
         c_scale, c_off_x, c_off_y, c_chain = scale, off_x, off_y, chain
         mx, my, mw, mh = frame(children[0])
         k = space_factor(mw, mh, screen_w, screen_h)
+        why = refute_marker(children, k, screen_w, screen_h) if k is not None else None
+        if why:
+            c_chain = chain + ["refused marker %gx%g at %g,%g: %s" % (mw, mh, mx, my, why)]
+            k = None
         if k is not None:
             c_scale, c_off_x, c_off_y = k, -mx * k, -my * k
             if (k, c_off_x, c_off_y) != (1.0, 0.0, 0.0):

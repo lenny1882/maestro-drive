@@ -174,6 +174,68 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 102. The 1/3-scale correction is applied to anything that looks like a marker — **DONE 24 Sep: a marker is used only after it passes two checks against the screen**
+
+`resolve.py` treats any node whose frame is the screen size divided by some
+factor as a marker, and rescales that node's siblings. The factor can also be
+below 1. On the XS Max, Calendar's tree has a 1242×2688 node at −414,−896,
+which is exactly the phone's pixel size from `/deviceInfo`
+(`widthPixels 1242, heightPixels 2688`). `resolve.py` read it as a marker
+(`find --explain`: "marker 1242x2688 at -414,-896 -> scale 0.3333 offset
++138,+298.67") and moved Continue from y=781, where the tree has it, to y=559.
+`tapon` then returned rc=0 for a tap that hit nothing. Item 50's 11 Sep note of
+a target resolved to x=−892 on the home screen was probably the same thing.
+
+The correction exists for one Flutter bug on iOS, where frames come back at 1/3
+scale (item 100, and `hugoboss-flutter-runner`'s backlog item 999.16). Applying
+it to a native app is guessing.
+
+**Requirement: nothing is corrected automatically.** A transform is applied only
+when it passes a check against the real screen, and when it doesn't, the raw
+frame is used and `--explain` says which check failed. Checks to build:
+
+- **Against the screen size.** Read `/deviceInfo` (points and pixels) and
+  compare the candidate marker's frame with it. A node the size of the screen in
+  pixels is pixel space, not a scale marker, and is never taken as one.
+- **Against the content.** Under a genuine 1/3 marker, the siblings' raw frames
+  fit inside the marker's scaled region. Siblings that already span the screen
+  in points, as Calendar's did (Continue at 44,756 on an 896-point screen),
+  refute the marker.
+- **Against the result.** A transformed point that lands outside every visible
+  node, or off the screen, refutes the transform rather than getting tapped.
+
+**Done 24 Sep.** `refute_marker` in `bin/resolve.py` runs before any
+transform, and a candidate that fails is not applied. `--explain` prints
+`refused marker <size> at <origin>: <why>`.
+
+- **Against the screen size:** a candidate larger than the screen (k < 1) is
+  refused. Every marker recorded so far is the screen divided by 3 or the
+  screen itself with an offset.
+- **Against the content:** under a scaling marker (k > 1), every sibling has
+  to lie inside the marker's frame. One that lies outside is already in screen
+  points.
+- **Against the result:** only what was already there, the off-screen and
+  under-the-keyboard refusals. "Outside every visible node" was not built.
+
+Pixel sizes are not passed to `resolve.py`: comparing against the screen in
+points refutes Calendar's node without them.
+
+**Fixtures:** `test/fixtures/marker-calendar-pixel-node.json`,
+`marker-flutter-third-scale.json` and `marker-home-paged-scroll.json`. All three
+are rebuilt from recorded frames and say so in their `_note`: Calendar's live
+tree was not saved and its What's New screen could not be shown again, and the
+real home-screen tree carries the phone owner's widgets and app names. Six
+tests. Calendar's Continue resolves to (207, 781); the committed `resolve.py`
+gave (207, 559). The Flutter 1/3 space, the overlay offset and the home
+screen's paged scroll view still resolve through their markers.
+
+**Done when (as raised):** Calendar's Continue on the XS Max resolves to (207, 781) with no
+marker applied, and the Flutter store screen's 1/3 case from
+`hugoboss-flutter-runner` still resolves correctly. Both need to be fixtures in
+`test/fixtures/`.
+
+---
+
 ## 98. `maestro-remote-mac` is the wrong name, and item 94's 5.5 chose the right one — **DONE 21 Sep 2026; the repository renamed throughout, the three things outside it closed the same day, and it shipped in v2.1.0**
 
 **Done 21 Sep, in three commits.** The conf is `.maestro-drive.conf` and the

@@ -1,6 +1,7 @@
 # maestro-drive — backlog
 
-**Eleven items are open — 87, 90, 93, 97, 99, 100 and 101–105.** 101–104 came out
+**Ten items are open — 87, 90, 93, 97, 99, 100, 101, 103, 104 and 105.** 102 was done
+24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
 finding out whether a physical phone can be streamed at all; 93 waits on 87
@@ -162,43 +163,6 @@ connecting".
 Finished with error`, say the driver could not be installed on the phone. Name
 3002 and 4000, and say that restarting the phone is what cleared it on 24 Sep.
 Keep item 46's message for a runner that installed and then died.
-
----
-
-## 102. The 1/3-scale correction is applied to anything that looks like a marker — **OPEN, raised 24 Sep**
-
-`resolve.py` treats any node whose frame is the screen size divided by some
-factor as a marker, and rescales that node's siblings. The factor can also be
-below 1. On the XS Max, Calendar's tree has a 1242×2688 node at −414,−896,
-which is exactly the phone's pixel size from `/deviceInfo`
-(`widthPixels 1242, heightPixels 2688`). `resolve.py` read it as a marker
-(`find --explain`: "marker 1242x2688 at -414,-896 -> scale 0.3333 offset
-+138,+298.67") and moved Continue from y=781, where the tree has it, to y=559.
-`tapon` then returned rc=0 for a tap that hit nothing. Item 50's 11 Sep note of
-a target resolved to x=−892 on the home screen was probably the same thing.
-
-The correction exists for one Flutter bug on iOS, where frames come back at 1/3
-scale (item 100, and `hugoboss-flutter-runner`'s backlog item 999.16). Applying
-it to a native app is guessing.
-
-**Requirement: nothing is corrected automatically.** A transform is applied only
-when it passes a check against the real screen, and when it doesn't, the raw
-frame is used and `--explain` says which check failed. Checks to build:
-
-- **Against the screen size.** Read `/deviceInfo` (points and pixels) and
-  compare the candidate marker's frame with it. A node the size of the screen in
-  pixels is pixel space, not a scale marker, and is never taken as one.
-- **Against the content.** Under a genuine 1/3 marker, the siblings' raw frames
-  fit inside the marker's scaled region. Siblings that already span the screen
-  in points, as Calendar's did (Continue at 44,756 on an 896-point screen),
-  refute the marker.
-- **Against the result.** A transformed point that lands outside every visible
-  node, or off the screen, refutes the transform rather than getting tapped.
-
-**Done when:** Calendar's Continue on the XS Max resolves to (207, 781) with no
-marker applied, and the Flutter store screen's 1/3 case from
-`hugoboss-flutter-runner` still resolves correctly. Both need to be fixtures in
-`test/fixtures/`.
 
 ---
 

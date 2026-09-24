@@ -1,0 +1,7 @@
+{"_note":"Reconstructed from frames recorded 24 Sep 2026 on an iPhone XS Max (414x896 points, 1242x2688 pixels), Calendar's What's New screen. The live tree was not saved. The first child is the screen's size in pixels at -414,-896; it is not a marker (BACKLOG item 102).",
+ "axElement":{"elementType":0,"frame":{"X":0,"Y":0,"Width":414,"Height":896},"children":[
+  {"elementType":1,"frame":{"X":0,"Y":54,"Width":414,"Height":842},"identifier":"SplashScreen","children":[
+   {"elementType":1,"frame":{"X":-414,"Y":-896,"Width":1242,"Height":2688}},
+   {"elementType":48,"label":"What’s New in Calendar","frame":{"X":44,"Y":134,"Width":326,"Height":81}},
+   {"elementType":9,"label":"Continue","frame":{"X":44,"Y":756,"Width":326,"Height":50},"children":[
+    {"elementType":48,"label":"Continue","frame":{"X":171,"Y":771,"Width":72,"Height":20}}]}]}]}}
