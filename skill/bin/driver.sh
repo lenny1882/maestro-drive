@@ -344,14 +344,31 @@ _settle() {  # _settle [timeout-seconds]
   # permanent animation, a video, a spinner the app leaves running. Without
   # this every action would pay the full timeout and then report failure.
   [ "$limit" = 0 ] && return 0
+  local empty=0
   while [ "$waited" -lt "$((limit * 5))" ]; do
     case "$(curl -s -m 5 "$BASE/isScreenStatic" 2>/dev/null)" in
       *true*) return 0 ;;
+      "")     empty=$((empty + 1)) ;;
+      *)      empty=0 ;;
     esac
+    # A dead driver answers nothing, and used to be waited out for the full
+    # limit and then reported as a moving screen — the same words as a live
+    # one, which sent a crashed phone back to be diagnosed as an animation
+    # (BACKLOG item 105). Three empty answers in a row is not a screen.
+    if [ "$empty" -ge 3 ]; then
+      echo "settle: the driver stopped answering after the last action — not a moving screen" >&2
+      return 1
+    fi
     sleep 0.2
     waited=$((waited + 1))
   done
-  echo "settle: screen still moving after ${limit}s" >&2
+  if [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' "$BASE/status" 2>/dev/null)" = 200 ]; then
+    echo "settle: screen still moving after ${limit}s — the driver is up, so the screen itself" >&2
+    echo "  keeps changing (an animation, a clock, a spinner; a phone's home screen did on 24 Sep)." >&2
+    echo "  SETTLE=0 skips the wait for such a screen." >&2
+  else
+    echo "settle: no still screen after ${limit}s, and the driver is not answering now" >&2
+  fi
   return 1
 }
 

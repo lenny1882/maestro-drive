@@ -102,7 +102,7 @@ messages are left alone rather than rewriting the branch's history for a label.
 
 ---
 
-## 106. The test suites fail in a shell that has sourced a project conf — **OPEN, raised 24 Sep; the conf cause FIXED 24 Sep, one unexplained run left**
+## 106. The test suites fail in a shell that has sourced a project conf — **OPEN, raised 24 Sep; the conf cause FIXED 24 Sep; the rest is two flaky tests, named**
 
 Four times on 24 Sep a suite reported failures, and passed straight after when
 rerun alone:
@@ -149,6 +149,20 @@ for the login-shell cases), `TMPDIR`, `TERM` and the locale. In the same shell
 with the hugoboss conf sourced, the skill suite now gives 577 passed, 0 failed
 and the packaging suite 158 passed, 0 failed.
 
+**The unexplained runs are two flaky tests (24 Sep).** Five packaging runs in
+a row, nothing sourced, nothing else driving: runs 2 and 5 failed one test each,
+a different one each time.
+
+- `same subnet with no ARP reply is named as the access point, not the Mac`
+  (packaging suite): it probes 10.9.9.9, so its answer depends on how long the
+  probe takes.
+- `watch: an emptied list is a change, not silence` (skill suite, run from the
+  installed path by the packaging suite): a sampling loop against a stub, so
+  timing again.
+
+Each failed once in five. Next: rerun each alone twenty times to get a rate,
+then read what each waits on.
+
 **The fix as first proposed:** have each suite start from a clean
 environment (unset every variable `config.sh` can set, or run under `env -i`
 with only `PATH` and `HOME`) and its own `LDIR`. If the third row recurs with a
@@ -156,7 +170,7 @@ clean environment, capture it while a `driver.sh tree` loop runs.
 
 ---
 
-## 105. `settle` waits its full timeout on a screen that never reports static — **OPEN, raised 24 Sep**
+## 105. `settle` waits its full timeout on a screen that never reports static — **OPEN, raised 24 Sep; option (a) built 24 Sep, the tree-comparison fallback not started**
 
 Found during item 50's close. On the XS Max's home screen, where the App
 Library page was showing, the driver's `/isScreenStatic` answered `false` every
@@ -173,6 +187,20 @@ as item 50 again. That costs a misdiagnosis on top of the time.
 - Consider a tree-comparison settle (two identical hierarchies in a row) as a
   fallback when `/isScreenStatic` stays false. Measure it on the home screen
   and on an app screen before adopting it.
+
+**Built 24 Sep, option (a) and one more.** `_settle` in `bin/driver.sh`:
+
+- stops after three empty answers from `/isScreenStatic` in a row and says
+  "the driver stopped answering after the last action — not a moving screen".
+  A dead driver used to be polled for the full limit and then reported as a
+  moving screen, which is how this morning's face-up crashes first read. It
+  now takes about 1 s.
+- on a real timeout, asks `/status`: "the driver is up, so the screen itself
+  keeps changing", with `SETTLE=0` named as the way past it, or "the driver is
+  not answering now".
+
+Four offline tests. Still open: option (b), the tree-comparison fallback, which
+would remove the wait rather than explain it; it needs measuring on a phone.
 
 Not checked: which element keeps the home screen moving (a widget, the clock,
 the App Library search field), and whether a simulator's home screen does the
