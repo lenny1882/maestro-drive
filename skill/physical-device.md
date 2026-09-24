@@ -28,6 +28,13 @@ app *on* a device is still by hand (the signing gate, item 45).
   mid-session and killed the run. `bin/device.sh`/`deviceup.sh` refuse with "the
   phone is LOCKED — unlock it" when they find it locked, rather than letting it
   read as a relay fault.
+- **Sessions that keep dying within a couple of minutes: restart `remoted` on
+  the Mac first.** `sudo killall -9 remoted` (it restarts itself in seconds).
+  Measured 24 Sep 2026 on the iPhone 11 over USB: before it, every driver
+  session died after 57–108 s with "connection was invalidated", whichever
+  driver, and restarting the phone changed nothing; after it, four sessions of
+  four were alive at 10 minutes. It needs the Mac user's password, so ask for
+  it rather than retrying (item 46).
 - **Flat is fine with the driver built from source; the prebuilt one needs
   the phone UPRIGHT.** The prebuilt driver crashes on the first `/touch` when
   the phone reports `.faceUp` (`ScreenSizeHelper.swift:99: Fatal error: Not
