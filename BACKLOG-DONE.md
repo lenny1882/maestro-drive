@@ -174,6 +174,95 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 106. The test suites fail in a shell that has sourced a project conf — **DONE 24 Sep: a clean environment, and no pipe into grep -q that can lose its writer**
+
+Four times on 24 Sep a suite reported failures, and passed straight after when
+rerun alone:
+
+| run | in the same Bash call, before it | result | rerun alone |
+| --- | --- | --- | --- |
+| skill suite | `. bin/lib.sh` from the hugoboss project, then `device.sh list` | 562 passed, 9 failed | 571 passed, 0 failed |
+| packaging suite | the same call | 155 passed, 3 failed | 158 passed, 0 failed |
+| packaging suite | nothing; a `driver.sh tree` and `find` ran after it | 156 passed, 2 failed | 158 passed, 0 failed |
+| packaging suite | a stray, non-executable `skill/bin/device-old.sh` | 155 passed, 3 failed | 158 passed, 0 failed |
+
+The last row is explained. **The first two are probably environment, not
+concurrency:** sourcing `lib.sh` loads a project's conf into the shell — `DEV`,
+`APP_ID`, `MAC_HOST`, `LDIR`, `RDIR`, `SCREEN_W` and the rest — and the suites
+then ran with all of it set. A test that relies on a variable being unset, or
+on its own default, sees the project's value instead. The third row had nothing
+sourced; the phones were being driven in the same minute from other calls, so
+shared state (`LDIR`'s `devices.map`, the Mac's `RDIR`, a port) is the
+remaining suspect. The names of the failing tests were not captured in any of
+the four.
+
+A suite that is red only in some shells reads as "the change broke it", and
+costs a rerun at best.
+
+**Reproduced 24 Sep:** after `. bin/lib.sh` in the hugoboss project, the skill
+suite gives 568 passed, 9 failed, and the packaging suite 157 passed, 1 failed
+(its "the skill's own suite passes from the installed path", which is the same
+9). The conf sets values as `: "${APP_ID:=…}"`, so a value already in the
+environment wins, and the tests got `oneiota.e.hugoboss.runner.dev` where they
+expected their own. The nine:
+
+- `notes.sh init writes the file from the template`, `a measured note is
+  stamped measured`, `--once is recorded as seen once`, `--inferred is
+  recorded` — no `app-notes.md` was written in the test's project
+- `a local conf loads with APP_ID and nothing else`, `an unconfigured local
+  project is told the local shape` — "not configured for this project"
+- `and it is not asked for a Mac it does not have` — printed the ssh diagnostic
+- `conf: upward search still works`, `conf: a detached cwd falls back to the
+  cache` — got the hugoboss `APP_ID`
+
+**Fixed 24 Sep:** both `run-tests.sh` files re-run themselves once under `env
+-i`, keeping only `PATH`, `HOME` (redirected straight after, the real one kept
+for the login-shell cases), `TMPDIR`, `TERM` and the locale. In the same shell
+with the hugoboss conf sourced, the skill suite now gives 577 passed, 0 failed
+and the packaging suite 158 passed, 0 failed.
+
+**The unexplained runs are two flaky tests (24 Sep).** Five packaging runs in
+a row, nothing sourced, nothing else driving: runs 2 and 5 failed one test each,
+a different one each time.
+
+- `same subnet with no ARP reply is named as the access point, not the Mac`
+  (packaging suite): it probes 10.9.9.9, so its answer depends on how long the
+  probe takes.
+- `watch: an emptied list is a change, not silence` (skill suite, run from the
+  installed path by the packaging suite): a sampling loop against a stub, so
+  timing again.
+
+Each failed once in five.
+
+**Cause, found 24 Sep: a pipe into `grep -q` under `pipefail`.** Both
+assertions were `printf '%s' "$d" | grep -q …` or `echo "$wout" | grep -q …`.
+In a pipe, bash's `printf` writes one line per `write(2)` (strace: three lines,
+three writes). `grep -q` exits at its first match, so if the scheduler runs it
+between two of the writer's writes, the writer's next line dies of SIGPIPE and
+`pipefail` fails the pipeline — on text that matched. The failing run printed
+the whole diagnosis, both words the test asked for included. It never showed
+alone (0 of 40, 0 of 3000) because an idle machine lets the writer finish
+first.
+
+**Fixed:** 122 such assertions across both suites now use a here-string
+(`grep -q … <<< "$d"`), and the 26 that pipe a command use `drain_grep`, which
+greps and then reads the rest of its input so the writer is never cut off. A
+test makes the race certain — a writer that pauses between a matching first
+line and a second — and checks that plain `grep -q` fails it and `drain_grep`
+does not.
+
+**The fix as first proposed:** have each suite start from a clean
+environment (unset every variable `config.sh` can set, or run under `env -i`
+with only `PATH` and `HOME`) and its own `LDIR`. If the third row recurs with a
+clean environment, capture it while a `driver.sh tree` loop runs.
+
+**Verified 24 Sep:** ten runs of both suites against the final tree, one after
+the other: skill suite 598 passed, 0 failed, all ten; packaging suite 158
+passed, 0 failed, all ten. A twenty-run packaging loop during the work also
+passed twenty of twenty.
+
+---
+
 ## 105. `settle` waits its full timeout on a screen that never reports static — **DONE 24 Sep: a dead driver is named in about 1 s, and a still tree settles when /isScreenStatic will not**
 
 Found during item 50's close. On the XS Max's home screen, where the App
@@ -333,8 +422,14 @@ bring-up anyway (item 99 Part 2).
 the sandbox forbids creating Unix sockets: the fake lists the phone as id 5,
 then as 8 before the first connection. Two tests. Both fail against the old
 logic, and pass with the fix (579 passed, 0 failed). Live on the Mac the new
-forwarder carried the iPhone 11 on id 10 over USB; a live unplug and replug was
-not done.
+forwarder carried the iPhone 11 on id 10 over USB.
+
+**Proven live the same afternoon.** With the iPhone 11 up over USB on id 11 and
+`/status` read every 3–4 s, its cable was pulled for about five seconds and put
+back. `/status` gave 000 while usbmuxd listed nothing, then 200 again at the
+next read, with the forwarder logging `device id 11 -> 14 (reconnected)` — no
+restart and no `device.sh down`/`up`. The driver's own XCTest session died
+about 20 s later (item 46), which the automatic restart covers.
 
 ---
 
