@@ -1704,6 +1704,26 @@ case "$aout" in *"configured app test.app: not in front"*) ok "and springboard f
   *) no "and springboard from runningApp reads as 'configured app not in front'" "got: $aout" ;; esac
 
 echo
+echo "settle tells a moving screen from a dead driver (item 105)"
+# The item-104 harness again, with two curls: a screen that never reports
+# static while /status answers, and a driver that answers nothing at all.
+mkdir -p "$TMP/settle-moving" "$TMP/settle-dead"
+printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) printf 200;; */isScreenStatic) printf %%s "{\\"isScreenStatic\\":false}";; *) printf "{}";; esac\n' > "$TMP/settle-moving/curl"
+printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) printf 200;; *) exit 7;; esac\n' > "$TMP/settle-dead/curl"
+chmod +x "$TMP/settle-moving/curl" "$TMP/settle-dead/curl"
+sout=$(PATH="$TMP/settle-moving:$PATH" timeout 30 bash "$ADIR/driver.sh" settle 1 2>&1); src=$?
+case "$sout" in *"still moving after 1s — the driver is up"*"SETTLE=0"*) ok "a screen that never settles, with the driver up, is called a moving screen" ;;
+  *) no "a screen that never settles, with the driver up, is called a moving screen" "got: $sout" ;; esac
+[ "$src" = 1 ] && ok "and settle still fails" || no "and settle still fails" "rc=$src"
+t0=$(date +%s)
+sout=$(PATH="$TMP/settle-dead:$PATH" timeout 30 bash "$ADIR/driver.sh" settle 20 2>&1)
+t1=$(( $(date +%s) - t0 ))
+case "$sout" in *"driver stopped answering"*"not a moving screen"*) ok "a driver that answers nothing is named as that, not as a moving screen" ;;
+  *) no "a driver that answers nothing is named as that, not as a moving screen" "got: $sout" ;; esac
+[ "$t1" -lt 10 ] && ok "and it stops in seconds, not after the 20s limit (${t1}s)" \
+  || no "and it stops in seconds, not after the 20s limit" "took ${t1}s"
+
+echo
 echo "deviceup.sh names the failure the log shows (item 103)"
 # _why is extracted and fed the lines each failure actually wrote on 24 Sep.
 why() { printf '%b' "$1" > "$TMP/why.log"
