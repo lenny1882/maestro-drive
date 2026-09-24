@@ -22,10 +22,43 @@ WORK=${3:-/tmp/maestro-mac}
 HERE=$(cd "$(dirname "$0")" && pwd)
 XCTR="$HOME/.maestro/maestro-iphoneos-driver-build/driver-iphoneos/Build/Products/maestro-driver-ios-config.xctestrun"
 
-[ -r "$XCTR" ] || { echo "no re-signed device driver at:" >&2
-  echo "  $XCTR" >&2
-  echo "It is the prebuilt driver-iphoneos, re-signed by hand — see physical-device.md §3." >&2
-  exit 1; }
+mkdir -p "$WORK"
+
+# Cable or wifi (BACKLOG item 99, Part 2). A phone on wifi is not on usbmuxd at
+# all, so the usbmux forwarder cannot reach it; devicectl still can, through a
+# CoreDevice tunnel whose address changes every time the tunnel is rebuilt. The
+# prebuilt driver listens on the phone's loopback only, so over wifi it has to
+# be the driver from driver/build.sh, started with TEST_RUNNER_BIND set to the
+# tunnel address, and the forwarder relays to that address over plain TCP.
+_link() {  # prints "<transportType> <tunnelIPAddress>"
+  xcrun devicectl device info details --device "$UDID" \
+    --json-output "$WORK/details-$UDID.json" >/dev/null 2>&1
+  python3 -c '
+import json, sys
+try:
+    c = json.load(open(sys.argv[1]))["result"]["connectionProperties"]
+    print(c.get("transportType", "?"), c.get("tunnelIPAddress", ""))
+except Exception:
+    print("?")' "$WORK/details-$UDID.json"
+}
+set -- $(_link); LINK=${1:-?}; TUNNEL=${2:-}
+
+if [ "$LINK" = localNetwork ]; then
+  [ -n "$TUNNEL" ] || { echo "the phone is on wifi but devicectl gives no tunnel address — is it paired and awake?" >&2; exit 1; }
+  XCTR=${WIFI_XCTESTRUN:-$(ls -t "$HOME"/maestro-drive-driver/build-*/Build/Products/*.xctestrun 2>/dev/null | head -1)}
+  [ -r "$XCTR" ] || { echo "the phone is on wifi, and that needs the driver built from source:" >&2
+    echo "  sh $HERE/driver/build.sh" >&2
+    echo "  then, from Terminal on the Mac: $HERE/driver/sign.sh '<identity>' <profile> <build-dir>" >&2
+    echo "The prebuilt driver listens on the phone's loopback only, which wifi cannot reach." >&2
+    exit 1; }
+  codesign --verify --deep --strict "$(dirname "$XCTR")/Debug-iphoneos/maestro-driver-iosUITests-Runner.app" 2>/dev/null ||
+    { echo "the wifi driver at $(dirname "$XCTR") is not signed — run driver/sign.sh from Terminal on the Mac" >&2; exit 1; }
+else
+  [ -r "$XCTR" ] || { echo "no re-signed device driver at:" >&2
+    echo "  $XCTR" >&2
+    echo "It is the prebuilt driver-iphoneos, re-signed by hand — see physical-device.md §3." >&2
+    exit 1; }
+fi
 
 # A locked phone cannot run XCUITest and fails as a connection error, not a lock
 # — the single most common way this goes wrong (measured 10 Sep 2026). Refuse
@@ -35,10 +68,14 @@ case "$(xcrun devicectl device info lockState --device "$UDID" 2>/dev/null | gre
              echo "XCUITest cannot attach to a locked screen." >&2; exit 1 ;;
 esac
 
-mkdir -p "$WORK"
-
 # The forwarder: Mac 127.0.0.1:PORT -> device 127.0.0.1:PORT. One per device.
-if ! pgrep -f "iproxy.py $UDID $PORT" >/dev/null 2>&1; then
+# Over wifi it is always replaced: the tunnel address it was given may be gone.
+# Over USB a running usbmux forwarder is kept, but not a wifi one ($ anchors the
+# match to a command line with no --tunnel after the port).
+if [ "$LINK" = localNetwork ]; then
+  :   # started below, after the wake, with the address the wake leaves
+elif ! pgrep -f "iproxy.py $UDID $PORT\$" >/dev/null 2>&1; then
+  pkill -f "iproxy.py $UDID " 2>/dev/null
   nohup python3 "$HERE/iproxy.py" "$UDID" "$PORT" > "$WORK/iproxy-$PORT.log" 2>&1 &
   sleep 2
   grep -q forwarding "$WORK/iproxy-$PORT.log" 2>/dev/null || {
@@ -48,6 +85,20 @@ fi
 # Wake the tunnel immediately before the driver — it drops to idle in seconds,
 # and any devicectl call wakes it.
 xcrun devicectl device info lockState --device "$UDID" >/dev/null 2>&1
+
+# Over wifi the wake can rebuild the tunnel with a new address, so the address
+# is read now, after it, and the forwarder started with that one. Read before
+# the wake, the driver was handed a gone address and failed at once with
+# `Bind(49): Can't assign requested address` (measured 24 Sep 2026).
+if [ "$LINK" = localNetwork ]; then
+  set -- $(_link); TUNNEL=${2:-}
+  [ -n "$TUNNEL" ] || { echo "the tunnel address went away after the wake — is the phone still on wifi?" >&2; exit 1; }
+  pkill -f "iproxy.py $UDID " 2>/dev/null; sleep 1
+  nohup python3 "$HERE/iproxy.py" "$UDID" "$PORT" --tunnel "$TUNNEL" > "$WORK/iproxy-$PORT.log" 2>&1 &
+  sleep 2
+  grep -q forwarding "$WORK/iproxy-$PORT.log" 2>/dev/null || {
+    echo "forwarder did not bind:" >&2; cat "$WORK/iproxy-$PORT.log" >&2; exit 1; }
+fi
 
 # Already serving on this port? Leave it — relaunching drops whatever the caller
 # is part-way through.
@@ -59,7 +110,17 @@ fi
 # bring-up while the first phone's xcodebuild was still appending to it, so a
 # failure on either named the other's lines (BACKLOG item 99).
 LOG="$HOME/devdrv-$UDID.log"; : > "$LOG"
-TEST_RUNNER_PORT=$PORT nohup xcodebuild test-without-building \
+# TEST_RUNNER_BIND only over wifi: an empty one would be an address to bind.
+# Over wifi the xctestrun is build.sh's, which runs every test in the bundle,
+# so name the server test; the prebuilt one already skips the rest.
+BIND=; ONLY=
+if [ "$LINK" = localNetwork ]; then
+  BIND=$TUNNEL
+  ONLY=-only-testing:maestro-driver-iosUITests/maestro_driver_iosUITests/testHttpServer
+  pkill -f "xcodebuild test-without-building.*$UDID" 2>/dev/null
+fi
+env ${BIND:+TEST_RUNNER_BIND=$BIND} TEST_RUNNER_PORT=$PORT \
+  nohup xcodebuild test-without-building $ONLY \
   -xctestrun "$XCTR" \
   -destination "id=$UDID" \
   -derivedDataPath "$WORK/dd-$UDID" \

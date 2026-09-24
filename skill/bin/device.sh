@@ -80,10 +80,12 @@ case "${1:-list}" in
       PLATFORM=ios-device "$HERE/runner.sh" platform claim "$udid" >/dev/null 2>&1 || {
         echo "device: $udid is not a physical device udid — a simulator is bin/drivers.sh up" >&2
         exit 2; }
-    _ssh "mkdir -p '$RMODS/ios-device'" >/dev/null
+    _ssh "mkdir -p '$RMODS/ios-device/driver'" >/dev/null
     _push "$HERE/../runners/ios-device/platform.sh" \
           "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
-          "$RMODS/ios-device/" ||
+          "$RMODS/ios-device/" &&
+      _push "$HERE/../runners/ios-device/driver/build.sh" "$HERE/../runners/ios-device/driver/sign.sh" \
+            "$HERE/../runners/ios-device/driver/bind-address.patch" "$RMODS/ios-device/driver/" ||
       { echo "device: could not copy the ios-device module" >&2; exit 1; }
     live=$(_ssh "sh '$PL' driver-scan" 2>/dev/null)
     port=$(_device_port "$udid" "${3:-}" "$live") || exit 2
