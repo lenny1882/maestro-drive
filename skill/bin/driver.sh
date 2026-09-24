@@ -182,6 +182,12 @@ _ensure_device() {
   _is_device || return 1
   _ensure_dev_retry=1
   echo "note: the device driver for $DEV is not answering — restarting it (item 46)" >&2
+  # Name the cause BEFORE restarting. The restart empties the phone's log, so
+  # afterwards there is nothing left to read, and a restart that works never
+  # reaches the hint in _start. From 11 Sep, when the restart below started
+  # working, until 24 Sep, a phone lying flat crashed on every tap and came back
+  # silently, and the face-up crash was never named (items 50, 46).
+  _devdrv_hint
   # bash <script>, not the path alone. device.sh used to ship without an execute
   # bit — the old rsync-to-build/ publish did not chmod and ~/.claude refuses
   # chmod +x — so a direct "$HERE/device.sh" failed with "Permission denied" and
