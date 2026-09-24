@@ -1667,6 +1667,23 @@ case "$fwd_out" in *"echo: ping"*) ok "a connection after a reconnect reaches th
 case "$fwd_out" in *"device id 5 -> 8 (reconnected)"*) ok "the forwarder says the id changed" ;;
   *) no "the forwarder says the id changed" "got: $fwd_out" ;; esac
 
+echo
+echo "deviceup.sh names the failure the log shows (item 103)"
+# _why is extracted and fed the lines each failure actually wrote on 24 Sep.
+why() { printf '%b' "$1" > "$TMP/why.log"
+  ( source <(sed -n '/^_why()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _why "$TMP/why.log" 2>&1 ); }
+w=$(why 'IDELaunchReport: Installing built products Finished with error: Connection with the remote side was unexpectedly closed\nERROR: Failed to install the app on the device. (com.apple.dt.CoreDeviceError error 3002 (0xBBA))\n** TEST EXECUTE FAILED **\n')
+case "$w" in *"could not be INSTALLED"*"CoreDeviceError error 3002"*"restarting the phone"*) ok "an install failure is named as one, with its error, not as item 46" ;;
+  *) no "an install failure is named as one, with its error, not as item 46" "got: $w" ;; esac
+case "$w" in *"XCTest session dying"*) no "and item 46's message is not printed for it" "both printed" ;;
+  *) ok "and item 46's message is not printed for it" ;; esac
+w=$(why "[FlyingFox] server error: SocketError. Bind(49): Can't assign requested address\n** TEST EXECUTE FAILED **\n")
+case "$w" in *"was rebuilt with a new address"*) ok "a gone tunnel address is named" ;; *) no "a gone tunnel address is named" "got: $w" ;; esac
+w=$(why 'ScreenSizeHelper.swift:99: Fatal error: Not implemented yet\n** TEST EXECUTE FAILED **\n')
+case "$w" in *"FACE-UP crash"*) ok "the face-up crash is named at bring-up" ;; *) no "the face-up crash is named at bring-up" "got: $w" ;; esac
+w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')
+case "$w" in *"XCTest session dying (item 46)"*) ok "anything else is item 46's session death" ;; *) no "anything else is item 46's session death" "got: $w" ;; esac
+
 # The ensure-driver recovery (item 46) must fire only for a registered phone, and
 # never reach bin/device.sh for a simulator.
 if ( LDIR="$TMP/ensure1"; mkdir -p "$LDIR"; DEVICE_MAP="$LDIR/devices.map"

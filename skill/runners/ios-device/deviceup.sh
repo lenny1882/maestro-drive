@@ -141,6 +141,31 @@ env ${BIND:+TEST_RUNNER_BIND=$BIND} TEST_RUNNER_PORT=$PORT \
   -derivedDataPath "$WORK/dd-$UDID" \
   >> "$LOG" 2>&1 &
 
+# Say what the log says, not one cause for every failure (BACKLOG item 103).
+# Each branch is a failure seen on this Mac, in the order they can overlap.
+_why() {  # _why <log>
+  if grep -qE "Installing built products.*Finished with error|Failed to install the app" "$1" 2>/dev/null; then
+    echo "the driver could not be INSTALLED on the phone — it never ran." >&2
+    grep -oE "CoreDeviceError error [0-9]+|IXRemoteErrorDomain error [0-9]+|Connection interrupted|disconnected immediately after connecting" "$1" | sort -u | sed 's/^/  /' >&2
+    echo "On 24 Sep 2026 this was CoreDeviceError 3002 (IXRemote 6, 'Connection" >&2
+    echo "interrupted') four times in a row, and restarting the phone cleared it; the" >&2
+    echo "next install took 3s. A second process using the phone's tunnel (a devicectl" >&2
+    echo "loop) caused the same error on 10 Sep. Retrying without either does not help." >&2
+  elif grep -qE "Bind\(49\)|Can't assign requested address" "$1" 2>/dev/null; then
+    echo "the driver could not listen on the tunnel address it was given — the tunnel" >&2
+    echo "was rebuilt with a new address before it started. Retry; the address is read" >&2
+    echo "again (item 99 Part 2)." >&2
+  elif grep -q "ScreenSizeHelper" "$1" 2>/dev/null; then
+    echo "the FACE-UP crash (item 50): the prebuilt driver dies on a touch while the" >&2
+    echo "phone lies flat. Stand it up, or build the driver from source (driver/build.sh)." >&2
+  else
+    echo "'TEST EXECUTE FAILED' / 'connection was invalidated' with the phone unlocked and" >&2
+    echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
+    echo "not the tunnel. Measured 24 Sep 2026: 60-104s with either driver on a cable," >&2
+    echo "and 30-100s over wifi. Retry; driver.sh restarts a registered phone itself." >&2
+  fi
+}
+
 # Cold start measured at ~10-30s on the XS Max: xcodebuild launches the runner,
 # it binds its server on the phone, the forwarder relays it. Poll, do not sleep.
 for _ in $(seq 1 60); do
@@ -150,14 +175,12 @@ for _ in $(seq 1 60); do
   if grep -qE "Testing failed|TEST EXECUTE FAILED|error:" "$LOG" 2>/dev/null; then
     echo "the device driver failed to start; $LOG ends:" >&2
     tail -5 "$LOG" >&2
-    echo "'TEST EXECUTE FAILED' / 'connection was invalidated' with the phone unlocked and" >&2
-    echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
-    echo "not the tunnel — measured ~40-70s on Xcode 26.6. Retry; if it keeps dying that" >&2
-    echo "fast the toolchain is suspect (a newer Maestro, or a different Xcode version)." >&2
+    _why "$LOG"
     exit 1
   fi
   sleep 2
 done
 echo "the device driver did not answer on $PORT within ~120s; $LOG ends:" >&2
 tail -5 "$LOG" >&2
+_why "$LOG"
 exit 1
