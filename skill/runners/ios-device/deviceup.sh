@@ -163,6 +163,8 @@ _why() {  # _why <log>
     echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
     echo "not the tunnel. Measured 24 Sep 2026: 60-104s with either driver on a cable," >&2
     echo "and 30-100s over wifi. Retry; driver.sh restarts a registered phone itself." >&2
+    echo "If it keeps dying within a couple of minutes, restart CoreDevice on the Mac:" >&2
+    echo "  sudo killall -9 remoted   (on 24 Sep that took sessions past 10 minutes)" >&2
   fi
 }
 
