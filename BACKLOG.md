@@ -6,7 +6,7 @@ its face-up diagnosis had been unreachable since 11 Sep. 87 is not gated; 90 wai
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
-word of MCP; 99 has Part 1 done and Part 2, wifi, not started; 100 is gated on the setup
+word of MCP; 99 has both parts built, and wifi sessions die within 30–100 s; 100 is gated on the setup
 screens until Flutter 3.49 is stable. **17 is done** — the package
 has a git repo, a version, a manifest, an installer and an update path. That
 released **28**.
@@ -224,6 +224,18 @@ before it restarts, so the cause is read from the log while it is still there.
 A new test gives the stub restart a working driver (`/status` answers 200 once
 `device.sh` has run) and fails on the old order.
 
+**24 Sep, later: both of the old blockers moved.**
+- Posture can now be read before a touch. Xcode 27's `devicectl device
+  orientation get` works on a physical phone: the flat XS Max answered
+  `faceUp` with `Non-flat Orientation: portrait`, the upright iPhone 11
+  `portrait`. So `driver.sh` can refuse to touch a flat phone and say so,
+  instead of crashing the driver.
+- The driver built from source (item 99 Part 2, `driver/build.sh`) did not
+  crash on a flat phone: on the XS Max reporting `faceUp`, three orientation
+  reads logged no fatal and the first touch returned 200 with the driver still
+  up. One run, over wifi, where the session died soon after for an unrelated
+  reason, so not yet proven.
+
 **Still open:**
 - The crash itself. The on-device runner is built from older source than the
   Maestro jar ships (item 55); the jar's `ScreenSizeHelper.swift` handles
@@ -303,7 +315,59 @@ upstream report of it was found.
 
 ---
 
-## 99. Two phones at once, and a phone with no cable — **OPEN, raised 22 Sep; Part 1 DONE 24 Sep — the port fix is built and two phones were driven at once; Part 2 (wifi) not started**
+## 99. Two phones at once, and a phone with no cable — **OPEN, raised 22 Sep; Part 1 DONE 24 Sep — the port fix is built and two phones were driven at once; Part 2 24 Sep — a phone on wifi can be reached and driven, but its XCTest session dies within 30–100 s**
+
+**Part 2, 24 Sep**, on the same two phones with both cables out. The Mac was
+on the office wired network (10.0.52.250), Xcode 27.0.
+
+- **usbmuxd lists nothing** once the cables are out, so `iproxy.py` has no
+  device id to connect to. CoreDevice still reaches both phones:
+  `transportType: localNetwork`, a point-to-point tunnel per phone (the phone
+  at `<prefix>::1`, the Mac at `::2` on a `utun`). The tunnel address changed
+  four times in the day, including across a `devicectl` call that woke it.
+- **The prebuilt driver cannot be reached over wifi.** It starts over wifi (6 s,
+  faster than USB), but its server listens on the phone's `127.0.0.1` only —
+  `XCTestHTTPServer.swift`: `.inet(ip4: "127.0.0.1", ...)`. The tunnel address
+  refused the connection. `devicectl` has no port forward.
+- **A driver built from source with one patch can.** The patch
+  (`runners/ios-device/driver/bind-address.patch`) takes the listen address
+  from `TEST_RUNNER_BIND`, falling back to `127.0.0.1`. Built from the
+  `cli-2.8.0` tag by `driver/build.sh` (35 s; Xcode 27 needs deployment target
+  15.0) and signed by `driver/sign.sh` with the same wildcard profile as the
+  prebuilt driver. Signing has to happen in Terminal on the Mac: over ssh every
+  `codesign` fails with `errSecInternalComponent`. Launched bound to the
+  iPhone 11's tunnel address: `/status` 200 in 7 s, `/viewHierarchy` (91 KB) in
+  1.0 s, `/touch` in 0.46 s, and the tap opened Weather on the phone.
+  WebDriverAgent is driven over wifi the same way (quern-dev/quern issue #163).
+  It listens on every interface; this listens on the tunnel only, so nothing
+  else on the Wi-Fi can drive the phone.
+- **Wired into the toolkit.** `deviceup.sh` asks `devicectl` for the transport.
+  Over wifi it uses the newest signed build from `build.sh`, reads the tunnel
+  address after the tunnel wake (read before it, the driver was given a gone
+  address: `Bind(49): Can't assign requested address`), starts `iproxy.py
+  --tunnel <address>` so everything downstream still talks to 127.0.0.1:port,
+  and runs only `testHttpServer`. `device.sh up <udid>` is the same command for
+  either transport.
+
+**What stops it being usable: the XCTest session dies within 30–100 s over
+wifi**, with `The connection was invalidated` (CoreDevice, Mercury error
+1001). It is not the rebuild: the prebuilt driver's session died the same way
+at 103 s. It is not idleness either: `/status` every 5 s through the tunnel did
+not keep it alive. Over USB the same drivers lived more than 6 minutes the
+same morning. Item 46's automatic restart revives it in 6–20 s, so every call
+after a death costs a restart. Apple's forums report the same error for wifi
+testing, with no fix found.
+
+**Open for Part 2:**
+- Why the session dies. Candidates: the tunnel being rebuilt (its address
+  changes), Wi-Fi power saving on the phone, or CoreDevice's own session
+  timeout. Watching `tunnelIPAddress` across a death would separate the first
+  from the others.
+- `build.sh` replaces its build directory, so `sign.sh` has to be rerun from
+  Terminal on the Mac after every build. The signed build now at
+  `~/maestro-drive-driver/build-2.8.0` is a copy of the first, hand-run build
+  (same tag, same patch), because `build.sh`'s own output was still unsigned.
+
 
 **Part 1, done 24 Sep** on an iPhone 11 (`00008030-001858493C91402E`, iOS
 26.5.2) and the XS Max (`00008020-000A396C3606002E`, iOS 18.7.9), both on USB
