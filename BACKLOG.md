@@ -4,8 +4,7 @@
 finding out whether a physical phone can be streamed at all; 93 waits on 87
 landing; 97 is three decisions rather than a fix — `bin/mcp.sh` reads this
 project's conf, finds one alias, cannot reach it, and exits before it speaks a
-word of MCP; 99 is gated on a second iPhone, and on one defect that makes the
-obvious two-phone command drive the wrong phone; 100 is gated on the setup
+word of MCP; 99 has Part 1 done and Part 2, wifi, not started; 100 is gated on the setup
 screens until Flutter 3.49 is stable. **17 is done** — the package
 has a git repo, a version, a manifest, an installer and an update path. That
 released **28**.
@@ -167,7 +166,50 @@ upstream report of it was found.
 
 ---
 
-## 99. Two phones at once, and a phone with no cable — **OPEN, raised 22 Sep**
+## 99. Two phones at once, and a phone with no cable — **OPEN, raised 22 Sep; Part 1 DONE 24 Sep — the port fix is built and two phones were driven at once; Part 2 (wifi) not started**
+
+**Part 1, done 24 Sep** on an iPhone 11 (`00008030-001858493C91402E`, iOS
+26.5.2) and the XS Max (`00008020-000A396C3606002E`, iOS 18.7.9), both on USB
+to the Mac. Both UDIDs were already on the driver's profile, which expires 21
+Aug 2027.
+
+- **The fix.** `_device_port` (`bin/device.sh`) walks up from 22187 past every
+  port another phone holds, in `DEVICE_MAP` and in the live forwarders from
+  `platform.sh driver-scan`. A phone keeps its own port across restarts, and a
+  port asked for that belongs to another phone is refused. There are seven
+  offline tests. The defect was not reproduced on the old code first.
+- **Live:** with no port given, the iPhone 11 came up on 22187 in 11 s and the
+  XS Max on 22188 in 17 s. Each port drove only its own phone: Settings on one,
+  Calendar on the other. Every item 46 restart went back to the same port.
+- **Two drivers at once:** 30 rounds of reading both trees in parallel, 5 s
+  apart, all succeeded at 0.9–1.5 s per read. Both drivers were still up after
+  3 minutes idle. Parallel taps landed on both phones once they were upright.
+- **One log per phone.** `deviceup.sh` now writes `~/devdrv-<udid>.log`. The
+  shared `~/devdrv.log` was emptied by the second phone's bring-up while the
+  first phone's `xcodebuild` was still writing to it.
+
+**What the run turned up, not yet fixed:**
+
+- **A forwarder that outlives a reconnect points at a dead phone.** `iproxy.py`
+  resolves the usbmux device id once, when it starts. The iPhone 11 got a new
+  id when it was stood up, and its forwarder kept sending to "device 5": the
+  runner said it was serving, and every connection was reset. `deviceup.sh`
+  keeps an existing forwarder, so item 46 restarts never replaced it; only
+  `device.sh down` then `up` did. `deviceup.sh` should check the forwarder's id
+  against a fresh `ListDevices` before it keeps the forwarder.
+- **`resolve.py` applies the Flutter 1/3-scale correction to native apps.**
+  Calendar's tree has a 1242×2688 node at −414,−896. `resolve.py` reads it as a
+  coordinate-space marker and moves Continue from y=781 to y=559. `tapon`
+  returned rc=0 for a tap that hit nothing. Item 50's 11 Sep "x=−892" was the
+  same mis-transform.
+- **The XS Max's driver install failed with `CoreDeviceError` 3002** (IXRemote
+  6, "Connection interrupted") four times in a row, at 72 s each, with nothing
+  else using its tunnel. A restart of the phone fixed it, and the install then
+  took 3 s. `deviceup.sh` reports this as the item 46 XCTest death, which it is
+  not: it fails while Xcode is installing the driver.
+- **`driver.sh app` answers `com.apple.springboard` on a phone** whatever is in
+  front, so it cannot tell two phones apart.
+
 
 Every physical-device measurement in `physical-device.md` is one phone on one
 cable: the XS Max, 21 Aug to 11 Sep. Two things have never been tried, and they

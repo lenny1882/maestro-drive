@@ -118,7 +118,7 @@ _rebind() {
 # On a physical device the driver's HTTP server lives on the phone, reached over
 # a usbmux tunnel; when the tunnel or the on-device runner drops, this side sees
 # only "status did not answer" and the instinct is to blame the relay. The real
-# cause is named in ~/devdrv.log on the Mac (item 46). That log exists only for a
+# cause is named in ~/devdrv-<udid>.log on the Mac (item 46). That log exists only for a
 # device driver run and only a recent one is this session's, so its presence is a
 # self-gating device signal — a simulator run adds nothing.
 _devdrv_hint() {
@@ -135,11 +135,11 @@ _devdrv_hint() {
     echo "  XCUITest cannot attach to a locked screen; it fails as a relay/connection" >&2
     echo "  error, not as a lock (item 46)." >&2
   fi
-  t=$(_ssh 'f=$HOME/devdrv.log; [ -f "$f" ] || exit 0
+  t=$(_ssh 'f=$HOME/devdrv-'"$DEV"'.log; [ -f "$f" ] || exit 0
 now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
 [ $((now - m)) -lt 600 ] && tail -6 "$f"' 2>/dev/null)
   [ -n "$t" ] || return 0
-  echo "  ~/devdrv.log on the Mac (the on-device driver) ends:" >&2
+  echo "  ~/devdrv-$DEV.log on the Mac (the on-device driver) ends:" >&2
   printf '%s\n' "$t" | sed 's/^/    /' >&2
   # The face-up crash (item 50) has a distinct cause and a distinct fix, so name
   # it before the generic XCTest-death message below — a restart alone does not

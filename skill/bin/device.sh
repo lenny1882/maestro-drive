@@ -25,6 +25,41 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # can never land on the same port.
 : "${DEVICE_PORT_BASE:=22187}"
 
+# The port this phone should have. Sticky, like bin/drivers.sh's _port_for, and
+# walked the same way — but against the phones, not the simulators: the other
+# phones' registered ports in DEVICE_MAP and their live forwarders on the Mac,
+# whose command lines carry `<udid> <port>` (platform.sh driver-scan).
+#
+#   1. a port asked for on the command line, refused if another phone has it
+#   2. this phone's live forwarder, else its registered port, if no other phone
+#      is on it
+#   3. otherwise the lowest from DEVICE_PORT_BASE that no other phone is on
+#
+# Case 3 is BACKLOG item 99. Before it, every phone got DEVICE_PORT_BASE, so a
+# second phone brought up without a port found the first phone's driver
+# answering 200 on it, and bin/driver.sh then drove the first phone for it.
+_device_port() {  # _device_port <udid> <asked-port> <live-scan>
+  local udid=$1 asked=$2 live=$3 taken p
+  taken=$({ awk -v d="$udid" 'NF>=2 && $1!=d{print $2}' "$DEVICE_MAP" 2>/dev/null
+            printf '%s\n' "$live" | awk -v d="$udid" 'NF>=2 && $1!=d{print $2}'; } | sort -u)
+  if [ -n "$asked" ]; then
+    if printf '%s\n' "$taken" | grep -qx "$asked"; then
+      echo "device: port $asked belongs to another phone —" >&2
+      printf '%s\n' "$live" | awk -v p="$asked" '$2==p{print "  live forwarder: "$1}' >&2
+      awk -v p="$asked" '$2==p{print "  registered:     "$1}' "$DEVICE_MAP" 2>/dev/null >&2
+      echo "  leave the port off and one is chosen." >&2
+      return 2
+    fi
+    echo "$asked"; return 0
+  fi
+  p=$(printf '%s\n' "$live" | awk -v d="$udid" '$1==d{print $2; exit}')
+  [ -n "$p" ] || p=$(awk -v d="$udid" '$1==d{print $2; exit}' "$DEVICE_MAP" 2>/dev/null)
+  if [ -n "$p" ] && ! printf '%s\n' "$taken" | grep -qx "$p"; then echo "$p"; return 0; fi
+  p=$DEVICE_PORT_BASE
+  while printf '%s\n' "$taken" | grep -qx "$p"; do p=$((p + 1)); done
+  echo "$p"
+}
+
 _register() {  # _register <udid> <port>
   { grep -v "^$1 " "$DEVICE_MAP" 2>/dev/null; echo "$1 $2 device"; } > "$DEVICE_MAP.tmp" &&
     mv -f "$DEVICE_MAP.tmp" "$DEVICE_MAP"
@@ -37,7 +72,6 @@ _unregister() {  # _unregister <udid>
 case "${1:-list}" in
   up)
     udid=${2:?usage: device.sh up <udid> [port]}
-    port=${3:-$DEVICE_PORT_BASE}
     # A phone is runners/ios-device's whatever PLATFORM says, because that is
     # what this script is for. The module carries deviceup.sh and iproxy.py and
     # bin/install.sh pushes all three together (BACKLOG item 87, 5.4).
@@ -51,6 +85,9 @@ case "${1:-list}" in
           "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
           "$RMODS/ios-device/" ||
       { echo "device: could not copy the ios-device module" >&2; exit 1; }
+    live=$(_ssh "sh '$PL' driver-scan" 2>/dev/null)
+    port=$(_device_port "$udid" "${3:-}" "$live") || exit 2
+    echo "device: $udid on port $port"
     # The driver cold-starts in tens of seconds; the default timeout is too short.
     out=$(TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"); rc=$?
     printf '%s\n' "$out"
