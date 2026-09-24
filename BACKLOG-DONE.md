@@ -174,6 +174,36 @@ operator, all done by 11 Sep: the ship ran 10 Sep, the § 5 hook entry is in
 `~/.claude/settings.json` (line 35 points at the skill's `hooks/gate-journey-first.sh`),
 and the interim standalone `~/.claude/hooks/gate-journey-first.sh` has been deleted.
 
+## 104. `driver.sh app` always answers springboard on a phone — **DONE 24 Sep: it was never a phone problem; the verb now names the app in front from the tree**
+
+Found during item 99. On both phones, `driver.sh app` returned
+`"runningAppBundleId" : "com.apple.springboard"`. That was true before and
+after `launch com.apple.Preferences` on the iPhone 11 and `launch
+com.apple.mobilecal` on the XS Max, while the trees' root nodes read `app
+Settings` and `app Calendar`. So on a phone the verb cannot confirm which app is
+in front, and it cannot tell two phones apart. The tree could: the root node
+names the app.
+
+**Fix:** on a physical device, answer from the tree's root node instead. At
+minimum, say the driver's answer is not reliable there rather than print it as
+fact. Not checked: whether a simulator gives the right answer, and whether this
+is the old on-device runner (item 55).
+
+**Done 24 Sep, and the cause was the route, not the phone.** Maestro's
+`runningApp` takes a list of bundle ids and returns whichever of them is in
+front, or `com.apple.springboard` when none is. `driver.sh` passed only the
+configured `APP_ID`, so with Settings or Calendar in front the answer was
+springboard on any device. `reference/driver-api.md` said the route "returns
+the foreground bundle id"; that is corrected.
+
+`driver.sh app` now prints two lines: `in front: <name>`, from the screen
+tree's application node, and whether the configured app is in front, from
+`runningApp`. The name is the app's display name (Settings), not its bundle id,
+because the tree carries no bundle id. Two offline tests, with a stubbed tree
+and route answer; not run on a phone, which was busy with the lifetime run.
+
+---
+
 ## 103. An install failure is reported as the XCTest session dying — **DONE 24 Sep: deviceup.sh names the failure its log shows**
 
 Found during item 99. On the XS Max, `device.sh up` failed four times in a row,

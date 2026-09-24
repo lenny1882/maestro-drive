@@ -1,6 +1,7 @@
 # maestro-drive — backlog
 
-**Nine items are open — 87, 90, 93, 97, 99, 100 and 104–106.** 101 and 103 were done 24 Sep. 102 was done
+**Eight items are open — 87, 90, 93, 97, 99, 100, 105 and 106.** 101, 103 and 104 were
+done 24 Sep. 102 was done
 24 Sep and is in `BACKLOG-DONE.md`. 101–104 came out
 of item 99's two-phone run on 24 Sep, and 105 out of closing item 50. 50 was
 reopened and closed on 24 Sep and is in `BACKLOG-DONE.md`. 87 is not gated; 90 waits on
@@ -176,23 +177,6 @@ as item 50 again. That costs a misdiagnosis on top of the time.
 Not checked: which element keeps the home screen moving (a widget, the clock,
 the App Library search field), and whether a simulator's home screen does the
 same.
-
----
-
-## 104. `driver.sh app` always answers springboard on a phone — **OPEN, raised 24 Sep**
-
-Found during item 99. On both phones, `driver.sh app` returned
-`"runningAppBundleId" : "com.apple.springboard"`. That was true before and
-after `launch com.apple.Preferences` on the iPhone 11 and `launch
-com.apple.mobilecal` on the XS Max, while the trees' root nodes read `app
-Settings` and `app Calendar`. So on a phone the verb cannot confirm which app is
-in front, and it cannot tell two phones apart. The tree could: the root node
-names the app.
-
-**Fix:** on a physical device, answer from the tree's root node instead. At
-minimum, say the driver's answer is not reliable there rather than print it as
-fact. Not checked: whether a simulator gives the right answer, and whether this
-is the old on-device runner (item 55).
 
 ---
 

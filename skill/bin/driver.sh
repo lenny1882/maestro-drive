@@ -36,7 +36,7 @@
 #   ./bin/driver.sh shot out.png --raw    # native pixels, unrotated
 #   ./bin/driver.sh static         # has the screen settled?
 #   ./bin/driver.sh keyboard       # is the keyboard up?
-#   ./bin/driver.sh app            # bundle id of the foreground app
+#   ./bin/driver.sh app            # the app in front, and is it the configured one
 #   ./bin/driver.sh tap 200 483    # points, from the top-left of the screen
 #   ./bin/driver.sh text "some text"
 #   ./bin/driver.sh key delete
@@ -965,7 +965,31 @@ case "${1:-start}" in
   shot) shift; _shot "$@" ;;
   static)   _start && curl -s -m 10 "$BASE/isScreenStatic"; echo ;;
   keyboard) _post keyboard "{$_appids}"; echo ;;
-  app)      _post runningApp "{$_appids}"; echo ;;
+  # Two answers, because the route gives only one of them (BACKLOG item 104).
+  # runningApp takes a list of bundle ids and returns whichever is in front,
+  # or com.apple.springboard when none of them is, so it cannot name any other
+  # app: with Settings in front it said springboard on both phones. The screen
+  # tree can, by the name on its application node.
+  app)      _hier > "${LDIR:-${TMPDIR:-/tmp}}/app-hier.$$" || exit 1
+            fg=$(python3 -c '
+import json, sys
+def w(n):
+    if n.get("elementType") == 2 and n.get("label"):
+        return n["label"]
+    for c in n.get("children") or []:
+        r = w(c)
+        if r: return r
+try:
+    print(w(json.load(open(sys.argv[1])).get("axElement", {})) or "")
+except Exception:
+    print("")' "${LDIR:-${TMPDIR:-/tmp}}/app-hier.$$")
+            rm -f "${LDIR:-${TMPDIR:-/tmp}}/app-hier.$$"
+            ra=$(_post runningApp "{$_appids}" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("runningAppBundleId",""))
+except Exception: print("")')
+            echo "in front:      ${fg:-unknown (no application node in the tree)}"
+            if [ "$ra" = "$APP_ID" ]; then echo "configured app $APP_ID: in front"
+            else echo "configured app $APP_ID: not in front"; fi ;;
   tap)      [ $# -ge 3 ] || { echo "usage: $0 tap <x> <y> [seconds]" >&2; exit 2; }
             # a duration turns the tap into a long press, so only send one when asked
             if [ -n "${4:-}" ]; then _post touch "{\"x\":$2,\"y\":$3,\"duration\":$4}"
