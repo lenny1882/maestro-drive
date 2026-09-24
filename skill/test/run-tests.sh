@@ -1619,6 +1619,54 @@ _dp 'PHONE1 22187 device\n' '' PHONE2 22187 >/dev/null; rc=$?
   && ok "a free port asked for is used as given" \
   || no "a free port asked for is used as given" "got $(_dp '' '' PHONE2 22300)"
 
+echo
+echo "the usbmux forwarder follows a phone that reconnected (item 101)"
+# A fake usbmuxd, over TCP because a sandbox may forbid Unix sockets, lists
+# the phone as DeviceID 5 when the forwarder starts, then
+# as 8, as a reconnect does. Connect succeeds only for the current id and then
+# echoes. Before item 101 the forwarder kept 5 and reset every connection.
+fwd_out=$(timeout 30 python3 - "$REPO/runners/ios-device/iproxy.py" <<'PY'
+import os, socket, struct, plistlib, subprocess, sys, threading, time
+cur = {"id": 5}
+def send(c, p):
+    b = plistlib.dumps(p); c.sendall(struct.pack("<IIII", 16 + len(b), 1, 8, 1) + b)
+def recv(c):
+    h = b""
+    while len(h) < 16: h += c.recv(16 - len(h))
+    n = struct.unpack("<I", h[:4])[0] - 16; b = b""
+    while len(b) < n: b += c.recv(n - len(b))
+    return plistlib.loads(b)
+def serve(c):
+    m = recv(c)
+    if m["MessageType"] == "ListDevices":
+        send(c, {"DeviceList": [{"DeviceID": cur["id"], "Properties": {"SerialNumber": "PHONE"}}]}); c.close()
+    elif m["DeviceID"] == cur["id"]:
+        send(c, {"Number": 0})
+        while True:
+            d = c.recv(100)
+            if not d: break
+            c.sendall(d)
+    else:
+        send(c, {"Number": 2}); c.close()
+srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(8)
+os.environ["USBMUXD_SOCKET"] = "127.0.0.1:%d" % srv.getsockname()[1]
+threading.Thread(target=lambda: [threading.Thread(target=serve, args=(srv.accept()[0],), daemon=True).start() for _ in iter(int, 1)], daemon=True).start()
+s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+p = subprocess.Popen([sys.executable, sys.argv[1], "PHONE", str(port)], stdout=subprocess.PIPE, text=True, env=os.environ)
+p.stdout.readline()                      # "forwarding ...": it has looked up id 5
+cur["id"] = 8                            # the phone reconnects
+c = socket.create_connection(("127.0.0.1", port), timeout=5)
+c.sendall(b"ping"); got = c.recv(10)
+print("echo:", got.decode(errors="replace"))
+p.terminate(); p.wait()
+print(p.stdout.read().strip())
+PY
+)
+case "$fwd_out" in *"echo: ping"*) ok "a connection after a reconnect reaches the phone's new device id" ;;
+  *) no "a connection after a reconnect reaches the phone's new device id" "got: $fwd_out" ;; esac
+case "$fwd_out" in *"device id 5 -> 8 (reconnected)"*) ok "the forwarder says the id changed" ;;
+  *) no "the forwarder says the id changed" "got: $fwd_out" ;; esac
+
 # The ensure-driver recovery (item 46) must fire only for a registered phone, and
 # never reach bin/device.sh for a simulator.
 if ( LDIR="$TMP/ensure1"; mkdir -p "$LDIR"; DEVICE_MAP="$LDIR/devices.map"
