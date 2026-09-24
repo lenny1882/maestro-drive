@@ -93,7 +93,7 @@ gives each body) and then exercised against the live driver:
 | `launchApp` / `terminateApp` | `{"bundleId":..}` / `{"appId":..}` | shape only |
 | `isScreenStatic` | GET | yes — `{"isScreenStatic":true}` |
 | `keyboard` | `{"appIds":[...]}` | yes — `{"isKeyboardVisible":true}` |
-| `runningApp` | `{"appIds":[...]}` | yes — returns the foreground bundle id |
+| `runningApp` | `{"appIds":[...]}` | yes — returns whichever of the given ids is in front, else `com.apple.springboard`; it cannot name an app not in the list (item 104) |
 | `installedApps`, `setPermissions` | — | not exercised |
 | `keyboardInfo` | — | named by the client, **404 on this driver** (13 Aug) |
 

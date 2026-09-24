@@ -1668,6 +1668,42 @@ case "$fwd_out" in *"device id 5 -> 8 (reconnected)"*) ok "the forwarder says th
   *) no "the forwarder says the id changed" "got: $fwd_out" ;; esac
 
 echo
+echo "driver.sh app names the app in front, not just the configured one (item 104)"
+# Stubbed like the face-up case below: a curl that serves a tree with Settings
+# in front and a runningApp answer of springboard, which is what both phones
+# gave on 24 Sep with Settings open.
+ADIR="$TMP/appverb"; ASTUB="$TMP/appstub"; mkdir -p "$ADIR" "$ASTUB"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/jtok.py" "$ADIR/"
+cat > "$ADIR/lib.sh" <<LIBSH
+_fs_shared()  { [ "\${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "\${TRANSPORT:-ssh}" = local ]; }
+MAC_HOST=stub; MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
+DRIVER_PORT_BASE=1; RDIR=$TMP/none; JOURNEY_DIR=$TMP/none; SSH_OPTS=(-o X=y); LDIR=$TMP/appverb
+_driver_base(){ printf 'http://%s:%s' "\$MAC_FQDN" "\$DPORT"; }
+RHELP=$TMP/none; RMODS=$TMP/none/runners; DEVICE_MAP=$TMP/none/devmap; PLATFORM_SH=/x/platform.sh
+_driver_bind(){ return 0; }
+_rebind(){ return 1; }
+_push(){ return 0; }
+_ssh(){ return 0; }
+LIBSH
+cat > "$ASTUB/curl" <<'CURL'
+#!/usr/bin/env bash
+for a in "$@"; do case "$a" in http*) u=$a;; esac; done
+case "$u" in
+  */status) printf 200 ;;
+  */viewHierarchy) printf '%s' '{"axElement":{"elementType":0,"frame":{"X":0,"Y":0,"Width":0,"Height":0},"children":[{"elementType":2,"label":"Settings","frame":{"X":0,"Y":0,"Width":414,"Height":896}}]}}' ;;
+  */runningApp) printf '%s' '{"runningAppBundleId":"com.apple.springboard"}' ;;
+  *) printf '{}' ;;
+esac
+CURL
+chmod +x "$ASTUB/curl"
+aout=$(PATH="$ASTUB:$PATH" timeout 30 bash "$ADIR/driver.sh" app 2>&1)
+case "$aout" in *"in front:      Settings"*) ok "the app in front is named from the tree" ;;
+  *) no "the app in front is named from the tree" "got: $aout" ;; esac
+case "$aout" in *"configured app test.app: not in front"*) ok "and springboard from runningApp reads as 'configured app not in front'" ;;
+  *) no "and springboard from runningApp reads as 'configured app not in front'" "got: $aout" ;; esac
+
+echo
 echo "deviceup.sh names the failure the log shows (item 103)"
 # _why is extracted and fed the lines each failure actually wrote on 24 Sep.
 why() { printf '%b' "$1" > "$TMP/why.log"
