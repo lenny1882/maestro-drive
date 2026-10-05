@@ -4,7 +4,7 @@
 # two-action flow against ~17.6s here, but it can only address the device on
 # port 22087, whereas --device here works.
 #
-# Either way it costs that device its driver. Measured 13 Aug 2026: Maestro
+# Either way it costs that device its driver. Measured: Maestro
 # terminates the runner for the device it was given when the command finishes,
 # whether the command worked or not, so a bin/drivers.sh layout loses that one
 # entry — and only that one; other devices keep their ports. The next
@@ -61,7 +61,7 @@ done < <(_app_vars)
 # READ BEFORE ANY ROUND TRIP. _dev makes an _ssh call, and _ssh forwards this
 # process's stdin to the far side — so resolving the device first ate the flow
 # and left `appId:` with no commands under it, which Maestro reports as
-# "Commands Section Required" (measured 21 Sep 2026, over the bridge). ssh is
+# "Commands Section Required" (measured over the bridge). ssh is
 # laxer about this than the bridge is, which made it a latent bug rather than a
 # harmless ordering.
 if [ -n "$FILE" ]; then
@@ -103,7 +103,7 @@ exit \$_rc"
 # whatever it was — a screenshot of a flow that failed is the evidence — so
 # without this the script would end on the `if` and exit 0 for a failed flow,
 # which is the bug the remote `exit $_rc` above was meant to fix and did not.
-# Measured 18 Sep: a flow asserting text that is on no screen returned 0.
+# Measured: a flow asserting text that is on no screen returned 0.
 rc=$?
 
 if [ -n "$SHOT" ]; then

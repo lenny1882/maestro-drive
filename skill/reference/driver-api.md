@@ -43,9 +43,8 @@ same picture as the app's:
 | iPhone 16 Pro, portrait | 402x874 points, 1206x2622 pixels | 1206x2622 |
 
 So on the iPad the picture arrives on its side and at twice the points it is
-measured in. Both were corrected by hand until 13 Aug 2026 — eight `sips -r 270`
-calls in one session, hand-written ImageMagick crops against a 1206x2622 source
-in another.
+measured in. `driver.sh shot` corrects both; correcting them by hand means a
+`sips -r 270` per picture and hand-written ImageMagick crops.
 
 Which way to turn it is the status bar again, the same reading that separates
 system space from app space (`resolve.py --space`): the bar down the right edge
@@ -95,45 +94,40 @@ gives each body) and then exercised against the live driver:
 | `keyboard` | `{"appIds":[...]}` | yes — `{"isKeyboardVisible":true}` |
 | `runningApp` | `{"appIds":[...]}` | yes — returns whichever of the given ids is in front, else `com.apple.springboard`; it cannot name an app not in the list (item 104) |
 | `installedApps`, `setPermissions` | — | not exercised |
-| `keyboardInfo` | — | named by the client, **404 on this driver** (13 Aug) |
+| `keyboardInfo` | — | named by the client, **404 on this driver** |
 
 All of it is in `bin/driver.sh`: `tap`, `text`, `key`, `button`, `erase`,
 `swipe`, `orient`, `launch`, `kill`, `static`, `keyboard`, `app`.
 
 ### `swipe` is not the swipe route — `swipeV2` is, and the difference is rotation
 
-This table said `swipe` was the working route until 17 Sep 2026, and the
-correction cost a day. **`POST /swipe` answers HTTP 200 whether or not it moves
-the screen.** The 200 confirms the JSON parsed, nothing more — which is the
+**`POST /swipe` answers HTTP 200 whether or not it moves the screen.** The 200 confirms the JSON parsed, nothing more — which is the
 whole difference, because a swipe that reports success and moves nothing reads
 as an app that will not scroll.
 
 **Where it does nothing.** iPad Pro 11-inch (M4), iOS 18.6, landscapeLeft,
-driving a Flutter two-column grid, 16 Sep 2026: fourteen consecutive `/swipe`
+driving a Flutter two-column grid: fourteen consecutive `/swipe`
 calls produced fourteen identical hierarchies — `760 700 760 300` at 0.4, 0.6,
 0.8 and 1.0 s, both columns, the scrollbar edge, and a normalised `0.63 0.84
 0.63 0.25`. The same payload to `/swipeV2` scrolled the grid first try, and a
 22-step sweep built on it reached all 48 rows in 90 s.
 
-**Where it works.** iPhone 16 Pro Max, iOS 18.6, 17 Sep 2026 — first against
+**Where it works.** iPhone 16 Pro Max, iOS 18.6 — first against
 springboard (paged the home screen in both directions, returning to an earlier
 page's exact row signature, which a redraw cannot fake), then **against a
 Flutter scrolling list in the app under test**, which is the case that matters:
 
 ```
-before  4002 Riverside · 4002 Riverside · 4010 Eastgate · 4014 Eastgate ·
-        4032 High St · 4110 Northfield · 4140 Lakeside · 4200 Harbour
-after   4002 Riverside · 4110 Northfield · 4140 Lakeside · 4200 Harbour ·
-        4210 Marina · 4232 Central Mall · 4237 Outlet Park · 4238 Grand Mall ·
-        4241 Grand Mall GF
+before  Row 01 · Row 01 · Row 02 · Row 03 · Row 04 · Row 05 · Row 06 · Row 07
+after   Row 01 · Row 05 · Row 06 · Row 07 · Row 08 · Row 09 · Row 10 · Row 11 ·
+        Row 12
 ```
 
 One `POST /swipe` moved it. `/swipeV2` moved the same list immediately
-afterwards. The 16 Sep note claiming `/swipe` was confirmed broken on an iPhone
-was second-hand and is withdrawn.
+afterwards. A claim that `/swipe` is broken on an iPhone is wrong.
 
-**The variable is the orientation, and `/swipe` does not rotate.** Isolated
-18 Sep 2026 on iPad Pro 11-inch (M4), one driver, in **Settings** rather than the
+**The variable is the orientation, and `/swipe` does not rotate.** Isolated on
+iPad Pro 11-inch (M4), one driver, in **Settings** rather than the
 app so the framework is out of it. The same app-space payload to each route,
 relaunched to a fresh scroll position before every trial:
 
@@ -194,9 +188,8 @@ would come from the device rather than being derived from its size.
 
 Every one of those verbs polls `isScreenStatic` after acting and returns the
 moment the screen is still, which is what makes a `sleep` after one pointless.
-Until 13 Aug 2026 only the journey verbs did this and the command-line ones
-returned immediately, so a caller genuinely did have to guess a wait; 42 of the
-154 sleeps counted across four sessions were covering exactly that. A settle
+Before the command-line verbs did this too, only the journey verbs waited and a
+caller genuinely did have to guess a wait. A settle
 timeout warns on stderr and leaves the exit status alone — the action happened,
 the screen is merely still busy — whereas in a journey it fails the step, since
 a batch carrying on into a moving screen is how a batch goes wrong. `SETTLE=0`
@@ -214,10 +207,10 @@ directly after the verb to print the screen once the action has settled:
 Only in that position — `type` takes the rest of the line as text, so a flag
 after it is typed. The screen prints even when the action failed.
 
-Measured live on 13 Aug 2026: 2.29 s for the combined call against 2.61 s for
-the same two as separate invocations. So the process saving is 0.3 s and beside
-the point — as with journeys, what it removes is the model stopping to think
-between an action and the read that tells it what the action did.
+Measured live: 2.29 s for the combined call against 2.61 s for the same two as
+separate invocations. So the process saving is 0.3 s and beside the point — as
+with journeys, what it removes is a stop to decide between an action and the
+read that tells you what the action did.
 
 **Why this matters more than the speed.** `/touch` takes raw screen coordinates
 in points. It has no selector, no bounds lookup, and no conversion step — which
@@ -241,8 +234,7 @@ Maestro upgrade may change without warning. `bin/bench.sh` should be re-run and
 these routes re-checked after any upgrade.
 
 It also confirms the driver survives between calls — `lsof -nP -iTCP:22087` on
-the Mac is a one-line health check for the driver session, which an earlier note previously
-listed as untested. The port number comes from the docs' note that checking for
+the Mac is a one-line health check for the driver session. The port number comes from the docs' note that checking for
 open port `22087` used to be the way apps detected Maestro on iOS
 (`docs/pages/maestro-flows__flow-control-and-logic__detect-maestro.md`); that
 detection method is deprecated, but the port is still there.
@@ -356,7 +348,7 @@ Maestro's client side can only ever talk to one device from one machine.
 `McpMaestroSessionManager.DEFAULT_XCTEST_PORT` are both the literal `22087`,
 `sipush`ed inline with no environment read anywhere. The MCP server therefore
 serves **whatever device is on 22087**, whichever `device_id` you pass, and
-says nothing about it. Measured 12 Aug 2026: with the iPad's driver on 22087,
+says nothing about it. Measured: with the iPad's driver on 22087,
 `inspect_screen` for the iPhone's UDID returned the iPad's tree, 1194x834,
 correct-looking in every other way.
 
@@ -403,7 +395,7 @@ Three things that were tested rather than assumed:
   talks to whatever is on 22087. A CLI run leaves nothing behind either way,
   because the driver only lives while a session holds it. So the failure mode is
   "that device now has no driver", not "its driver moved".
-- **A failed Maestro run destroys it too.** Re-measured 13 Aug with three
+- **A failed Maestro run destroys it too.** Re-measured with three
   drivers up (iPad 22087, iPhone 16 Pro 22088, iPhone 16 22089). A `maestro
   --device <iPhone 16 Pro> hierarchy` that ended in an error left that device
   with no driver; so did the one after it that worked. The other two kept their
@@ -431,12 +423,12 @@ in the open questions: do not mix CLI runs into an MCP-driven session.
 ### The viewer, and why the wall replaced it
 
 `open_maestro_viewer` returns `http://127.0.0.1:9999/`. Three things make that
-unusable for watching from anywhere but the Mac. All three were measured on
-15 Sep 2026; backlog 64 and 65.
+unusable for watching from anywhere but the Mac. All three were measured;
+backlog 64 and 65.
 
 **The port is not 9999.** `maestro mcp --help`: `--viewer-port` "Defaults to a
 free local port". Every `maestro mcp` starts its own viewer, so every session
-gets a different port — two sessions that afternoon held 9999 and 10001. Nothing
+gets a different port — two concurrent sessions held 9999 and 10001. Nothing
 may assume the number; `bin/viewer.sh list` discovers it by asking each MCP
 server's listening sockets for `/api/device/targets`.
 

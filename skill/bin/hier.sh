@@ -5,7 +5,7 @@
 # Unlike the MCP server this does honour --device, so it is the way to read a
 # second simulator when no driver is up for it yet.
 #
-# It costs that device its driver. Measured 13 Aug 2026: Maestro terminates the
+# It costs that device its driver. Measured: Maestro terminates the
 # runner for the device it was given when the command finishes, whether the
 # command worked or not, and a bin/drivers.sh layout loses that one entry.
 # Every other device is untouched — it is not that port 22087 changes hands.

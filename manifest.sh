@@ -5,12 +5,12 @@
 #
 # The skill is a directory, but it is not only a directory: it carries two
 # hooks and an MCP server, and all three need registering before the skill is
-# one step to install. They used to be the user's to paste in by hand, on the
-# grounds that both hooks change what happens in every session rather than only
-# the ones that load this skill. That was true and it still cost more than it
-# saved — rig-down-on-end.sh sat unregistered from 17 Sep, so every untidy
-# session left a simulator booted and a stale name on the wall, which is the
-# exact failure the hook exists to prevent.
+# one step to install. They used to be pasted in by hand, on the grounds that
+# both hooks change what happens in every session rather than only the ones
+# that load this skill. That was true and it still cost more than it saved —
+# an unregistered rig-down-on-end.sh means every untidy session leaves a
+# simulator booted and a stale name on the wall, which is the exact failure
+# the hook exists to prevent.
 #
 # So install.sh now registers all three:
 #
@@ -25,8 +25,8 @@
 PKG="maestro-drive"
 OWNS="maestro-drive"
 
-# EVERY NAME THIS PACKAGE HAS HAD. It was maestro-remote-mac until 21 Sep 2026
-# (BACKLOG item 98), and an upgrade across a rename is the one case where the
+# EVERY NAME THIS PACKAGE HAS HAD. It was maestro-remote-mac until
+# BACKLOG item 98 renamed it, and an upgrade across a rename is the one case where the
 # OWNS strip above is not enough: the entries already in settings.json carry the
 # old name, so a strip that knows only the current one leaves them behind and
 # the user ends up with two gates on every Bash call and a SessionEnd hook

@@ -1,21 +1,18 @@
 # Reaching the Mac, and what survives between calls
 
-Everything here was measured from inside a Claude Code session on 11 Aug 2026.
-It is about this sandbox and a Mac on the same network; none of it is about
-Maestro, and all of it applies whatever you are driving.
+Everything here was measured from inside a Claude Code session. It is about
+this sandbox and a Mac on the same network; none of it is about Maestro, and all
+of it applies whatever you are driving.
 
 ## 2. Connection hygiene
-
-Measured 11 Aug 2026 from inside a Claude Code session.
 
 **SSH itself works and is cheap.** 0.30–0.44 s to connect and run a command.
 That is not where the time goes — see `reference/connection.md` and the batching section below.
 
-**`~/.ssh/known_hosts` now persists.** Earlier in this work the sandbox blocked
-the write, so every call printed `Failed to add the host to the list of known
-hosts` and the helper scripts carried `StrictHostKeyChecking=accept-new` plus a
-`grep -v` to hide it. After a settings change the Mac's key is written normally,
-so none of that boilerplate is needed any more.
+**`~/.ssh/known_hosts` persists.** With the sandbox's write allowlist covering
+it, the Mac's key is written normally, so no `StrictHostKeyChecking=accept-new`
+or `grep -v` over `Failed to add the host to the list of known hosts` is needed.
+Without that allowlist entry, every call prints that warning.
 
 **Do not bother with `ControlMaster`.** It fails with `muxclient socket():
 Operation not permitted`, and reference/connection.md explains why fixing that would not help.
@@ -24,14 +21,13 @@ Operation not permitted`, and reference/connection.md explains why fixing that w
 because the sandbox proxy resolves it, but SSH takes a different route and needs
 an alias with a `Host` block. The measurements are below.
 
-**Build the helper scripts up front.** In the original session `mac.sh`,
-`flow.sh`, `shot.sh`, `hier.sh` and `net.sh` appeared over three hours, and
-`hier.sh` was rewritten three times (12:15, 12:16, 12:20), each rewrite costing
-a round trip. Take them from `bin/` instead.
+**Build the helper scripts up front.** Writing `mac.sh`, `flow.sh`, `shot.sh`,
+`hier.sh` and `net.sh` ad hoc while driving costs a round trip per rewrite. Take
+them from `bin/` instead.
 
 ## 3. Nothing on this side persists — put residency on the Mac
 
-All of this was measured on 11 Aug 2026, not inferred.
+All of this was measured, not inferred.
 
 ### Every Bash call is a fresh container
 
@@ -56,25 +52,21 @@ hold open.
 
 ### What to use instead, when something genuinely has to outlive the call
 
-The rule above says what dies. It did not, until 17 Sep 2026, say what does not
-— so every session that needed a watcher found out by having one die. Three
-facts, measured 15-17 Sep 2026 (BACKLOG item 71):
+The rule above says what dies. This says what does not. Three facts, measured
+(BACKLOG item 71):
 
-**`nohup … &` does not survive.** Re-tested 17 Sep: a `nohup bash -c 'for i in
-1..8; do echo tick; sleep 4; done' &` wrote exactly one tick and the process was
-gone by the next call. Twenty-one `nohup` attempts were made across 15-16 Sep
-regardless. The failure is silent and it looks like success — the call prints
-`started pid 5` and returns 0.
+**`nohup … &` does not survive.** A `nohup bash -c 'for i in 1..8; do echo tick;
+sleep 4; done' &` writes exactly one tick and the process is gone by the next
+call; twenty-one attempts gave the same result. The failure is silent and it
+looks like success — the call prints `started pid 5` and returns 0.
 
-**The harness's `run_in_background: true` does survive.** It is the mechanism,
-and it was used 88 times across those two days *after* two sessions stumbled
-onto it. It returns a task id and a file the output is written to, which can be
+**The harness's `run_in_background: true` does survive.** It is the mechanism.
+It returns a task id and a file the output is written to, which can be
 read with `Read` while the thing is still running. Use it for a watcher, a
 sampler, a poll, a long seed — anything that has to still be there on the next
 call.
 
-**`sleep N; <read the log>` is refused.** Six times across those two days:
-*"Blocked: sleep 75 followed by … To wait for a condition, use Monitor with an
+**`sleep N; <read the log>` is refused.** The harness answers *"Blocked: sleep 75 followed by … To wait for a condition, use Monitor with an
 until-loop."* So the obvious way to wait on a background job costs a rejected
 call. Use `Monitor` with an until-loop for a condition, and read the task's
 output file for progress; do not chain shorter sleeps to get around it.
@@ -82,7 +74,7 @@ output file for progress; do not chain shorter sleeps to get around it.
 **And whatever you start detached cannot find the project conf.** `config.sh`
 walks up from `$PWD`, and a process started from `$TMPDIR` is nowhere near the
 project — it stops with "not configured for this project", which reads as a
-broken install. Since 17 Sep `config.sh` remembers the conf this session last
+broken install. `config.sh` remembers the conf this session last
 found and falls back to it, so this usually resolves itself; pass
 `MAESTRO_DRIVE_CONF=<project>/.maestro-drive.conf` explicitly when it does not.
 
@@ -90,8 +82,8 @@ found and falls back to it, so this usually resolves itself; pass
 same fresh-container rule that kills `nohup` makes pids meaningless between
 calls: a process started by one call has a pid in that call's namespace, so a
 later call's `kill -0 <pid>` fails on a process that is running perfectly well,
-and its `kill <pid>` reaches nothing. Measured 17 Sep 2026 while building
-`driver.sh watch` — a pid-file lock reported "NOT watching" over a live watcher
+and its `kill <pid>` reaches nothing. Measured while building `driver.sh
+watch` — a pid-file lock reported "NOT watching" over a live watcher
 and then let a second one start, which is the exact collision the lock existed
 to prevent.
 
@@ -114,10 +106,9 @@ helper scripts `driver.sh` copies over, the wall labels, the per-device port map
 That is mostly correct — a reboot takes every driver with it too, so the state
 and the things it describes disappear together. What it costs is about 30 s per
 device rebuilding the runner, and it presents as a first run rather than as a
-reboot. Measured 15 Sep 2026: a session found `/tmp/maestro-mac/` gone after the
-Mac came back up, and with it a `relay.py` a previous session had patched by
-hand — which is how the IPv4/IPv6 relay bug (item 62) reappeared for an
-afternoon. **Nothing worth keeping across a reboot belongs in `$RDIR`.**
+reboot. A reboot also takes any file in `/tmp/maestro-mac/` patched by hand — a
+hand-patched `relay.py` going with it is how the IPv4/IPv6 relay bug (item 62)
+came back. **Nothing worth keeping across a reboot belongs in `$RDIR`.**
 
 The Mac has none of these limits — that is what the next section is about, and
 where anything long-running is better placed if it does not need to read this
@@ -137,8 +128,8 @@ Egress goes through the sandbox proxy (`$grpc_proxy`, listening in-namespace on
 | `<mac>.local` over **SSH**, with no `Host` block | fails, "Network is unreachable" |
 
 **Use the name for HTTP and the alias for SSH.** The two take different routes
-and behave differently, which is easy to conflate — an earlier version of this
-file said flatly "use the IP, never the `.local` name", and that was wrong.
+and behave differently, which is easy to conflate — "use the IP, never the
+`.local` name" is wrong.
 
 - **HTTP goes through the sandbox proxy.** `curl` reports `remote_ip
   127.0.0.1`: it connects to the proxy, and the *proxy* resolves the name and
@@ -159,9 +150,9 @@ name for URLs; `MAC_HOST` holds the alias for SSH.
 **The two halves do not survive a move equally.** `MAC_FQDN` follows the Mac
 between networks because the proxy resolves it. `MAC_HOST` does not: an alias is
 a fixed address in `~/.ssh/config`, so a Mac that moves needs a different one.
-On 13 Aug 2026 that cost a session — every call failed with `Connection timed
-out during banner exchange`, which reads as the machine being asleep rather than
-as the wrong route, and was reported as exactly that.
+With the wrong alias every call fails with `Connection timed out during banner
+exchange`, which reads as the machine being asleep rather than as the wrong
+route.
 
 `MAC_HOST` therefore accepts a space-separated list:
 
@@ -233,7 +224,7 @@ it becomes habit.
 
 ### What this made possible
 
-Both candidates for a resident driver were tested on 11 Aug 2026:
+Both candidates for a resident driver were tested:
 
 - **`maestro studio` is gone** — unbundled from the CLI in 2.8.0, desktop app
   only. Not drivable remotely.
@@ -248,14 +239,14 @@ Bash call. That is the only kind of residency available here.
 
 ## 4. `vmservice.sh` when the simulator log has scrolled past the URI
 
-Measured 20 Aug 2026. `bin/publish.sh` reported
+Measured: `bin/publish.sh` reported
 `no VM service found - is the app running in debug?` with a live `flutter run`
 attached and the Dart VM Service printed in its own log. The cause: `vmservice.sh`
 rediscovered the base URI only from a five-minute window on the simulator system
 log, so an app started longer ago than that — every app whose build you sat
 through — had scrolled out of it, and the message wrongly blamed the build mode.
 
-**Fixed 11 Sep (item 39).** `vmservice.sh` now looks in the `flutter run` log
+**Fixed (item 39).** `vmservice.sh` now looks in the `flutter run` log
 first — a file keeps the URI however long ago the app started — and falls back to
 the simulator system log only for an app started without a redirected log. It
 reads `$FLUTTER_RUN_LOG` (default `/tmp/flutter-run.log`, this skill's own recipe)

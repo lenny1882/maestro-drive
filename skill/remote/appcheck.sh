@@ -8,10 +8,9 @@
 # and `date` genuinely take different flags on the two, and the tests run on
 # Linux while the real thing runs on macOS.
 #
-# Why it exists: sessions A and B each worked this check out from scratch, in
-# three or four calls apiece, and **both found the simulator running a build
-# from a different branch**. Without it both reviews would have been worthless.
-# A third instance turned up on 13 Aug without anyone looking for it.
+# Why it exists: worked out by hand this check takes three or four calls, and a
+# simulator running **a build from a different branch** is a common finding. A
+# review run against such a build says nothing about the branch under review.
 #
 # What it can and cannot say. An installed build older than the newest commit
 # cannot contain that commit — that is a fact, and it is the case that bit A
@@ -130,8 +129,7 @@ appcheck() {  # appcheck <info-file> <repo> [marker] [built-version]
 
     # A FLAVOUR DECORATES THE VERSION. pubspec says 3.0.4 and the uat build
     # installs as 3.0.4-uat, so a literal comparison reports a mismatch on a
-    # build that is exactly this code — measured 18 Sep 2026 against the phone,
-    # and it would have been the first thing this check ever said to anybody.
+    # build that is exactly this code — measured against a physical phone.
     #
     # Matched as "the built version, optionally followed by -<suffix>" rather
     # than by stripping everything after a dash: a project whose real version is

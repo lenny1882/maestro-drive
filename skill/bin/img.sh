@@ -12,17 +12,16 @@
 # clockwise and must be 90, 180 or 270. Without --out the file is rewritten in
 # place.
 #
-# Why this exists: session B on 11 Aug 2026 ran `sips -r 270` and
-# `sips -c … --cropOffset …` by hand on the Mac about eight times, and session D
-# on 12 Aug spent calls hunting for a local image tool — `python3 -c "import
-# PIL"`, then `which convert magick pngquant` — before hand-writing crops
-# against a 1206x2622 screenshot.
+# Why this exists: without it, rotating and cropping a screenshot means running
+# `sips -r 270` and `sips -c … --cropOffset …` by hand on the Mac, or hunting
+# for a local image tool — `python3 -c "import PIL"`, then `which convert magick
+# pngquant` — before hand-writing crops against a 1206x2622 screenshot.
 #
 # There is no dependency to install. Whichever of these the machine has is
 # used, in this order:
 #
 #   magick / convert   ImageMagick, if it is on this machine (0.15s for a crop
-#                      of a 6MP image, 0.8s for a rotate — measured 13 Aug)
+#                      of a 6MP image, 0.8s for a rotate — measured)
 #   sips               when the skill is being run from a Mac itself
 #   sips on the Mac    otherwise: the file goes up, sips runs there, it comes
 #                      back. Always available, because there is always a Mac —
@@ -85,7 +84,7 @@ esac
 # Clamped against the picture it will actually be cut from — after the rotation,
 # so the axes are the ones the caller measured against. Both backends accept a
 # rectangle that runs off the edge and disagree about it: ImageMagick narrows
-# the crop, sips slides it. Measured 13 Aug on a rectangle two pixels too wide —
+# the crop, sips slides it. Measured on a rectangle two pixels too wide —
 # 1748x180 against 1750x180, and 360 pixels of difference. Neither is wrong, so
 # the rectangle is made to fit here instead.
 if [ -n "$CROP" ]; then

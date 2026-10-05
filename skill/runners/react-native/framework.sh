@@ -61,7 +61,7 @@ describe)
   ;;
 
 variants)
-  # SETTLED 18 Sep (item 87, 4.2): `variants <repo> [--platform <p>]`. This is
+  # SETTLED (item 87, 4.2): `variants <repo> [--platform <p>]`. This is
   # the framework that needs it — iOS schemes live in ios/*.xcodeproj and
   # Android product flavours in android/app/build.gradle, and they need not
   # share names. With no --platform, return every variant the project has,
@@ -95,7 +95,7 @@ build)
   #
   # Name the exact output path rather than globbing for it: the tree holds stale
   # output from earlier builds, and a wildcard picking one of those over the
-  # fresh output is a bug this package has already had once (11 Sep 2026).
+  # fresh output is a bug this package has already had once.
   echo "runners/react-native build: not written — see the comment in this file" >&2
   exit 2
   ;;
@@ -157,7 +157,7 @@ inspect)
   # Dart VM Service port is rather than assumed. And a target list survives a
   # reload while the target behind it does not, so the cached pair needs the
   # same re-validation vmservice.sh does — a dead target that still answers is
-  # the failure that cost a session an empty traffic list read as a quiet app.
+  # the failure where an empty traffic list reads as a quiet app.
   echo "runners/react-native inspect: not written — Metro's CDP target list at" >&2
   echo "  /json/list is the endpoint; the port must be discovered, not assumed." >&2
   exit 2

@@ -1,8 +1,8 @@
 # Driving a physical iPhone
 
 Everything in the rest of this skill assumes a simulator. A physical device
-works too, and none of it is the same. This file is what it took, measured on
-21 Aug 2026 against an iPhone XS Max (iOS 18.7.9) attached by cable to the Mac,
+works too, and none of it is the same. This file is what it took, measured
+against an iPhone XS Max (iOS 18.7.9) attached by cable to the Mac,
 driving `acme.e.brandco.runner.dev`. The real device UDID is replaced throughout
 this file by the placeholder `00008020-0011223344556677`; substitute your own.
 
@@ -10,7 +10,7 @@ The end state reached: `maestro hierarchy` returning the real view hierarchy off
 the phone, with real bounds — `DEV APP [0,0][414,896]`, `SUBMIT
 [48,549][365,599]`.
 
-The driving half is now wired into **`bin/device.sh`** (added 10 Sep 2026): it
+The driving half is now wired into **`bin/device.sh`**: it
 brings up the forwarder and a persistent driver and registers the phone, so
 `DEV=<udid> bin/driver.sh …` drives it exactly like a simulator, and
 `driver.sh` restarts a dead device driver on its own (item 46). The sections
@@ -22,15 +22,14 @@ app *on* a device is still by hand (the signing gate, item 45).
 
 - **The phone must be UNLOCKED, and set Auto-Lock to Never** (Settings → Display
   & Brightness → Auto-Lock → Never). XCUITest cannot attach to a locked
-  springboard: measured 10 Sep 2026, an unlocked phone starts the driver 3/3 and
-  a locked one fails every time — and because a bring-up plus a test is often
-  under a minute, the default Auto-Lock repeatedly re-locked the phone
-  mid-session and killed the run. `bin/device.sh`/`deviceup.sh` refuse with "the
-  phone is LOCKED — unlock it" when they find it locked, rather than letting it
-  read as a relay fault.
+  springboard: measured, an unlocked phone starts the driver 3/3 and a locked
+  one fails every time — and because a bring-up plus a test is often under a
+  minute, the default Auto-Lock re-locks the phone mid-run and kills it.
+  `bin/device.sh`/`deviceup.sh` refuse with "the phone is LOCKED — unlock it"
+  when they find it locked, rather than letting it read as a relay fault.
 - **Sessions that keep dying within a couple of minutes: restart `remoted` on
   the Mac first.** `sudo killall -9 remoted` (it restarts itself in seconds).
-  Measured 24 Sep 2026 on the iPhone 11 over USB: before it, every driver
+  Measured on an iPhone 11 over USB: before it, every driver
   session died after 57–108 s with "connection was invalidated", whichever
   driver, and restarting the phone changed nothing; after it, four sessions of
   four were alive at 10 minutes. It needs the Mac user's password, so ask for
@@ -39,8 +38,8 @@ app *on* a device is still by hand (the signing gate, item 45).
   the phone UPRIGHT.** The prebuilt driver crashes on the first `/touch` when
   the phone reports `.faceUp` (`ScreenSizeHelper.swift:99: Fatal error: Not
   implemented yet`), because it was compiled from older source than the jar
-  ships. The driver from `runners/ios-device/driver/build.sh` handles it: on 24
-  Sep 2026 the flat XS Max took 5 touches of 5 on it, and died on touch 1 with
+  ships. The driver from `runners/ios-device/driver/build.sh` handles it: the
+  flat XS Max took 5 touches of 5 on it, and died on touch 1 with
   the prebuilt one. `deviceup.sh` starts the source build whenever a signed one
   exists (item 50). On the prebuilt fallback, `driver.sh` names the crash from
   `~/devdrv-<udid>.log` and says "STAND THE PHONE UPRIGHT". Posture can be read
@@ -93,7 +92,7 @@ Apple Events reach the GUI from SSH without extra permission — checked with
 `Macintosh HD`. `screencapture` does **not** work the same way; it produced no
 file, so the Mac's screen cannot be read this way.
 
-**Two traps that cost time here.**
+**Two traps here.**
 
 `security find-identity -v -p codesigning` with no keychain argument omitted an
 identity that was present. Naming the keychain found it:
@@ -116,7 +115,7 @@ Search both. The second is the one Xcode 16 writes and reads.
 
 ## 2. Build the app in profile mode, not debug
 
-> **Automated since 11 Sep (item 45).** `DEV=<device-udid> bin/build.sh` now does
+> **Automated (item 45).** `DEV=<device-udid> bin/build.sh` now does
 > everything in this section: it runs a profile build through the Aqua session
 > and installs with `devicectl`, gated on a local provisioning profile, and
 > checks the installed bundle id is the one asked for. The manual recipe below is
@@ -160,7 +159,7 @@ available that way.
 
 ## 3. Maestro 2.8.0 cannot build its own device driver
 
-**Superseded 24 Sep 2026 by building from source** (BACKLOG items 99 and 50).
+**Superseded by building from source** (BACKLOG items 99 and 50).
 Maestro's git tag has the `MaestroDriverLib` target the jar leaves out, so
 `runners/ios-device/driver/build.sh` (on the Mac) builds the driver from it,
 and `driver/sign.sh` (from Terminal on the Mac) signs it with the wildcard
@@ -433,7 +432,7 @@ running against the phone.
 
 ### It also drops mid-session, and that is not what the error says
 
-Measured 21 Aug 2026 across a two-hour run of idle-timeout checks. The tunnel
+Measured across a two-hour run of idle-timeout checks. The tunnel
 does not only idle out *before* Maestro starts — it drops while the XCUITest
 driver is running, and most often during a long wait with no traffic, which is
 exactly what an idle-timeout test is. `~/devdrv.log` ends with:

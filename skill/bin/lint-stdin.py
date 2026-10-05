@@ -5,9 +5,9 @@
 from a pipe eats every line not yet read: the loop runs once and the rest of the
 list disappears, silently, with a zero exit.
 
-Three sightings on 17 Sep 2026 alone — `ports adopt` reported one driver of
-four, `_rig_status` printed one device of seven, and `drivers.sh up` has carried
-a prose comment about the trap for weeks. Prose did not stop it.
+Three sightings — `ports adopt` reported one driver of four, `_rig_status`
+printed one device of seven, and `drivers.sh up` carried a prose comment about
+the trap all along. Prose did not stop it.
 
 The fix is always the same: read the list before the loop
 (`rows=(); mapfile -t rows < <(...)`), then iterate the array.

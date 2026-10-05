@@ -321,8 +321,8 @@ if [ "$DETECT" = 1 ]; then
     echo "  Check on the Mac:  echo \$JAVA_HOME  and  /usr/libexec/java_home"
   fi
 
-  # The checkout, matched on the remote rather than the name. Session B spent
-  # three SSH calls hunting for it by hand; this is one, and it says which
+  # The checkout, matched on the remote rather than the name. Hunting for it by
+  # hand takes three SSH calls; this is one, and it says which
   # candidate is the same repository rather than which one is spelt the same.
   echo "== checkouts on the Mac"
   found=$(ssh "${SSH_OPTS[@]}" "$HOST1" 'sh -s 5' < "$(dirname "$0")/../remote/findrepo.sh")
@@ -439,7 +439,7 @@ VALS
   # it are not, and those come from two plug-in modules.
   #
   # The framework is ASKED rather than assumed, because the checkout is right
-  # there and a wrong guess sends a session down a path that cannot work.
+  # there and a wrong guess leads down a path that cannot work.
   # PLATFORM is written as ios and not detected: nothing has been booted at this
   # point in a first-time setup, so there is no device to ask about.
   _rn=

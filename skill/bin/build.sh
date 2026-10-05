@@ -27,8 +27,8 @@
 # calls and carries the artefact path back between them, rather than one call
 # that does both on the Mac.
 #
-# That costs one round trip — 0.35s, against a build measured at 21-34s on
-# 18 Sep 2026. What it buys is the artefact path on THIS side, which means a
+# That costs one round trip — 0.35s, against a build measured at 21-34s.
+# What it buys is the artefact path on THIS side, which means a
 # second install skips the build entirely: --install-only. A no-op rebuild is
 # 21-22s measured, not free, so every install of a build already made saves
 # that — a simulator booted after the build, a reinstall after `simctl erase`,
@@ -38,7 +38,7 @@
 # Everything the build discovers — the SDK, the Ruby environment, the flavour —
 # is still worked out from the repo rather than configured, because the point of
 # the item this came from (BACKLOG.md 5) is that the recipe was being re-derived
-# per project and then written into one project's memory file, where the next
+# per project and then written into one project's own notes, where the next
 # app cannot see it.
 set -uo pipefail
 # shellcheck disable=SC1091

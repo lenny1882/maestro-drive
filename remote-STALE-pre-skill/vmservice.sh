@@ -3,8 +3,8 @@
 # Runs ON THE MAC.  Usage: vmservice.sh <device-udid> <cache-file>
 #
 # Never hardcode these. The port and the isolate id both change on every
-# `flutter run`, app install or relaunch — the original session baked a stale
-# port into its network script and lost a full cycle rediscovering it.
+# `flutter run`, app install or relaunch — a port baked into a script is stale
+# by the next launch.
 DEV="$1"; CACHE="${2:-/tmp/hbtest/vmservice}"
 
 valid() {

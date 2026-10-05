@@ -120,8 +120,8 @@ waits for it twice. One line per state: what it is, and the quickest way to
 reach it — a backend call, an equivalent user action, a config override.
 
 Fill this in the first time somebody works one out. The cost of not having it is
-measured: 15 Sep 2026, two sessions and nine hours waiting for request TTLs to
-expire, when cancelling a request produced the same result in under a minute.
+measured: hours waiting for request TTLs to expire, when cancelling a request
+produces the same result in under a minute.
 
 <!-- e.g.
 - Expired request — POST the cancel endpoint instead; the list sheds the row the

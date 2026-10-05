@@ -99,9 +99,8 @@ case "${1:-start}" in
     #
     # The cost is not the wrong text, it is whose device it lands on. With no
     # udid the label goes to whatever _dev resolves to, which on a Mac two
-    # sessions are sharing is whichever device has a driver up — reported
-    # 18 Sep 2026 by the sister project's session, which ran `label --help` to
-    # check the syntax and overwrote a peer's label doing it. Item 67 exists
+    # sessions are sharing is whichever device has a driver up — so running
+    # `label --help` to check the syntax overwrote a peer's label. Item 67 exists
     # because a label is evidence of who is driving what; this erased it by
     # accident, from a command whose intent was to read the usage.
     _label_usage() { echo "usage: $0 label [<udid>] <name> [--group <g>]"; }

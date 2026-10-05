@@ -7,10 +7,10 @@
 # instructed to type anything. Every ending that is not a tidy one leaves the
 # simulator booted, its driver running and its name on the wall — and because
 # nothing clears a label at session end, the next session cannot tell that name
-# from one somebody set by hand, so it inherits it (BACKLOG item 67). The maintainer
-# opened the wall on 16 Sep 2026 to four simulators named 13 hours earlier, none
-# of them working, and a tile reading `named 15h ago` under a live session that
-# was not the one named on it.
+# from one somebody set by hand, so it inherits it (BACKLOG item 67). The wall
+# has shown four simulators named 13 hours earlier, none of them working, and a
+# tile reading `named 15h ago` under a live session that was not the one named
+# on it.
 #
 # Scope, deliberately narrow. It takes down only what `rig up` BOOTED, recorded
 # per session on the Mac in $RDIR/rig/<session>. A simulator that was already

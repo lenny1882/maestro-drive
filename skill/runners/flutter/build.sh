@@ -3,8 +3,7 @@
 # builds it for the simulator and installs it.
 #
 # This is the flutter framework runner's own file — framework.sh beside it is
-# the only thing that should call it. It lived in remote/ until 18 Sep, which is
-# where it was before the seam existed (BACKLOG item 87, 5.4).
+# the only thing that should call it. It lived in remote/ before the seam existed (BACKLOG item 87, 5.4).
 #
 #   build.sh --repo <dir> --detect
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] [--target <file>]
@@ -22,9 +21,8 @@
 # Flutter-on-Android cannot work today. Nothing about the existing calls
 # changes: without --build-only this builds and installs exactly as it did.
 #
-# Nothing here is specific to one app. Three things cost session B about four
-# and a half minutes on 11 Aug 2026, and each of them presents as a different
-# problem than it is:
+# Nothing here is specific to one app. Three things go wrong, and each of them
+# presents as a different problem than it is:
 #
 #   flutter is on no PATH at all, because the repo pins its SDK with fvm — a
 #   bare `flutter` says "command not found", which reads as a broken install
@@ -117,7 +115,7 @@ _flavours() {
 # <Debug|Release|Profile>-<flavour> and each carries its own
 # PRODUCT_BUNDLE_IDENTIFIER, so the app being driven can be traced back to the
 # flavour that produces it rather than guessed at from a name that happens to
-# match. Confirmed against a seven-flavour project on 13 Aug 2026.
+# match. Confirmed against a seven-flavour project.
 _flavour_for_appid() {
   [ -n "$APPID" ] || return 1
   for p in "$REPO"/ios/*.xcodeproj/project.pbxproj; do
@@ -253,7 +251,7 @@ if [ -n "$DEVICE" ]; then
     # The exact path flutter build ios writes to, whatever the flavour. NOT a
     # glob: the tree also holds stale Debug-*/Profile-*-iphoneos dirs from earlier
     # builds, and a wildcard + head picked one of those (a debug .dev app) over
-    # the fresh output — caught live 11 Sep.
+    # the fresh output.
     echo "  app='$REPO/build/ios/iphoneos/Runner.app'"
     echo '  if [ -d "$app" ]; then'
     # Announced before the install, so --build-only and the full run report the

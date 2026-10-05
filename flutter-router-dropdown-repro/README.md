@@ -1,6 +1,6 @@
 # MaterialApp.router + DropdownMenu reports iOS accessibility frames at 1/dpr
 
-Reproduced 11 Aug 2026. Flutter 3.41.9 stable, iPhone 16 Pro simulator,
+Reproduced on Flutter 3.41.9 stable, iPhone 16 Pro simulator,
 iOS 18.6, device pixel ratio 3.
 
 ## What happens

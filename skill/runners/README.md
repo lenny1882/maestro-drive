@@ -87,7 +87,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 plain Xcode app has no `inspect` and no `traffic-*`, and the caller must say
 "native apps have no traffic endpoint" rather than "the relay is broken" — the
 same distinction `vmservice.sh` already draws between "no VM service" and "not
-in debug", which cost one session six minutes when it was missing.
+in debug", without which an empty result gets debugged as a broken relay.
 
 **`build` stops at the artefact and does not install.** That was the one real
 change to today's shape, and it is **applied**: `remote/build.sh` now prints
@@ -193,7 +193,7 @@ itself — none of this is applied yet.
    the build (item 24's concurrent reviews), a reinstall after `simctl erase`,
    an uninstall to test first launch, a device lost and replaced mid-session.
 
-   **A no-op build is 21-22 s**, measured 18 Sep 2026: three consecutive
+   **A no-op build is 21-22 s**. Measured: three consecutive
    `bin/build.sh --no-install` runs against an unchanged tree gave 34 s (19.6 s
    Xcode), 22 s (13.2 s), 21 s (12.4 s). Xcode re-runs Flutter's script phase
    every build whatever the staleness of its outputs, and ~9 s goes on `pub get`
@@ -233,8 +233,7 @@ is up, assigned by the port it lands on. Either the contract gains a
 
 **`android container` — `appcheck` has no Android form.** `container` exists so
 `remote/appcheck.sh` can compare the installed executable's timestamp with the
-newest commit, which is the check two separate sessions worked out from scratch
-and which caught a build from another branch both times. Android has neither an
+newest commit, which is the check that catches a build from another branch. Android has neither an
 executable path nor an `Info.plist`; `dumpsys package <id>` gives
 `versionName`, `versionCode` and `lastUpdateTime`, which is probably the shape
 the Android answer takes. Until that is settled, the single most valuable check

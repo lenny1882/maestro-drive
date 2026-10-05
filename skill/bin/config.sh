@@ -23,8 +23,8 @@
 # spawns to run on its own is not: a watcher, a sampler, a background poll
 # started from $TMPDIR searches $TMPDIR upwards, finds nothing, and stops with
 # "not configured for this project" — which reads as a broken install rather
-# than a working one started from the wrong directory. Measured 15 Sep 2026: a
-# watcher died on exactly this and every relaunch afterwards had to carry
+# than a working one started from the wrong directory. Measured: a watcher dies
+# on exactly this, and every relaunch afterwards has to carry
 # MAESTRO_DRIVE_CONF by hand (BACKLOG item 71).
 #
 # The cache is per session, because $LDIR is ($TMPDIR is session-scoped in the
@@ -238,8 +238,8 @@ fi
 # installer puts it. Recorded by `bin/init.sh --detect ... --write`, which asks
 # that machine's login shell: an install anywhere else lives on a PATH set in a
 # shell init file, and neither ssh nor a launcher without a terminal reads one.
-# Measured 21 Sep 2026 on this machine, where it is under /mnt/sda and the
-# process running the package could not see it.
+# Measured on a machine where it is under /mnt/sda and the process running the
+# package could not see it.
 : "${RMAESTRO:=}"
 
 # Where the JDK is on the machine with the device — the R family, like $RDIR and

@@ -106,8 +106,8 @@ variant-for-appid)
 # --mode     is debug | profile | release
 #
 # Name the exact output path rather than globbing for it. A tree holds stale
-# output directories from earlier builds, and a wildcard picked one of those
-# over the fresh output on 11 Sep 2026.
+# output directories from earlier builds, and a wildcard has picked one of
+# those over the fresh output.
 build)
   exit 2
   ;;
@@ -183,8 +183,7 @@ inspect)
 #
 # Capture is normally off by default and bound to the session, so it has to be
 # re-armed after anything that replaces the session. An unrecorded profile looks
-# exactly like an app that made no calls, which cost one session six minutes and
-# another its whole line of evidence.
+# exactly like an app that made no calls, and evidence built on it is worthless.
 traffic-arm)
   exit 2
   ;;

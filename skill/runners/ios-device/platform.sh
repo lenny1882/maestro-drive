@@ -62,8 +62,8 @@ install)
   # devicectl, not simctl. And the id it PUT ON THE PHONE is compared, not
   # merely searched for: a grep of the installed list passes even when this
   # install placed a different bundle and a previous one left the wanted id
-  # behind. That is the check that caught a stale .app being installed over a
-  # fresh build on 11 Sep 2026.
+  # behind. That is the check that catches a stale .app being installed over a
+  # fresh build.
   _id=${1:?install <id> <artifact> [app-id]}; _art=${2:?artifact}; _appid=${3:-}
   _out=$(xcrun devicectl device install app --device "$_id" "$_art" 2>&1) || {
     printf '%s\n' "$_out" >&2; echo "install failed: $_id" >&2; exit 1; }
@@ -78,7 +78,7 @@ install)
   ;;
 
 uninstall)
-  # ADDED 21 Sep 2026, NOT MEASURED — there is no phone on this machine. It was
+  # NOT MEASURED — there is no phone on this machine. It was
   # missing outright until the contract-coverage test went in (item 94, 5.3),
   # and `bin/driver.sh clearstate` calls it: against a phone that call was
   # answering "unknown verb" rather than removing anything.
@@ -94,7 +94,7 @@ uninstall)
 locked)
   # THE FIRST THING TO ASK when a driver will not attach. XCUITest cannot attach
   # to a locked springboard and it surfaces as a relay or connection failure
-  # rather than as a lock — measured 10 Sep 2026: unlocked, the driver starts
+  # rather than as a lock — measured: unlocked, the driver starts
   # 3/3; on the PIN screen it fails every time.
   case "$(xcrun devicectl device info lockState --device "${1:?locked <id>}" 2>/dev/null |
           grep -i passcodeRequired)" in
@@ -143,7 +143,7 @@ driver-scan)
 installed-info)
   # A phone gives version and build and NOTHING ELSE — devicectl's app record
   # carries bundleIdentifier, version, bundleVersion and a containerAccessible
-  # flag, and no timestamp of any kind. Measured 18 Sep 2026.
+  # flag, and no timestamp of any kind. Measured.
   #
   # So `epoch` and `container` are simply absent here, and appcheck falls back
   # to comparing the installed version+build against what the checkout would
@@ -184,7 +184,7 @@ container|data-container|prefs-read|prefs-flush|orientations|last-used)
   ;;
 
 screenshot)
-  # Two differences from simctl, both measured 18 Sep 2026 and both of which
+  # Two differences from simctl, both measured and both of which
   # exit 64 and write nothing — which reads as the device refusing rather than
   # as the command being wrong:
   #   the subcommand is `capture screenshot`, not `screenshot`

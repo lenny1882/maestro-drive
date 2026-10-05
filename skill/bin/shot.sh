@@ -4,7 +4,7 @@
 # `bin/driver.sh shot`, which comes from that device's own driver and so is
 # never the wrong simulator. The MCP `take_screenshot` tool can only see the
 # device on port 22087, whichever device_id it is given — and running it costs
-# that device its driver, measured 13 Aug 2026.
+# that device its driver (measured).
 #
 # Fetch a screenshot.
 #

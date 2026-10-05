@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Print the whole Maestro view hierarchy — every node, labelled or not.
 
-The original session's dump skipped nodes with no text, which silently hid
-every icon button and container. This one prints all of them.
+A dump that skips nodes with no text silently hides every icon button and
+container. This one prints all of them.
 
 Reads the JSON dump on stdin or from the path in argv[1].
 """

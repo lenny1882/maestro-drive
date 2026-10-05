@@ -46,7 +46,7 @@ FRAMEWORK_SH_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../runners" && pwd)/${R
 # socket could not outlive the call anyway (reference/connection.md). SSH connect measures
 # 0.30-0.44s, which is not where the time goes.
 #
-# ~/.ssh/known_hosts persists again as of 11 Aug 2026, so no UserKnownHostsFile
+# ~/.ssh/known_hosts persists in the sandbox, so no UserKnownHostsFile
 # override is needed.
 SSH_OPTS=(
   -o StrictHostKeyChecking=accept-new
@@ -147,10 +147,10 @@ export PATH=$PATH:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
 
 # Which alias to talk to, when MAC_HOST names more than one.
 #
-# The Mac moves between networks and each network has its own alias. On 13 Aug
-# 2026 it came into the office for the first time and every command failed with
+# The Mac moves between networks and each network has its own alias. On a
+# network whose alias is not the one configured, every command fails with
 # "Connection timed out during banner exchange" — which reads as the machine
-# being asleep, not as the wrong route, and was reported as exactly that.
+# being asleep, not as the wrong route.
 #
 # Selection has to be a real SSH attempt. A TCP probe would be cheaper, but from
 # inside the sandbox /dev/tcp fails against BOTH addresses, including the live
@@ -163,7 +163,7 @@ export PATH=$PATH:$HOME/.maestro/bin'"$_MAESTRO_PATH"'
 # The Mac's one-minute load average, or empty if it cannot be read.
 #
 # Worth knowing before anything expensive, because a booting simulator makes the
-# machine look broken for about a minute. Measured 17 Sep 2026: with seven
+# machine look broken for about a minute. Measured: with seven
 # simulators already booted and the wall up, load sat at 6 and the machine was
 # fine; booting ONE more took it to 122 within 36 seconds, and it began falling
 # again as soon as that boot settled. The process count barely moved with it —
@@ -608,9 +608,9 @@ _driver_map() {  # cached; pass --fresh to re-read from the Mac
 # among the drivers currently alive, so a device that lost its driver — which
 # Maestro does routinely, every CLI or MCP run tears one down — got whatever
 # number was free next time, including one another device had just released.
-# Two sightings, 16 Sep 2026: after a load spike killed every driver, the iPad's
-# came back on 22087, which was the iPhone 16 Pro Max's port; and a session
-# holding relay 9105 sent 22 swipes to ANOTHER session's iPhone after a restart
+# Two sightings: after a load spike killed every driver, the iPad's came back
+# on 22087, which had been the iPhone 16 Pro Max's port; and a caller holding
+# relay 9105 sent 22 swipes to ANOTHER session's iPhone after a restart
 # moved its iPad to 9106. Driving the wrong device is the failure this toolkit
 # exists to prevent, and a moving port is how it happens silently.
 #
@@ -639,7 +639,7 @@ mv -f '$PORTS_MAP.tmp' '$PORTS_MAP'" >/dev/null 2>&1 || true
 # two can never drift: 22087 -> 9101, 22088 -> 9102, and so on.
 _dport_for() { echo $(( DPORT_BASE + ${1:?driver port} - DRIVER_PORT_BASE )); }
 
-# Measured 13 Aug 2026 on three simulators at once. Running Maestro against a
+# Measured on three simulators at once. Running Maestro against a
 # device — the MCP server, bin/hier.sh, bin/flow.sh, bin/shot.sh — destroys
 # THAT DEVICE'S driver and leaves every other one alone. It happens on the way
 # out, when Maestro terminates the runner it was talking to, and it happens

@@ -120,7 +120,7 @@ while True:
                 # time it reconnects: standing it up, a cable wiggle. Looked up
                 # once at start, a forwarder kept sending to the gone id and
                 # reset every connection, and a driver restart never replaced
-                # it (BACKLOG item 101, 24 Sep 2026: id 5, then 8, then 10).
+                # it (BACKLOG item 101: id 5, then 8, then 10).
                 # So on a failed connect, look again and retry once.
                 fresh = find_device_id()
                 if fresh is None or fresh == did:

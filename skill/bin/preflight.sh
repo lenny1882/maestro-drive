@@ -92,10 +92,9 @@ if [ "$_nj" != 0 ] || [ "$_nf" != 0 ]; then
 fi
 
 # The app notes are read at the start of every session, so their SIZE is a fact
-# about every session, not about the file. SKILL.md says they must stay short and
-# nothing measured that until 17 Sep 2026, by which point one project's had
-# reached 1,302 lines / 169 KB — loaded cold into every session that most needed
-# it. Printed here rather than enforced: only a person can say which entries have
+# about every session, not about the file. SKILL.md says they must stay short,
+# and without a measurement one project's reached 1,302 lines / 169 KB — loaded
+# cold into every session. Printed here rather than enforced: only a person can say which entries have
 # been superseded.
 _notes=${APP_NOTES:-}
 if [ -n "$_notes" ] && [ -r "$_notes" ]; then

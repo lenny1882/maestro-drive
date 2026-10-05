@@ -419,8 +419,8 @@ phase_a_followup() {
 # Exit status is about the ADDRESS, not about success: 0 means the address is
 # worth re-typing on a retry, 1 means it is not. A refusal comes from the Mac
 # itself, so the address reached it and re-asking for it is noise.
-# Two machines on one subnet with nothing passing between them. Found 18 Sep
-# after an afternoon spent on the Mac: Remote Login on for all users, sshd
+# Two machines on one subnet with nothing passing between them. Everything on
+# the Mac checks out: Remote Login on for all users, sshd
 # accepting loopback, the Mac holding the address it said it held, and neither
 # machine able to ping the other. The access point was blocking
 # station-to-station traffic, which no amount of looking at the Mac reveals.
@@ -623,9 +623,8 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     say ""
     # Not tail -1. The line that says what happened is often the ProxyCommand's,
     # and ssh's own summary comes after it — "Bad Gateway" from socat, then
-    # kex_exchange_identification from ssh, and only the second survived. That
-    # cost an afternoon: the proxy refusing an address reads exactly like a Mac
-    # refusing a login.
+    # kex_exchange_identification from ssh, and only the second survived. The
+    # proxy refusing an address then reads exactly like a Mac refusing a login.
     if [ -n "$err" ]; then
       printf '%s' "$err" | grep -v '^$' | tail -3 | sed 's/^/  ssh said: /' >&2
     fi
@@ -633,8 +632,8 @@ probe_until_answered() { # probe_until_answered <user> <key> <addr>
     say ""
     say "  Nothing has been written yet, so there is nothing to undo."
     # A penalised source that retries at once stays penalised: the dropped
-    # connection is itself another failure. The loop is what kept one alive for
-    # an afternoon on 18 Sep, so where that is a candidate it says to wait.
+    # connection is itself another failure. The loop keeps a penalty alive
+    # indefinitely, so where that is a candidate it says to wait.
     if [ "$PROBE_USER_SUSPECT" = 1 ]; then
       say "  If this is a penalty, retrying now renews it — wait, or clear it first."
     fi
@@ -1098,7 +1097,7 @@ c_target() { # c_target <alias> <addr>
 # probe against a Mac that ANSWERS silently ate the rest of the run's input.
 # Interactively it is invisible, because a person has not typed ahead; it only
 # bites a scripted run, and only when the Mac is reachable, which is why every
-# earlier test missed it (measured 18 Sep 2026: a three-line stream, and `read`
+# earlier test missed it (measured: a three-line stream, and `read`
 # after one successful probe returned nothing). Not ssh-copy-id, which must keep
 # its stdin to read the password.
 mac_run() { # mac_run <ignored> <command> -> stdout, empty if unreachable
@@ -1131,9 +1130,9 @@ arm = '    "%s")\n      echo "%s"\n      ;;\n' % (ssid, profile)
 # ^ and MULTILINE are load-bearing. Unanchored, `[ \t]*"SSID")` matches inside a
 # COMMENTED arm — starting after the #, because the spaces that follow it are
 # whitespace — and the run then carries on to the next `;;` that does begin a
-# line, which belongs to a different arm. Measured 18 Sep 2026 against a Mac
-# whose HomeNet:Main arm had been commented out by hand: the splice removed
-# the live "Office Tenants WiFi" arm and glued the orphaned # onto
+# line, which belongs to a different arm. Measured against a Mac whose
+# HomeNet:Main arm had been commented out by hand: the splice removed the next
+# live arm and glued the orphaned # onto
 # `    "GuestNet")`, commenting out its pattern and leaving its echo with no
 # arm to belong to. bash -n caught it and nothing was copied to the Mac.
 #
@@ -1274,7 +1273,7 @@ print(" ".join(servers))
   # never had Homebrew or anything else put something there — so on a genuinely
   # fresh machine the script install fails with "No such file or directory".
   #
-  # Guarded rather than unconditional: measured on a Mac 18 Sep 2026, BSD
+  # Guarded rather than unconditional: measured on a Mac, BSD
   # `install -d` on a directory that already exists returns 0 and rewrites its
   # mode anyway — 700 became 755 — so with -o root -g wheel it would also rewrite
   # the owner. On an Intel Mac Homebrew owns /usr/local/bin as the user, and
@@ -1543,7 +1542,7 @@ write_etc_hosts() {
   # newline-delimited too. Matching `*" $B_ALIAS "*` against a newline-separated
   # list never matches anything but the first entry, and the alias just written
   # was appended a second time — the /etc/hosts step then offered the same
-  # network twice as "which do you use most". Measured 18 Sep 2026.
+  # network twice as "which do you use most". Measured.
   if [ -n "${B_ALIAS:-}" ]; then
     case $'\n'"$aliases"$'\n' in
       *$'\n'"$B_ALIAS"$'\n'*) ;;
@@ -1641,14 +1640,14 @@ PY
   # before the file was built, then "Apply that?" after the diff — both
   # defaulting to no, and the second reads as a repeat of the first. Answering
   # the first and taking the default on the second left the file untouched with
-  # no sudo prompt, which is indistinguishable from sudo failing. Reported
-  # 18 Sep 2026. The diff has to come first anyway: the answer depends on it.
+  # no sudo prompt, which is indistinguishable from sudo failing. The diff has
+  # to come first anyway: the answer depends on it.
   if confirm "Write $HOSTS_FILE with sudo?" n; then
     # Both sudo calls are checked. This function is called as
     # `write_etc_hosts || warn`, and a function invoked with `||` runs with
     # `set -e` suspended for its whole body — so a failing sudo does not abort
     # here, and an unconditional `ok "written"` reported a write that had not
-    # happened. Measured 18 Sep 2026 against a sandbox whose sudo is not setuid:
+    # happened. Measured against a sandbox whose sudo is not setuid:
     # two "sudo: must be owned by uid 0" lines, then `ok written`, with the file
     # untouched. /etc/hosts is the third leg of the all-three-or-none this whole
     # script is about, so a false success here is the exact failure it exists to

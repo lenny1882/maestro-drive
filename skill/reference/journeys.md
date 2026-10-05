@@ -82,14 +82,13 @@ arguments, a variable can sit inside a quoted pattern
 name is left as written, so a missing variable fails on the verb that used it
 rather than quietly doing nothing.
 
-This was the other way round until 13 Aug 2026, and it cost a session:
-`text ${USER}` with `USER="Test User"` typed `Test`, which still filtered the
-list and still matched something, so a device was set to the wrong user and the
-run reported success. Two things follow from the fix. `text` and `type` now take
+Word-splitting a value is the failure this avoids: `text ${USER}` with
+`USER="Test User"` would type `Test`, which still filters the list and still
+matches something, so a device is set to the wrong user and the run reports
+success. Two things follow. `text` and `type` now take
 the rest of the line, exactly as they do from the command line, so forgetting
 the quotes no longer shortens what gets typed. And the step log prints the line
-as written, so `${APP_PIN}` appears as `${APP_PIN}` — it used to be printed in
-full on every step that used it.
+as written, so `${APP_PIN}` appears as `${APP_PIN}`, never as its value.
 
 ## Assert what a step actually did
 
@@ -99,10 +98,10 @@ than carrying on. `TYPE_VERIFY=0` turns that off for a field the app rewrites
 as you type.
 
 That check cannot see what the app then *did* with the text, and the difference
-matters. Driving a searchable dropdown on 13 Aug 2026: the typed value was in
-the field, correctly, and the app committed a different row entirely — the list
-had not filtered, so the return key took the first entry. `type` passed,
-because as far as the field was concerned it had. Only an assertion on the
+matters. Driving a searchable dropdown: the typed value was in the field,
+correctly, and the app committed a different row entirely — the list had not
+filtered, so the return key took the first entry. `type` passed, because as far
+as the field was concerned it had. Only an assertion on the
 result catches that:
 
     type "^Select Device Location$" "LOC1"
@@ -133,8 +132,8 @@ edge of the screen, and anything at or below the top of the keyboard, where the
 tap would land on the keyboard instead. `find` prints `!!` against those. The
 refusal carries the arithmetic behind it — which edge, how far past it, and
 where the edge came from — so check it against `driver.sh nodes` before
-reaching for `--anyway`. One was overridden on the strength of a screenshot on
-12 Aug and typed a stray character into the field underneath.
+reaching for `--anyway`. Overriding one on the strength of a screenshot types a
+stray character into the field underneath.
 
 The fix is `dismiss`, or a `swipe` to bring it into view, followed by an
 `expect` on what the tap did. `reference/driving.md`.
@@ -143,8 +142,8 @@ The fix is `dismiss`, or a `swipe` to bring it into view, followed by an
 presses return, which iOS leaves as the only other method and which submits
 whatever had focus. It says which of the two worked, and fails the step if
 neither did — so a journey never carries on into a screen it cannot reach.
-Which one works is a property of the app: on the app measured on 13 Aug the tap
-never worked and return always did. `--no-key` rules out the second, for a
+Which one works is a property of the app: on one app measured the tap never
+worked and return always did. `--no-key` rules out the second, for a
 field where a submit would commit the wrong value.
 
 Check what a pattern will do before committing it to a journey:
@@ -262,16 +261,15 @@ run, it fails, and the recovery is hand-driving the screen it was supposed to
 save — the most expensive habit in this workflow. So the executable prior work
 has to be *maintained*, not just written once:
 
-- **Repair it in place; do not hand-drive around it.** A login journey once drove
-  a dropdown with `tapon` + typing, which selects nothing on that screen; the
-  working method (tap the row) had been found and written into the app notes but
-  never back into the journey. The next session re-derived the whole login a tap
-  at a time — half an hour on one four-field screen — because the file it ran was
-  still the broken one.
-- **Do not fork a copy to dodge a bug.** Told to run the existing journeys, one
-  session duplicated `02-setup.journey` as `-v3` with the offending
-  `settle` removed, rather than fixing that one line in the file everyone runs.
-  A forked copy to avoid a fix is the same "rediscover rather than replay"
+- **Repair it in place; do not hand-drive around it.** A login journey that drives
+  a dropdown with `tapon` + typing selects nothing on a screen where the working
+  method is tapping the row. If that method is written into the app notes but not
+  back into the journey, the next run re-derives the whole login a tap at a time
+  — half an hour on one four-field screen — because the file it runs is still the
+  broken one.
+- **Do not fork a copy to dodge a bug.** Duplicating `02-setup.journey` as `-v3`
+  with an offending `settle` removed, rather than fixing that one line in the file
+  everyone runs, is the wrong move. A forked copy to avoid a fix is the same "rediscover rather than replay"
   failure one layer up, and it leaves a directory of near-identical journeys
   nobody can tell apart. Fork only when the *steps* genuinely differ (above),
   never to route around a defect.
@@ -287,8 +285,8 @@ has to be *maintained*, not just written once:
   notes, the way `${APP_PIN}` already is, so retiring one is a one-line change in
   one place.
 
-The positive shape: after verifying a fix, the session that got it right ended by
-writing a *new* journey capturing the finding — `expect-not` on the error string,
+The positive shape: after verifying a fix, write a *new* journey capturing the
+finding — `expect-not` on the error string,
 `expect` on the recovered state, with a header stating the build modes it is valid
 on. The finding became executable prior work instead of a note. That is the write-back
 this section asks for.

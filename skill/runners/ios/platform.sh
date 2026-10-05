@@ -108,7 +108,7 @@ container)
   ;;
 
 data-container)
-  # HEADED `container)` A SECOND TIME UNTIL 21 Sep 2026, so `case` took the
+  # ONCE HEADED `container)` A SECOND TIME, so `case` took the
   # bundle container above and this was unreachable — `data-container`, which
   # runners/README.md names and which bin/prefs.sh will call (item 87, unit 6),
   # answered "unknown verb". Beside it sat `data-installed-info`, a verb the
@@ -209,7 +209,7 @@ locked)
   #
   # Worth asking before blaming the driver: XCUITest cannot attach to a locked
   # springboard and it surfaces as a relay or connection failure rather than as a
-  # lock. Measured 10 Sep 2026 — unlocked, the driver starts 3/3; on the PIN
+  # lock. Measured — unlocked, the driver starts 3/3; on the PIN
   # screen it fails every time.
   case "$(xcrun devicectl device info lockState --device "${1:?locked <id>}" 2>/dev/null |
           grep -i passcodeRequired)" in
@@ -224,8 +224,8 @@ last-used)
   # call. `rig reap` needs it to tell a leftover from somebody's live work.
   #
   # Two levels deep, not one. A container directory's mtime only moves when its
-  # IMMEDIATE contents change, so the container itself reported 16 Sep for a
-  # device driven all day on the 18th; Documents/ and Library/ inside it gave the
+  # IMMEDIATE contents change, so the container itself reported a date two days
+  # old for a device driven all day; Documents/ and Library/ inside it gave the
   # right answer, which is what a recursive walk would return for the cost of a
   # glob.
   _today=$(date +%Y%m%d)

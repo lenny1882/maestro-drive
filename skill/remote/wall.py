@@ -66,8 +66,8 @@ UDID_RE = re.compile(r"^[0-9A-Fa-f-]{36}$")
 
 # Whoever is driving a simulator names it, by writing a file next to this
 # script over the same SSH connection it drives through. The wall only ever
-# reads them, so nothing on the network can rename a device — asked for
-# explicitly on 15 Sep 2026: nobody writes to the wall by hand.
+# reads them, so nothing on the network can rename a device: nobody writes to
+# the wall by hand.
 #
 #   labels/<udid>     name=Checkout flow, PR 101
 #                     group=brandco-flutter-runner
@@ -83,14 +83,12 @@ LABELS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "labels")
 STALE_AFTER = 3600
 
 # Hiding a name outright: once it is from an earlier CALENDAR DAY, not after a
-# fixed number of hours. The maintainer's call, 17 Sep 2026, and it matches how anybody
-# reads a wall — a name put up at 09:00 is still today's work at 23:00, and one
+# fixed number of hours. That matches how anybody reads a wall — a name put up at 09:00 is still today's work at 23:00, and one
 # put up at 23:00 is yesterday's by breakfast even though it is ten hours old.
 #
 # Why it needs hiding at all: nothing removes a label when a session ends, so a
-# device nobody picks up again keeps its name for good. On the morning of
-# 16 Sep 2026 the wall showed four simulators named 13 hours earlier, none of
-# them working, and a tile reading `named 15h ago` under a live session that was
+# device nobody picks up again keeps its name for good. The wall has shown four
+# simulators named 13 hours earlier, none of them working, and a tile reading `named 15h ago` under a live session that was
 # not the one named on it. The session-end hook and the reclaim on reuse
 # (item 67, pieces 1-3) cover every device that gets touched again; this covers
 # the one nobody comes back to.
@@ -448,7 +446,7 @@ class Wall:
 
         A simulator-server can stay alive and stop producing frames. scan() only
         replaces one whose PROCESS has gone, so this state survives every scan
-        and that tile never paints again. Measured 18 Sep 2026: the wedged
+        and that tile never paints again. Measured: the wedged
         capture had used 0.81s of CPU in 26m28s elapsed, beside 14.15s on a
         working one on the same Mac at the same time.
 

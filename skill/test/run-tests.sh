@@ -10,7 +10,7 @@
 # copy. The packaging tests live in ../test/run-tests.sh; run that one to get
 # both.
 #
-# Fixtures, all captured 12 Aug 2026:
+# Fixtures, all captured from live devices:
 #   ipad-landscape-keyboard-up   iPad Pro 11-inch, iOS 16.4, landscape-locked
 #                                app on a natively-portrait device, keyboard up
 #   ipad-landscape-system-alert  the same, showing the notification permission
@@ -41,7 +41,7 @@ fi
 # `writer | drain_grep -q` fails when grep matches, exits, and the writer — bash's
 # printf writes one line per write(2) into a pipe — is killed by SIGPIPE on its
 # next line: a false FAIL on text that matched. Rare, because it needs the
-# scheduler to run grep between two of the writer's writes; seen 24 Sep as two
+# scheduler to run grep between two of the writer's writes; seen as two
 # different tests failing once each in five runs. Assertions on a variable use
 # a here-string instead; this is for the ones that pipe a command.
 drain_grep() { local r=0; grep "$@" || r=$?; cat > /dev/null; return "$r"; }
@@ -83,7 +83,7 @@ for f in "$REPO"/runners/*/*.sh; do
 done
 # A duplicate case label is silent: `case` takes the first arm and the second is
 # dead, so a verb the contract names answers "unknown verb" while the file looks
-# like it implements it. Both platform modules carried one until 21 Sep 2026 —
+# like it implements it. Both platform modules once carried one —
 # `container)` twice, with `data-container` unreachable behind it (item 94, 5.3).
 for f in "$REPO"/runners/*/platform.sh; do
   [ -r "$f" ] || continue
@@ -122,7 +122,7 @@ echo "system coordinate space (landscape-locked app on a portrait device)"
 # portrait space while the app draws in its own landscape one. Before this was
 # handled, tapon on a permission dialog resolved a point in the wrong space and
 # missed in silence. 664.8,474.5 is not arithmetic — it is the tap that was
-# confirmed to dismiss the dialog, twice, on 12 Aug 2026.
+# confirmed to dismiss the dialog, twice.
 got=$($R "^Allow$" $IPAD --point < "$FIX/ipad-landscape-system-alert.json" 2>&1)
 [ "$got" = "664.8 474.5" ] \
   && ok "alert Allow resolves to the tap that works" \
@@ -203,9 +203,9 @@ $R "^SETTINGS" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | drain_gr
 $R "^SEARCH$" $IPHONE < "$FIX/iphone-portrait-keyboard-up.json" 2>&1 | drain_grep -q "UNDER THE KEYBOARD" \
   && no "iPhone: SEARCH above the keyboard is tappable" "wrongly refused" || ok "iPhone: SEARCH above the keyboard is tappable"
 
-# A refusal nobody believes is a refusal nobody obeys. On 12 Aug one was
-# overridden as a false positive and a stray character went into the field
-# underneath, so the message now carries the arithmetic behind it.
+# A refusal nobody believes is a refusal nobody obeys. Overridden as a false
+# positive, one sends a stray character into the field underneath, so the
+# message carries the arithmetic behind it.
 # Collapsed to one line first: the message is wrapped for reading, so a phrase
 # can fall across two lines and a literal match would miss it.
 msg=$($R "^SETTINGS" --width 402 --height 874 --point < "$TMP/kb-pos.json" 2>&1 | tr '\n' ' ' | tr -s ' ')
@@ -296,7 +296,7 @@ echo "screenshot orientation and cropping"
 # its side. Which way to turn it is the same status-bar reading that separates
 # system space from app space, so there is one detection, not two — and these
 # are the degrees that were confirmed by rotating the simulator both ways and
-# looking at the result (13 Aug 2026).
+# looking at the result.
 got=$($R --width 1194 --height 834 --space < "$FIX/ipad-landscape-system-alert.json" 2>&1)
 [ "$got" = "landscapeLeft 270" ] \
   && ok "iPad landscapeLeft asks for 270 degrees" \
@@ -1680,7 +1680,7 @@ echo
 echo "driver.sh app names the app in front, not just the configured one (item 104)"
 # Stubbed like the face-up case below: a curl that serves a tree with Settings
 # in front and a runningApp answer of springboard, which is what both phones
-# gave on 24 Sep with Settings open.
+# gave with Settings open.
 ADIR="$TMP/appverb"; ASTUB="$TMP/appstub"; mkdir -p "$ADIR" "$ASTUB"
 cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/jtok.py" "$ADIR/"
 cat > "$ADIR/lib.sh" <<LIBSH
@@ -1747,7 +1747,7 @@ r4=$(rn)
 
 echo
 echo "settle falls back to comparing trees, but not past a spinner (item 105)"
-# /isScreenStatic always false, as a still phone screen answered on 24 Sep; the
+# /isScreenStatic always false, as a still phone screen answers; the
 # tree the same every read. Settles once the fallback starts (about 2s). With
 # an activity indicator (elementType 36) in the tree it must wait the limit.
 mkdir -p "$TMP/settle-tree" "$TMP/settle-spin"
@@ -1791,7 +1791,7 @@ fi
 
 echo
 echo "deviceup.sh names the failure the log shows (item 103)"
-# _why is extracted and fed the lines each failure actually wrote on 24 Sep.
+# _why is extracted and fed the lines each failure actually wrote.
 why() { printf '%b' "$1" > "$TMP/why.log"
   ( source <(sed -n '/^_why()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _why "$TMP/why.log" 2>&1 ); }
 w=$(why 'IDELaunchReport: Installing built products Finished with error: Connection with the remote side was unexpectedly closed\nERROR: Failed to install the app on the device. (com.apple.dt.CoreDeviceError error 3002 (0xBBA))\n** TEST EXECUTE FAILED **\n')
@@ -1849,7 +1849,7 @@ python3 "$REPO/bin/tree.py" nodes < "$FIX/ipad-landscape-system-alert.json" | dr
 
 echo
 echo "a driver that was taken, not one that was never there"
-# Measured 13 Aug on three simulators: running Maestro against a device
+# Measured on three simulators: running Maestro against a device
 # destroys THAT device's driver when the command finishes, and leaves every
 # other one alone. The failure lands one call later, on whatever tries to use
 # that device next, where "no driver" reads as if there had never been one.
@@ -2473,8 +2473,8 @@ grep -q 'maestro-drive\.conf\.\*' "$REPO/bin/init.sh" \
 
 echo
 echo "build residue in the checkout, told apart from real changes"
-# A branch switch on 12 Aug stopped dead on two lock files the session's own
-# builds had regenerated. `git status --short` is a flat list, so they looked
+# A branch switch stops dead on lock files that the checkout's own builds
+# regenerated. `git status --short` is a flat list, so they looked
 # exactly like work someone had done.
 if command -v git >/dev/null 2>&1; then
   GR="$TMP/gitrepo"
@@ -2531,8 +2531,8 @@ if command -v git >/dev/null 2>&1; then
     *) no "a path the override does not name is a change again" "got: $rgo" ;;
   esac
 
-  # The entry point preflight actually uses. It sourced this file and called the
-  # function until 18 Sep, which put the matching inside zsh — where an unquoted
+  # The entry point preflight actually uses. It once sourced this file and called the
+  # function, which put the matching inside zsh — where an unquoted
   # expansion neither splits nor globs, so `*/Podfile.lock` matched only a file
   # of that literal name. Nothing here can run zsh, so the test is that the
   # executable entry point exists and behaves, and that preflight uses it.
@@ -2574,7 +2574,7 @@ if command -v git >/dev/null 2>&1; then
   # flow.sh must END on that status. The first version of this test grepped for
   # `exit $_rc` and was satisfied by the one inside the REMOTE string — while
   # flow.sh itself ended on `if [ -n "$SHOT" ]`, whose false condition exits 0.
-  # Measured 18 Sep: a flow asserting text on no screen returned 0 with the test
+  # Measured: a flow asserting text on no screen returned 0 with the test
   # passing. So check the last line of the file, which is the status the caller
   # actually sees.
   [ "$(grep -v '^ *$' "$REPO/bin/flow.sh" | tail -1)" = 'exit "$rc"' ] \
@@ -2619,8 +2619,8 @@ if command -v git >/dev/null 2>&1; then
               || no "a framework with no written inspect exits 2, not 1" "wrong status"
   # The traffic verbs run on EITHER side, so every file they touch must resolve
   # from the module rather than from $RDIR — which is a path on the MAC and
-  # means nothing in the sandbox. net.py was addressed as $RDIR/net.py until
-  # 18 Sep, so the fast path through the published relay could never have
+  # means nothing in the sandbox. net.py was once addressed as $RDIR/net.py,
+  # so the fast path through the published relay could never have
   # worked; only the SSH fallback did, and nothing had exercised the fast path.
   grep -q '\$RDIR' "$RS/flutter/framework.sh" \
     && no "the flutter module addresses its own files, not \$RDIR" \
@@ -2768,7 +2768,7 @@ printf '{"session_id":"x","tool_input":{"command":"driver.sh tap 1 2"}}' \
 
 echo
 echo "device driver: the face-up crash and the recovery invocation (items 50, 46)"
-# Both reproduced live on the XS Max, 11 Sep. Offline, a stub _ssh returns a
+# Both reproduced live on the XS Max. Offline, a stub _ssh returns a
 # canned devdrv.log carrying the ScreenSizeHelper fatal, and a /status that never
 # answers forces _start down its recovery path — the path the existing driver.sh
 # tests never reach because their stub is always up.
@@ -2815,8 +2815,8 @@ case "$dout" in
 esac
 # The case above only reaches the hint because its stub restart never brings
 # the driver back. A real restart does, and it empties the log it would have
-# read, so the hint has to come BEFORE the restart. Regressed from 11 Sep to
-# 24 Sep: two phones lying flat crashed on every tap and restarted silently,
+# read, so the hint has to come BEFORE the restart. When it came after, two
+# phones lying flat crashed on every tap and restarted silently,
 # the crash never named (items 50, 46). Here the restart works: /status answers
 # 200 once device.sh has run.
 printf '#!/usr/bin/env bash\nfor a in "$@";do case "$a" in http*) u=$a;; esac;done\ncase "$u" in */status) [ -f "$DEVMARK" ] && printf 200 || printf 500;; *) printf "{}";; esac\n' > "$DSTUB/curl"
@@ -3336,7 +3336,7 @@ esac
 # Maestro's own directory is the same class of question as the JDK's, and was
 # found the same way — by it not being there. This machine keeps Maestro under
 # /mnt/sda, exported from ~/.bashrc, which no non-interactive shell reads
-# (item 96, measured 21 Sep).
+# (item 96, measured).
 wi_out=$(HOME="$REAL_HOME" sh "$REPO/remote/whereis.sh" maestro 2>/dev/null); wi_rc=$?
 if [ "$wi_rc" = 0 ]; then
   [ -x "$wi_out/maestro" ] \
@@ -3789,8 +3789,8 @@ check("label-no-by", lambda: "by" not in w.parse_label("name=N\ngroup=G"))
 
 # A name from an earlier CALENDAR DAY is hidden, not merely greyed (item 67
 # piece 4). Nothing removes a label at session end, so a device nobody picks up
-# again would otherwise keep its name for good — the wall showed four of those
-# on 16 Sep 2026, none of them working.
+# again would otherwise keep its name for good — the wall has shown four of those
+# at once, none of them working.
 import datetime
 udid2 = "D" * 36
 with open(os.path.join(w.LABELS, udid2), "w") as fh:
@@ -4039,7 +4039,7 @@ pf(){ # pf <udid> <live-map> <ports-map>
 
 # THE CASE THIS ITEM EXISTS FOR. B is remembered on 22088. A's driver has died,
 # so 22087 is free — under the old lowest-free rule B would be handed 22087,
-# which is exactly how an iPad came back on an iPhone's port on 16 Sep.
+# which is exactly how an iPad came back on an iPhone's port.
 [ "$(pf B "" "A 22087
 B 22088")" = 22088 ] \
   && ok "ports: a device whose driver died comes back on its own port" \
@@ -4355,7 +4355,7 @@ reclaim(){ # reclaim <label-contents> <mine> <live-port-or-empty> <age-secs> -> 
 # though they ran on the Mac. awk died with "backslash not last character on
 # line", the substitution came back empty, and the test was always false. A
 # recent label is kept by the age check regardless, so nothing showed until a
-# live `rig up` printed the awk error on 18 Sep.
+# live `rig up` printed the awk error.
 #
 # Reading the file rather than running it, because the string cannot be
 # extracted from the function without rebuilding the very thing under test.

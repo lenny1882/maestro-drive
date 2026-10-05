@@ -2,7 +2,7 @@
 #
 # SUPERSEDED — kept because the numbers are worth being able to re-derive.
 # The question it was built to answer (is there a warm-up benefit to recover?)
-# was answered on 11 Aug 2026: no. A fresh `maestro hierarchy` costs ~7.7s every
+# was answered: no. A fresh `maestro hierarchy` costs ~7.7s every
 # time — 8.06s cold, then 7.56/7.81/7.61s — because each CLI invocation
 # re-establishes its session with the driver. Only a resident client avoids it,
 # which is what the MCP server is. See reference/driving.md for the comparison table.

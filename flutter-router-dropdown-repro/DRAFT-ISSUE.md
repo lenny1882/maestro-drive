@@ -1,8 +1,8 @@
 # DRAFT — not posted, not approved
 
-Written 12 Aug 2026 for the flutter/flutter tracker. Nothing has been sent.
-Posting it needs explicit approval of the exact text, and a decision on where
-it goes — a new issue, a comment on PR #189686, or a comment on issue #100946.
+A draft for the flutter/flutter tracker; it has not been filed. It could go as
+a new issue, a comment on flutter/flutter PR #189686, or a comment on issue
+#100946.
 See `UPSTREAM.md` for what is already there.
 
 The caption and the dropdown labels below are carried over from the app this

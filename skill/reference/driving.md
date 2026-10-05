@@ -10,15 +10,15 @@ Remote control over SSH is the approach. Everything here is about making the
 round trip cheap and making each one count, because **the round trip is the unit
 of cost** — not the tap, not the assertion, not the thinking.
 
-For scale: the original session ran 2 h 58 m across 289 tool calls, 46 minutes
-of which was pure remote execution. The worst stretch, restarting everything and creating a request, took 15.4 minutes across 37 sequential round trips. That is
-not slow thinking; it is 37 trips where 3 would have done.
+For scale: an unbatched run of 289 tool calls spends about a quarter of its time
+in remote execution. Restarting everything and creating a request one action per
+call is 37 sequential round trips and about 15 minutes. That is not slow
+thinking; it is 37 trips where 3 would have done.
 
 ## Two sessions on one Mac
 
-This is routine now, not exceptional: on 16 Sep 2026 two sessions drove the same
-Mac all afternoon, and it worked entirely by improvisation. The rules below are
-what they invented, written down.
+Two sessions driving the same Mac at once is routine, not exceptional. The rules
+below are what makes it work.
 
 **Claim your devices on the wall before you drive them.** `bin/wall.sh label`
 records which session wrote it (`by=<colour> · <session>`), so "whose device is
@@ -32,19 +32,21 @@ labelled before it does this, but the warning is not a substitute for naming the
 device.
 
 **Read the relay port on every call, never cache it.** Ports are pinned per
-device since 17 Sep (item 73), but a Mac whose `$RDIR` has been cleared starts
+device (item 73), but a Mac whose `$RDIR` has been cleared starts
 the numbering again. `drivers.sh` prints the live table; `drivers.sh ports adopt`
 writes down what is already running without restarting anything.
 
-**Say so before you restart a driver.** The 16 Sep pair did: one session told the other to go ahead, because its own measurements were finished and there was nothing to interrupt. A driver torn down mid-journey costs the peer the run, not a call.
+**Say so before you restart a driver**, and wait until the other session's
+measurements are finished. A driver torn down mid-journey costs the peer the
+run, not a call.
 
-**Split the test data.** Those two sessions took store 4002 and store 4001 and
-confirmed the split between themselves. Two sessions seeding and cancelling in
-one store poison each other's evidence, and neither can tell.
+**Split the test data.** Give each session its own store, and agree the split
+before either starts. Two sessions seeding and cancelling in one store poison
+each other's evidence, and neither can tell.
 
-**Share a toolkit finding immediately.** The `/swipeV2` finding (item 69) crossed
-between them within minutes of being measured, which is why both days' sweeps
-were re-examined rather than one.
+**Share a toolkit finding immediately.** A finding such as `/swipeV2` (item 69)
+changes how the other session's earlier results read, so it has to reach that
+session while its results can still be re-examined.
 
 ## Read state from the app, not from pixels
 
@@ -52,13 +54,12 @@ Ranked by usefulness. Work down the list, not up it.
 
 **1. The network layer.** A debug build exposes the Dart VM Service, and
 `ext.dart.io.getHttpProfile` gives every request and response body. This is the
-actual truth about what the app fetched and what the server said. In the session
-it was not used until 12:22 — and only because the user suggested it. It should
-be the first thing set up.
+actual truth about what the app fetched and what the server said. It should be
+the first thing set up.
 
-Discover the service URI *dynamically each time*; do not hardcode it. The
-session baked `http://127.0.0.1:60895/5aWHtQPbv6o=` into `net.sh`, the app
-restarted, and re-discovering the new port cost a whole cycle at 13:47.
+Discover the service URI *dynamically each time*; do not hardcode it. A URI such
+as `http://127.0.0.1:60895/5aWHtQPbv6o=` baked into `net.sh` is dead as soon as
+the app restarts, and re-discovering the new port costs a whole cycle.
 
 ```sh
 xcrun simctl spawn "$DEV" log show --last 3m --style compact 2>/dev/null \
@@ -86,7 +87,7 @@ disabled" faster than any number of taps.
 
 **4. Screenshots.** Only for questions genuinely about appearance — colour,
 contrast, overflow, status-bar styling. `take_screenshot` is cheap now, but the
-cost was never the transfer: measured across the original session, deciding the
+cost was never the transfer: measured across a full unbatched run, deciding the
 next action took a median 17.9 s after reading an image against 6.6 s after a
 hierarchy dump. An image is also where hallucinated selectors come from (reference/driving.md).
 
@@ -94,7 +95,7 @@ When one is warranted, take it with `driver.sh shot` and crop it to what the
 question is about — `--on "^SCAN$"` cuts the picture to that element, `--scale`
 shrinks it, and both cut the reading cost as well as the transfer. It also
 arrives the right way up: a landscape iPad's raw picture is on its side, and
-turning it by hand cost one session eight `sips` calls.
+turning it by hand takes several `sips` calls.
 
 ## Rules for driving
 
@@ -111,8 +112,8 @@ JVM and one driver session serve every call. Measured on that Mac:
 | two-action flow | ~2.2 s | 17.6 s (`flow.sh`) |
 | flow + hierarchy | ~2.4 s | 22.5 s |
 
-Reading the screen is roughly 40x cheaper than it was. The 100 Maestro-bearing
-calls that cost 35.3 minutes in the original session would now be 3–4 minutes.
+Reading the screen is roughly 40x cheaper over MCP: 100 Maestro-bearing calls
+that take 35.3 minutes as fresh CLI calls take 3–4 minutes.
 
 The CLI path (`bin/flow.sh`, `bin/hier.sh`) still works, and unlike the MCP
 server it honours `--device`. Everything below applies to all three paths.
@@ -177,19 +178,19 @@ mistake; scroll the row and read again before claiming what it contains.
   labels until nothing new appears — or better, read the list from the network
   response that populated it (the state-reading section).
 
-### Two traps that cost real time
+### Two traps worth knowing
 
 **`text:` is a full-string regex, case-insensitive.** A partial string does not
 match. `text: "RNR 352"` misses an element whose real text is
 `"RNR 352 - Expo Launch"`. Use the whole on-screen string or anchor it —
-`"RNR 352.*"`. This is why the session's working selectors all looked like
+`"RNR 352.*"`. This is why working selectors so often look like
 `".*12345678.*"`.
 
 **Copy `txt` values verbatim from `inspect_screen`. Never author them from a
 screenshot.** An element showing a heart icon looks like a "Favorite" button in
-an image and has no such text in the hierarchy. 74 of the 125 taps in the
-original session were percentage coordinates eyeballed off a screenshot; every
-mis-estimate cost a full round trip and failed silently, because a tap
+an image and has no such text in the hierarchy. Percentage coordinates
+eyeballed off a screenshot fail the same way: every mis-estimate costs a full
+round trip and fails silently, because a tap
 "succeeds" on whatever happens to be under the finger.
 
 Coordinates remain a last resort for genuinely unlabelled targets — and then
@@ -249,8 +250,8 @@ journey proceeds — the same screen can report correctly on a cold launch and a
 a third scale a few taps later. Derive it from the tree on every read, which is
 what the resolver does.
 
-**Work it out; do not eyeball it.** Every tap derived by arithmetic in the
-original session worked, and every tap estimated by eye off a screenshot missed.
+**Work it out; do not eyeball it.** Measured over one full run, every tap derived
+by arithmetic worked, and every tap estimated by eye off a screenshot missed.
 Screenshots are ground truth for *what* a thing is, never for *where* it is.
 
 **If you find yourself measuring a screenshot, your hierarchy dump is hiding
@@ -276,7 +277,7 @@ frame to tap. Three shapes of it have turned up:
   label; the field is there but no selector names it.
 
 For all three the only way in is a raw `driver.sh tap <x> <y>`, and the point is
-fragile on four independent axes — each has cost a real session:
+fragile on four independent axes:
 
 - **Keyboard.** A point read with the keyboard down moves once it is up.
 - **Text size.** A larger dynamic-type setting shifts the layout under the point.
@@ -343,7 +344,7 @@ Two ways a frame reported as an ordinary visible element cannot be tapped:
 - **It is underneath the keyboard.** A dropdown attached to a search field
   raises the keyboard over the bottom third of the screen. The list rows below
   that line are still reported with their real frames, enabled and unflagged. A
-  tap on one lands on the typing-prediction bar instead. Seen on 11 Aug 2026: a
+  tap on one lands on the typing-prediction bar instead. Seen once: a
   tap aimed at a list row at y=543, with the keyboard's top edge at y=538, typed
   `The ` — the middle QuickType suggestion — into the field.
 - **It is below the fold.** A button under a section that has just expanded
@@ -356,11 +357,11 @@ Deriving the keyboard's top edge needs one filter — the prediction bar carries
 a scroll extent of `402x1245` at `y=-62`, and taking the minimum without
 discarding frames taller than the screen puts the "keyboard" over everything.
 
-**The refusal shows its working, because one was disbelieved.** On 12 Aug a
-refusal was read as a false positive and overridden, and the tap typed a stray
-character into the field underneath. It had been correct: the keyboard was over
-a dropdown that looked, in the screenshot, as though it sat above it. So the
-message now gives the edge, the distance, and where the edge came from:
+**The refusal shows its working, because a refusal that looks like a false
+positive usually is not one.** Overriding a correct refusal types a stray
+character into the field underneath: the keyboard can be over a dropdown that
+looks, in the screenshot, as though it sits above it. So the message gives the
+edge, the distance, and where the edge came from:
 
 ```
 resolve: /^SETTINGS/ is at [40.2, 804.5], which is UNDER THE KEYBOARD — the tap
@@ -374,7 +375,7 @@ will hit the keyboard instead
 
 That last clause is the one that matters. The containers' *positions* are in
 the device's space and cannot be compared with the element's, which is what
-made the guard wrong in both directions until 12 Aug — so a message quoting a
+once made the guard wrong in both directions — so a message quoting a
 position next to an app-space edge would invite exactly the mistake it is
 trying to prevent. Only the size is used.
 
@@ -385,7 +386,7 @@ viewport, where dismissing the keyboard does not bring it back.
 The fix in a journey is `dismiss` (below) or a `swipe` before the `tapon`, and
 then an `expect` on what the tap actually did. **Not** typing to filter a list
 and pressing return to commit the match: that was recorded as the working
-method for this exact situation and measured wrong on 13 Aug — the list does
+method for this exact situation and measured wrong — the list does
 not always filter, and return can commit the first row rather than the one that
 was typed. `reference/apps/example-app.md` has the correction.
 
@@ -411,7 +412,7 @@ reads the keyboard back after each:
    before it.
 
 **Which of the two works is a property of the app, not of iOS.** Measured on
-the app under test on 13 Aug 2026: six taps on different blank parts of the
+one app under test: six taps on different blank parts of the
 sign-in screen and one swipe left the keyboard up every time, and `key return`
 put it away every time — the exact opposite of what upstream recommends. A
 Flutter app only unfocuses on a background tap if it was written to; most are
@@ -423,10 +424,10 @@ invisible scrim — so the tap it calls harmless may not be. And on a screen the
 app fills edge to edge with tappable rows there is no blank point at all, which
 it says rather than tapping something anyway.
 
-One correction it also settles: on 13 Aug a session concluded from three
-attempts that this keyboard would not drop at all. Each reading was taken after
-a command that had already re-tapped the field and raised it again. `key
-return` had worked.
+One correction it also settles: three attempts can suggest a keyboard will not
+drop at all when each reading was taken after a command that had already
+re-tapped the field and raised it again. Read the keyboard back without
+re-tapping the field.
 
 ### A field's placeholder is not a stable selector
 
@@ -447,8 +448,8 @@ anything ahead of it; `erase --all` sends 9999 backspaces, which helps only
 when the caret is already at the end. Prefer `clear` for replacing a field's
 contents.
 
-Keep two units and pick by situation when the cost matters. Measured on 11 Aug
-2026 the clearing version costs about 7 seconds a run: `erase` is 2.9s on its
+Keep two units and pick by situation when the cost matters. Measured: the
+clearing version costs about 7 seconds a run: `erase` is 2.9s on its
 own (roughly 2.2s fixed plus 0.03s a character), `clear` adds a long-press and
 a resolve, and splitting one `type` into tap/clear/type adds settle waits. That is why this journey has both a
 `03-search.journey` for the first, empty visit and a `03-search-again.journey`
@@ -458,8 +459,8 @@ for later ones, rather than paying for the clear every time.
 
 The settle wait is not only about animation finishing — a screen loading from
 the backend keeps reporting movement, so the timeout has to cover the request.
-A screen waiting on a slow request came back late on 11 Aug and failed a run at
-the old 10-second limit. `_settle` now defaults to 20s, overridable for a whole run with
+A screen waiting on a slow request can come back late enough to fail a run at a
+10-second limit. `_settle` now defaults to 20s, overridable for a whole run with
 `SETTLE=<seconds>`. A longer limit costs nothing when things are quick, because
 it returns the moment the screen is still.
 
@@ -515,10 +516,9 @@ its own journey file, and say in a comment what state it assumes.
 
 Maestro reports success for a tap that landed on nothing useful. Follow every
 screen change with `assertVisible` / `assertNotVisible` / `extendedWaitUntil`
-**inside the same flow**, so a wrong assumption fails within the batch. Seen at
-12:16 in the session this came from: a `tapOn:` on a size chip reported
-COMPLETED, the button behind it stayed disabled, and the run carried on
-regardless.
+**inside the same flow**, so a wrong assumption fails within the batch. A
+`tapOn:` on a size chip can report COMPLETED while the button behind it stays
+disabled, and without an assertion the run carries on regardless.
 
 ### Flows through the MCP server
 
@@ -541,8 +541,8 @@ reference it fully:
 
 ### Stop reading and deciding between calls
 
-Making each call fast does nothing if the number of calls stays the same. A
-full run on 11 Aug 2026 took seventeen minutes and about forty-five tool calls,
+Making each call fast does nothing if the number of calls stays the same. One
+measured full run took seventeen minutes and about forty-five tool calls,
 of which the device work was **under a minute**: 25 actions at 0.3–1.1 s and a
 dozen hierarchy reads at 0.28 s. The rest was ninety seconds of blind `sleep`,
 six minutes of a side investigation, and — mostly — one action per round trip,
@@ -575,9 +575,8 @@ not: a failed resolve is exactly when you want to see what is actually there.
 
 A journey is a text file of those lines, `include` chains one into another, and
 `${VAR}` comes from the environment — format in `reference/journeys.md`. A
-login sequence that was re-derived tap by tap three times in the original
-session, at roughly fifteen round trips each, became one call of about nine
-seconds. A whole end-to-end journey on the same app — sign out, sign in,
+login sequence re-derived tap by tap costs roughly fifteen round trips each
+time; as a journey it is one call of about nine seconds. A whole end-to-end journey on the same app — sign out, sign in,
 configure it, search, choose from the results, add to a basket — is 34 steps and
 about 48 seconds, six runs inside a 2.4 s spread.
 
@@ -585,8 +584,8 @@ Be clear about where that saving comes from, because it changes what to
 optimise. The same 34 actions issued as 42 separate `driver.sh` invocations
 took 55.3 s against 47.8 s for the journey: **one process instead of many is
 worth 7.5 seconds**, about 0.18 s an invocation. Everything else — the other
-fourteen and a half minutes — was the model reading a tree and deciding the
-next action between each call. The device work was already under a minute
+fourteen and a half minutes — was reading a tree and deciding the next action
+between each call. The device work was already under a minute
 before any of this. So batching is not about saving process startup, and making
 the calls faster still would buy almost nothing. It is about not being in the
 loop for a sequence whose shape is already known.
@@ -596,12 +595,10 @@ Two rules that make this safe rather than merely fast:
 - **Never add a `sleep`.** Every action verb waits for the screen to go still
   before it returns — `isScreenStatic` costs 0.15 s and answers the actual
   question. A fixed sleep on top is either too short, and you read a half-drawn
-  screen, or too long, and you paid for nothing. Counted across the four
-  sessions in `BACKLOG.md`: 154 sleeps, 88 of them in one session. `SETTLE=0`
-  is the escape hatch for a screen that never stops moving.
+  screen, or too long, and you paid for nothing. `SETTLE=0` is the escape hatch for a screen that never stops moving.
 - **Assert inside the batch.** `expect` / `expect-not` between the actions is
-  what stops a batch becoming a longer version of the original session's
-  failure mode, where a tap reported COMPLETED and the run carried on. A
+  what stops a batch becoming a longer version of the unasserted failure mode,
+  where a tap reports COMPLETED and the run carries on. A
   journey stops at the first failure and prints the tree as it stood.
 
 Measured from the sandbox: `/deviceInfo` 0.15 s, `/viewHierarchy` 0.28 s,
@@ -627,9 +624,8 @@ Two reasons to reach for it rather than `inspect_screen`:
 
 ## Preflight
 
-**First, start the wall and post its URL.** Asked for explicitly on 11 Aug
-2026: whenever remote testing starts, put a watchable URL into the session on its
-own line, somewhere obvious, so the work can be watched rather than taken on
+**First, start the wall and post its URL.** Whenever remote testing starts, put
+a watchable URL into the conversation on its own line, somewhere obvious, so the work can be watched rather than taken on
 trust. Do this before anything else, not when asked.
 
 ```sh
@@ -640,14 +636,14 @@ Every booted simulator, live, on one page, from a port that does not move. It
 spawns Maestro's capture binary per device and leaves the XCUITest drivers
 alone, so starting it mid-run is safe.
 
-This replaced `./bin/viewer.sh` on 15 Sep 2026. Maestro's own viewer cannot be
+This replaced `./bin/viewer.sh`. Maestro's own viewer cannot be
 watched from anywhere but the Mac: the stream URL it gives the browser is an
 absolute `http://127.0.0.1:<random>/stream.mjpeg`, and it attaches a device only
 when exactly one simulator is booted. Both were measured; backlog 64 and 65.
 
 
-Before any testing, one SSH call should answer all of this. The session
-discovered each fact separately, at cost.
+Before any testing, one SSH call should answer all of this, rather than one call
+per fact.
 
 ```sh
 ./mac.sh '
@@ -671,48 +667,46 @@ but is slower and noisier; use it only where fvm shims are actually needed.
 
 ## Traps worth knowing before you meet them
 
-- **The Mac's network config.** The whole of 10 Aug 15:20 → 11 Aug 11:00 — 119
-  tool calls, 74 SSH attempts, roughly four hours of the user's time across two
-  days — went on getting a connection. Root cause was a netmask of
+- **The Mac's network config.** Getting a connection once took 119 tool calls
+  and 74 SSH attempts. Root cause was a netmask of
   `255.255.255.0` on a `/22` network, so the Mac's replies never reached the
   Linux box. **Rule: when SSH times out at banner exchange but ARP resolves and
   packets arrive, get `ifconfig en0 | grep "inet "` from the Mac immediately and
   compare the mask against the Linux side's prefix.** One question would have
   replaced hours of guessing.
-- **Do not re-propose an option the user has rejected.** At 15:47 on 10 Aug the user rejected option a and asked not to be offered it again.
+- **Do not re-propose an option that has been rejected.**
 - **App restarts invalidate the VM service URI and the isolate id.** Re-discover
   both after any `flutter run`, install, or relaunch.
 - **`git stash` around branch switches** for `ios/Podfile.lock` and
   `pubspec.lock` — switching branches to compare against `development` needs
   them stashed, and the rebuild afterwards is ~1 minute each way.
-- **Read the tooling before driving it, and finish reading.** Three times in one
-  session the pattern was: read a little, find something genuinely useful, and
-  go straight back to tapping without finishing the sweep. Each early stop left
-  a fix on the table — `cheat_sheet` unread while fighting selectors, the docs
+- **Read the tooling before driving it, and finish reading.** Reading a little,
+  finding something genuinely useful and going straight back to tapping without
+  finishing the sweep leaves a fix on the table — `cheat_sheet` unread while fighting selectors, the docs
   index unopened while inventing workarounds for documented problems, the app's
   own source unread while reverse-engineering its coordinate spaces from
   screenshots. One pass is not enough; the second and third passes both found
   more than the first.
 - **The tools that answer a question are often not the ones being used.** The
-  network layer is ranked top in the state-reading section and tooling for it was written, tested and
-  then ignored for an entire run. Before the next long journey, check the list
+  network layer is ranked top in the state-reading section, and tooling for it
+  that is written and tested is still easy to leave unused for a whole run. Before the next long journey, check the list
   in reference/maestro-notes.md against the problem actually at hand.
 - **A fifth pass still found new things, and the biggest one yet.** Each of the
-  first three sweeps claimed to be complete. The fourth turned up the driver's
+  first three sweeps looked complete. The fourth turned up the driver's
   HTTP API, the artifact bundle every run already writes,
   `snapshotKeyHonorModalViews`, and CLI flags the documentation does not
   mention. The fifth found that the same driver API *writes* as well as reads —
   taps, text, keys, swipes at raw coordinates — which sidesteps the coordinate
-  problem that had absorbed most of two sessions. It also found that the
+  problem entirely. It also found that the
   published default for `MAESTRO_DRIVER_STARTUP_TIMEOUT` is simply wrong.
   Diminishing returns have not set in yet. Treat "I have read
   it all" as a hypothesis.
 
 ### Home-directory dotfiles appearing at the repo root
 
-Two sessions independently found `.bashrc`, `.zshrc`, `.profile`, `.gitconfig`,
-`.bash_profile`, `.gitmodules` and `.idea` appearing untracked at the checkout
-root during driven reviews. The cause is unknown — it may be the sandbox, GSD,
+`.bashrc`, `.zshrc`, `.profile`, `.gitconfig`,
+`.bash_profile`, `.gitmodules` and `.idea` have been found untracked at the
+checkout root during driven reviews. The cause is unknown — it may be the sandbox, GSD,
 or an IDE. The hazard: `git add .` or `git commit -a` sweeps them into a PR
 branch. Stage only named files during a review, and add these to the project's
 `.gitignore` or the global gitignore (`~/.config/git/ignore`):

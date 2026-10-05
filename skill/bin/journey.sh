@@ -1,14 +1,14 @@
 #!/bin/bash
 # Edit a journey file, loudly.
 #
-# Until 17 Sep 2026 the only way to change a journey was `s.replace(old, new)`
+# Before this script, the only way to change a journey was `s.replace(old, new)`
 # typed into a heredoc, and **a replace whose `old` does not match rewrites the
 # file byte-identical and reports success**. A failed edit is then
 # indistinguishable from an edit that did not help — and the next thing anybody
 # does is re-run the journey and read the result as a fact about the app.
 #
-# Measured 16 Sep 2026 (`sess0060`): five inline python edits to two journeys in
-# eleven minutes, including a revert, every one of them silent on a miss. Item
+# Measured: five inline python edits to two journeys in eleven minutes,
+# including a revert, every one of them silent on a miss. Item
 # 49's "repair the journey in place" is the right rule; this is the mechanism it
 # was missing (BACKLOG item 83).
 #

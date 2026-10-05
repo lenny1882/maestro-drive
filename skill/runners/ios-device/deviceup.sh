@@ -47,7 +47,7 @@ set -- $(_link); LINK=${1:-?}; TUNNEL=${2:-}
 # driver/sign.sh) whenever a signed one exists: it is the only one reachable
 # over wifi, and over USB it is the only one that survives a touch on a phone
 # lying flat — the prebuilt driver crashes in ScreenSizeHelper.swift:99 on the
-# first touch (item 50). Measured 24 Sep 2026 on the XS Max reporting faceUp:
+# first touch (item 50). Measured on the XS Max reporting faceUp:
 # prebuilt, dead on touch 1; source build, 5 touches of 5. The prebuilt driver
 # is the fallback, for USB only.
 SRCXCTR=${DRIVER_XCTESTRUN:-$(ls -t "$HOME"/maestro-drive-driver/build-*/Build/Products/*.xctestrun 2>/dev/null | head -1)}
@@ -75,7 +75,7 @@ else
 fi
 
 # A locked phone cannot run XCUITest and fails as a connection error, not a lock
-# — the single most common way this goes wrong (measured 10 Sep 2026). Refuse
+# — the single most common way this goes wrong (measured). Refuse
 # with the real reason rather than letting it surface as "driver not ready".
 case "$(xcrun devicectl device info lockState --device "$UDID" 2>/dev/null | grep -i passcodeRequired)" in
   *[Tt]rue*) echo "the phone is LOCKED (passcodeRequired: true) — unlock it and retry." >&2
@@ -103,7 +103,7 @@ xcrun devicectl device info lockState --device "$UDID" >/dev/null 2>&1
 # Over wifi the wake can rebuild the tunnel with a new address, so the address
 # is read now, after it, and the forwarder started with that one. Read before
 # the wake, the driver was handed a gone address and failed at once with
-# `Bind(49): Can't assign requested address` (measured 24 Sep 2026).
+# `Bind(49): Can't assign requested address` (measured).
 if [ "$LINK" = localNetwork ]; then
   set -- $(_link); TUNNEL=${2:-}
   [ -n "$TUNNEL" ] || { echo "the tunnel address went away after the wake — is the phone still on wifi?" >&2; exit 1; }
@@ -147,10 +147,10 @@ _why() {  # _why <log>
   if grep -qE "Installing built products.*Finished with error|Failed to install the app" "$1" 2>/dev/null; then
     echo "the driver could not be INSTALLED on the phone — it never ran." >&2
     grep -oE "CoreDeviceError error [0-9]+|IXRemoteErrorDomain error [0-9]+|Connection interrupted|disconnected immediately after connecting" "$1" | sort -u | sed 's/^/  /' >&2
-    echo "On 24 Sep 2026 this was CoreDeviceError 3002 (IXRemote 6, 'Connection" >&2
-    echo "interrupted') four times in a row, and restarting the phone cleared it; the" >&2
-    echo "next install took 3s. A second process using the phone's tunnel (a devicectl" >&2
-    echo "loop) caused the same error on 10 Sep. Retrying without either does not help." >&2
+    echo "CoreDeviceError 3002 (IXRemote 6, 'Connection interrupted') repeating is" >&2
+    echo "cleared by restarting the phone; the next install takes seconds. A second" >&2
+    echo "process using the phone's tunnel (a devicectl loop) causes the same error." >&2
+    echo "Retrying without dealing with either does not help." >&2
   elif grep -qE "Bind\(49\)|Can't assign requested address" "$1" 2>/dev/null; then
     echo "the driver could not listen on the tunnel address it was given — the tunnel" >&2
     echo "was rebuilt with a new address before it started. Retry; the address is read" >&2
@@ -161,10 +161,10 @@ _why() {  # _why <log>
   else
     echo "'TEST EXECUTE FAILED' / 'connection was invalidated' with the phone unlocked and" >&2
     echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
-    echo "not the tunnel. Measured 24 Sep 2026: 60-104s with either driver on a cable," >&2
+    echo "not the tunnel. Measured lifetimes: 60-104s with either driver on a cable," >&2
     echo "and 30-100s over wifi. Retry; driver.sh restarts a registered phone itself." >&2
     echo "If it keeps dying within a couple of minutes, restart CoreDevice on the Mac:" >&2
-    echo "  sudo killall -9 remoted   (on 24 Sep that took sessions past 10 minutes)" >&2
+    echo "  sudo killall -9 remoted   (that takes driver sessions past 10 minutes)" >&2
   fi
 }
 

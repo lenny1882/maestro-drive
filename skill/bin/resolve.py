@@ -6,8 +6,8 @@ device points, of every node whose text matches a pattern. This is the
 arithmetic that reference/driving.md describes, done from the tree rather than by eye
 off a screenshot.
 
-The whole thing rests on one observation, captured from a live tree on
-11 Aug 2026 (paths abbreviated):
+The whole thing rests on one observation, captured from a live tree (paths
+abbreviated):
 
     …1.1.1.0        0,0       134x291   <- marker, 402/3 x 874/3
     …1.1.1.1       15.9,39.7  102x18    "some label on the screen"
@@ -113,7 +113,7 @@ def refute_marker(children, k, screen_w, screen_h):
 
     - It may not be larger than the screen (k < 1). Every marker observed is
       the screen divided by 3 (Flutter's 1/3 space) or the screen itself with
-      an offset (an overlay, a paged scroll view). On 24 Sep 2026 Calendar's
+      an offset (an overlay, a paged scroll view). Calendar's
       What's New screen on an XS Max had a first child of 1242x2688 at
       -414,-896 — the screen's size in pixels — and taking it as k = 1/3 moved
       Continue from y=781 to y=559, where a tap hit nothing and reported rc=0.
@@ -215,7 +215,7 @@ def system_transform(node, screen_w, screen_h):
     orientation stays portrait, 834x1194. The app's own nodes come back in the
     app's space; anything iOS draws comes back in the native one. Nothing in a
     node says which it is, so `tapon` on a permission alert resolved a point in
-    the wrong space and missed silently (measured 12 Aug 2026).
+    the wrong space and missed silently (measured).
 
     The status bar is the tell, because it is always present and always a thin
     strip along one edge. When it comes back 24x1194 against a 1194x834 screen —
@@ -260,8 +260,8 @@ def image_rotation(node, screen_w, screen_h):
 
     `/screenshot` gives the device's native pixels, so a landscape-locked app
     on a natively-portrait iPad comes back on its side — 1668x2388 for a screen
-    the app draws as 1194x834. Correcting it by hand is what session B spent
-    eight `sips -r 270` calls on.
+    the app draws as 1194x834. Correcting it by hand takes a run of
+    `sips -r 270` calls.
 
     The same status bar that tells system space from app space tells which way
     round, so this is that one detection reused rather than a second guess:
@@ -269,9 +269,9 @@ def image_rotation(node, screen_w, screen_h):
         bar down the right edge (x=810 on an 834-wide device)  landscapeLeft   270
         bar down the left edge  (x=0)                          landscapeRight   90
 
-    Both measured on an iPad Pro 11-inch, iOS 16.4, 13 Aug 2026, by rotating the
-    simulator and reading the picture back each way. 270 is also the value
-    session B arrived at by hand for the first of them.
+    Both measured on an iPad Pro 11-inch, iOS 16.4, by rotating the simulator
+    and reading the picture back each way. 270 is also the value a correction by
+    hand arrives at for the first of them.
     """
     t = system_transform(node, screen_w, screen_h)
     if t is None:
@@ -291,7 +291,7 @@ def keyboard_geometry(node, screen_w, screen_h):
     only the thickness can be believed. Thickness is the smaller of the stack's
     two extents — the keyboard is never taller than it is wide.
 
-    This corrects item 30. Taking the size unconditionally (the 12 Aug fix) made
+    This corrects item 30. Taking the size unconditionally (the earlier fix) made
     the guard fire whenever a keyboard node existed at all: on the iPhone a
     keyboard parked DOWN reports 0,874 402x305 on an 874-point screen, and
     size-only gave a band at 874-305=569 and refused taps on a screen the keyboard
@@ -361,8 +361,7 @@ def keyboard_subtree(node):
 
     The driver reports an element the keyboard covers exactly as it reports any
     other: right frame, enabled, visible, no hint that a tap there will never
-    reach it. On 11 Aug 2026 that cost several minutes — taps aimed at a list
-    row under the keyboard landed on the typing-prediction bar and typed "The "
+    reach it. Taps aimed at a list row under the keyboard landed on the typing-prediction bar and typed "The "
     into the field instead of choosing anything.
     """
     ids = set()
@@ -405,8 +404,8 @@ def _outside(cx, cy, screen_w, screen_h):
 #
 # Containers are deliberately absent. A scroll view, a table, a collection view
 # and a plain `other` are all things a tap passes through, and treating them as
-# obstacles would rule out most of the screen — the sign-in screen measured on
-# 13 Aug has a scroll view covering 402x810 of its 402x874.
+# obstacles would rule out most of the screen — one sign-in screen measured
+# has a scroll view covering 402x810 of its 402x874.
 TAPPABLE_TYPES = frozenset((
     9, 10, 11, 12, 13, 14, 15, 16, 17,   # button and its relatives
     20,                                  # a keyboard key
@@ -595,7 +594,7 @@ def matches(hierarchy, pattern, screen_w, screen_h, visible_only=True):
 
 # What to do about a refusal, printed under it. This is deliberately not "type
 # to filter the list, then press return": that was recorded as the working
-# method for a covered dropdown and measured wrong on 13 Aug 2026 — the list
+# method for a covered dropdown and measured wrong — the list
 # does not always filter, and return can commit the first row rather than the
 # one that was typed (BACKLOG.md item 14). Sending someone who has just been
 # refused a tap towards a method that silently picks the wrong row would be
@@ -616,9 +615,8 @@ ADVICE = {
         "afterwards that the keyboard actually went",
         "or scroll the element clear. Either way, tap it and then assert what "
         "happened with `expect` rather than assuming the tap took",
-        "--anyway taps regardless. On 12 Aug that was done on the belief that "
-        "the refusal was a false positive, and it typed a stray character into "
-        "the field underneath",
+        "--anyway taps regardless. Used on the belief that a refusal is a false "
+        "positive, it types a stray character into the field underneath",
     ],
     "NOWHERE BLANK": [
         "every part of this screen above the keyboard has something on it. "
@@ -630,18 +628,18 @@ ADVICE = {
     "OFF SCREEN": [
         "swipe it into view and resolve again — the point moves",
         "a node reported 0,0 0x0 is off a scrolling container's viewport, and "
-        "dismissing the keyboard does not bring it back (measured 13 Aug)",
+        "dismissing the keyboard does not bring it back",
     ],
 }
 
 
-# A screen is a list far more often than it is one element, and until 17 Sep
-# 2026 nothing here could say so: --point picks one and refuses when several
+# A screen is a list far more often than it is one element, and before `rows`
+# nothing here could say so: --point picks one and refuses when several
 # match, the default listing is walk order with the resolver's diagnostics
 # interleaved, and neither is something a second reading can be diffed against.
-# So every session that needed "what is on the list now" wrote its own recursive
-# walk of axElement inside a heredoc — 118 of them over 15-16 Sep 2026, no two
-# the same, so two sessions' logs of one screen were not comparable
+# So every caller that needed "what is on the list now" wrote its own recursive
+# walk of axElement inside a heredoc — 118 of them, no two the same, so two
+# logs of one screen were not comparable
 # (BACKLOG item 72).
 #
 # Three rules make the output diffable, which is the whole point:

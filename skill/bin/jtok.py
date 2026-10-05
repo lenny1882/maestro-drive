@@ -7,7 +7,7 @@ The order is the whole point. Expanding the file first and splitting it
 afterwards is how `text ${USER}` with `USER="Test User"` came to type only
 "Test": the value's space became a token boundary and everything after it was
 dropped in silence. The shorter string still filtered the list and still
-matched something, so a session set a device to the wrong user and the wrong
+matched something, so the journey set a device to the wrong user and the wrong
 location and reported success (BACKLOG.md item 14).
 
 Splitting first gives a variable the behaviour anyone would assume:

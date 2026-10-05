@@ -47,7 +47,7 @@ done
 for d in "$LIB_DIR" "$STATE" ${STATE_DIRS[@]+"${STATE_DIRS[@]}"}; do
   [ -d "$d" ] && { rm -rf "$d"; ok "removed $d"; }
 done
-# The package was maestro-remote-mac until 21 Sep 2026 (BACKLOG item 98). An
+# The package was maestro-remote-mac until BACKLOG item 98 renamed it. An
 # uninstall that knows only the current name leaves the old install behind — and
 # a skill directory Claude Code still loads is not an uninstall.
 for d in ${LEGACY_SKILL_DIRS[@]+"${LEGACY_SKILL_DIRS[@]}"} \
@@ -67,7 +67,7 @@ elif confirm "  Remove this package's hook entries?"; then
   cp "$SETTINGS" "$SETTINGS.bak-uninstall"
   tmp=$(mktemp)
   # Every name the package has had — see LEGACY_OWNS in manifest.sh. An install
-  # that predates the 21 Sep 2026 rename registered its hooks under the old one.
+  # that predates the rename registered its hooks under the old one.
   names=$(printf '%s\n' "$OWNS" ${LEGACY_OWNS[@]+"${LEGACY_OWNS[@]}"} | jq -R . | jq -s .)
   jq --argjson names "$names" '
     def ours: (.command // "") as $c | any($names[]; . as $n | $c | contains($n));

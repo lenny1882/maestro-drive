@@ -6,7 +6,7 @@ The unlabelled containers `tree` hides carry the frames that explain an overlay
 reported in a parent's local space, so read `nodes` rather than measuring a
 screenshot when a frame looks wrong.
 
-Split out of driver.sh on 13 Aug 2026 so that `tapon --tree` could reuse it and
+Split out of driver.sh so that `tapon --tree` could reuse it and
 so that the renderer itself could be tested (BACKLOG.md item 7).
 """
 import json

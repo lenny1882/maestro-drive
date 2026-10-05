@@ -31,7 +31,7 @@ in the picture:
 
 Nobody is sent through `ssh-copy-id` to drive a device that is already here.
 
-**Run end to end once, 21 Sep 2026.** `platform.sh boot`, `devices --booted`,
+**Run end to end once.** `platform.sh boot`, `devices --booted`,
 `install.sh`, `shot.sh`, `prefs.sh`, `net.sh` and `flow.sh` all ran against an
 Android emulator on this machine (BACKLOG item 94, 5.2). That run was from
 inside a Claude session, so it went through item 96's bridge server rather than
@@ -215,8 +215,8 @@ here, `/etc/hosts`, and a new `Host` block in `~/.ssh/config`. All three or none
 
 **The journeys-first hook.** The skill ships a `PreToolUse` hook that blocks a
 raw `driver.sh tap`/`swipe` on literal coordinates **once per session** and
-names the journeys to run instead — the one habit the user has policed by hand
-across five-plus sessions. It is a nudge, not a ban: re-run the same command and
+names the journeys to run instead — hand-walking a covered screen is the most
+repeated waste in this workflow. It is a nudge, not a ban: re-run the same command and
 it passes.
 
 `install.sh` registers it (§ 8), so there is nothing to paste. What it writes is
@@ -279,9 +279,8 @@ the repo's `skill/hooks/`, and `install.sh` puts the whole `skill/` directory at
 
 That reverses an earlier decision to register neither, on the grounds that both
 change what happens in *every* session and so belonged to the machine rather
-than the skill. The argument was sound and the result was that
-`rig-down-on-end.sh` sat unregistered from 17 Sep, which is exactly the
-situation it exists to prevent. A skill whose hooks need a hand-edit of
+than the skill. The result was that `rig-down-on-end.sh` sat unregistered,
+which is exactly the situation it exists to prevent. A skill whose hooks need a hand-edit of
 `settings.json` is not one step to install.
 
 Both blocks are shown above so you can recognise them. `./install.sh --dry-run`
@@ -434,8 +433,7 @@ to `host/org/thing` first, so the two forms match. A checkout that only shares
 the directory name is marked as such rather than treated as the answer; two
 repositories can be spelt the same and only one of them is yours. On a Mac with
 twelve checkouts it takes about three seconds, which is one SSH call rather
-than the three session B spent guessing at `~/src`, `~/Development` and
-`~/Projects` by hand.
+than one per guess at `~/src`, `~/Development` and `~/Projects` by hand.
 
 That writes `.maestro-drive.conf` and creates `maestro/journeys/` and
 `maestro/app-notes.md`. Then, once per machine, push the Mac-side helpers:

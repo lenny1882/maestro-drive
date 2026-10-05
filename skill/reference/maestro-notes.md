@@ -1,16 +1,15 @@
 # Maestro itself — the surface worth knowing before driving
 
 Everything in this file is about Maestro rather than about any app. The
-headline finding is the process one: read the surface first. Three separate
-sweeps in the original work stopped early, and each early stop left a fix on
-the table.
+headline finding is the process one: read the surface first. A sweep that stops
+early leaves a fix on the table.
 
 ## 6. The tool surface — read it before driving, not after
 
-The worst process failure of this session was three separate rounds of "read a
-little, find something useful, jump straight back to tapping". Each round found
-things that mattered, and each stopped early. Reading the whole surface first
-costs a few minutes; not reading it cost most of two sessions.
+The costliest process failure is "read a little, find something useful, jump
+straight back to tapping". Each such round finds things that matter, and each
+stops early. Reading the whole surface first costs a few minutes; not reading it
+costs far more.
 
 A mirror of the Maestro documentation — 154 pages — is in `docs/pages/` in this skill,
 with the URL list in `docs/urls.txt`. Grep it instead of fetching page by page:
@@ -56,8 +55,7 @@ whole command language.
 
 ### Commands worth knowing exist
 
-Grouped by the problem they solve. None of these were used in the original
-session, and most were not used in this one either.
+Grouped by the problem they solve. All of them are easy to overlook.
 
 | problem | command |
 | --- | --- |
@@ -98,7 +96,7 @@ Four behaviours that explain failures rather than merely offering features.
 - **`hideKeyboard` on iOS scrolls from the centre of the screen**, because iOS
   exposes no API to dismiss the keyboard. That is exactly why it is flaky, and
   why the documented workaround is to tap a non-interactive area instead. Both
-  halves of that were measured on 13 Aug 2026 and neither worked on the app
+  halves of that were measured and neither worked on the app
   under test: a swipe from the middle and six taps on different blank areas all
   left the keyboard up, and `key return` put it away every time. Tapping a
   blank area only unfocuses if the app was written to do it, which a Flutter
@@ -146,7 +144,7 @@ length needs a scanning loop —
 This is the largest unused source of state in the setup. Every `run` — through
 the MCP server as much as the CLI — writes a timestamped session folder under
 `~/.maestro/tests/` on the Mac, and a per-flow folder inside it. Confirmed
-present for this session's runs:
+present:
 
 ```
 ~/.maestro/tests/<timestamp>/

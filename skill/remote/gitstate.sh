@@ -2,10 +2,9 @@
 # Runs ON THE MAC. Branch and working tree for a checkout, with tracked changes
 # split into build residue and real edits.
 #
-# `git status --short` is a flat list, and a flat list is why a branch switch on
-# 12 Aug 2026 stopped dead and had to be untangled by hand: two of the modified
-# files were lock files that the session's own builds had regenerated, and
-# nothing said so. They are tracked, so `git checkout <branch>` refuses to move
+# `git status --short` is a flat list, and in a flat list a branch switch stops
+# dead and has to be untangled by hand when modified files are lock files that
+# the builds themselves regenerated, and nothing says so. They are tracked, so `git checkout <branch>` refuses to move
 # until they are dealt with, and they look exactly like work someone did.
 #
 # This names them and prints the command, and does NOT run it. A Podfile.lock

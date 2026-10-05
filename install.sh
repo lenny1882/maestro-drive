@@ -98,7 +98,7 @@ if declare -F settings_merge >/dev/null; then
   # Remove this package's previous entries across every event, then let the
   # manifest add the current ones. That is what makes re-running safe.
   #
-  # EVERY NAME, not just the current one: across the 21 Sep 2026 rename the
+  # EVERY NAME, not just the current one: across the rename (BACKLOG item 98) the
   # entries already in the file say maestro-remote-mac, and a strip that knows
   # only maestro-drive leaves them in place beside the new ones.
   tmp=$(mktemp)
@@ -198,7 +198,7 @@ if [ "$DRY" -eq 1 ]; then
   say; say "(dry run — nothing written)"; exit 0
 fi
 
-# The package was maestro-remote-mac until 21 Sep 2026 (BACKLOG item 98), and an
+# The package was maestro-remote-mac until BACKLOG item 98 renamed it, and an
 # upgrade from before the rename leaves two of everything: a second copy of the
 # skill for Claude Code to load, with its own hooks, beside the one just
 # installed. The hook entries are already gone — the strip above matches every

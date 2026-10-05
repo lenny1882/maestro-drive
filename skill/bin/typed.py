@@ -6,8 +6,8 @@ has focus — the field the keystrokes went to — and compares what that field 
 holds against what was typed. Exit 0 means it matches, 1 means it does not.
 
 `type` is a tap followed by keystrokes, and both halves fail quietly. A tap that
-misses the field types into whatever had focus — on 12 Aug 2026 that put a stray
-character into a store field and the run carried on. A value that arrives
+misses the field types into whatever had focus — that puts a stray character
+into another field and the run carries on. A value that arrives
 shortened looks like the app truncating it: `text ${USER}` with
 `USER="Test User"` typed `Test`, which still filtered a list and still matched
 something, so the journey reported success and set the wrong user (item 14).

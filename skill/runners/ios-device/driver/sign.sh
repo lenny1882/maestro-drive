@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sign a driver that build.sh built, for a phone. Run from Terminal ON THE MAC,
 # not over ssh: every codesign over ssh fails with errSecInternalComponent,
-# because the login keychain is locked there (measured 24 Sep 2026).
+# because the login keychain is locked there (measured).
 #
 #   sign.sh '<identity>' <profile.mobileprovision> <build-dir>
 #

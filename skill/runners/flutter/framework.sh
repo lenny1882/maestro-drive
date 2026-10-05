@@ -11,7 +11,7 @@
 #
 # build.sh and vmservice.sh are this module's own files and sit beside this one,
 # on both sides: bin/install.sh pushes runners/ keeping its layout. They were in
-# remote/ until 18 Sep, which is where they were before the seam existed.
+# remote/ before the seam existed.
 set -u
 
 VERB=${1:-}; [ $# -gt 0 ] && shift
@@ -62,9 +62,8 @@ variants)
   # React Native's does. (item 87, 4.2)
   [ "${2:-}" = --platform ] && set -- "$1"
   # build.sh owns the rule — a flavour is real only when BOTH halves exist, an
-  # ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart. This asked it
-  # by reproducing the test until 18 Sep; now it asks it by calling it, so the
-  # two cannot drift.
+  # ios/*.xcodeproj xcscheme of that name and a lib/main_<f>.dart. It asks it by
+  # calling it rather than reproducing the test, so the two cannot drift.
   sh "$HERE/build.sh" --repo "${1:?variants <repo>}" --list-variants
   ;;
 

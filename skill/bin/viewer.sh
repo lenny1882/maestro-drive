@@ -17,7 +17,7 @@
 #
 # The port is discovered, never assumed. `maestro mcp` starts its viewer on "a
 # free local port" unless `--viewer-port` says otherwise, so every session gets
-# a different one: two sessions on 15 Sep held 9999 and 10001. $VPORT is only
+# a different one: two concurrent sessions have held 9999 and 10001. $VPORT is only
 # the port this republishes *on*.
 set -uo pipefail
 # shellcheck disable=SC1091

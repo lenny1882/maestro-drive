@@ -12,8 +12,7 @@
 # MaestroSessionManager and McpMaestroSessionManager both compile the driver
 # port in as a literal 22087 with no override, and the MCP server's session map
 # has no invalidation path. Ask it for a second device and it hands back the
-# FIRST device's screen, with a response that looks entirely correct. That has
-# cost hours in real sessions.
+# FIRST device's screen, with a response that looks entirely correct.
 #
 # The driver itself has no such limit. XCTestHTTPServer.swift reads
 # `ProcessInfo.processInfo.environment["PORT"]` before falling back to 22087,
@@ -99,9 +98,9 @@ _port_for() {  # _port_for <udid> <live-map> <ports-map>
 #
 # 2. A name left behind by a session that is GONE is overwritten. Nothing clears
 #    a label at session end, so without this every stale label reads as
-#    hand-set: the maintainer opened the wall on 16 Sep 2026 to four simulators named 13
-#    hours earlier, none of them working, and a tile still saying `named 15h
-#    ago` under a live session that was not the one named on it.
+#    hand-set: the wall has shown four simulators named 13 hours earlier, none
+#    of them working, and a tile still saying `named 15h ago` under a live
+#    session that was not the one named on it.
 #
 # Telling the two apart needs more than a session-id mismatch, because two live
 # sessions share this Mac routinely (item 80) and the second must not rename the
@@ -148,20 +147,19 @@ if [ \"\$AGE\" -gt $LABEL_STALE_AFTER ]; then cat > \"\$L\"; else cat >/dev/null
     >/dev/null 2>&1 || true
 }
 # --- the rig: several simulators brought up and taken down as one -----------
-# Setting a rig up and tearing it down were the units of work on
-# 16 Sep 2026, and neither was a thing this toolkit had. Setting one up by hand
-# cost about forty-five minutes in one session; taking one down was assembled
-# line by line in the moment every time.
+# Setting a rig up and tearing it down are units of work in their own right.
+# Setting one up by hand takes about forty-five minutes; taking one down by
+# hand is assembled line by line every time.
 #
 # What it does NOT do is build or install. `bin/build.sh` must not run
 # unprompted (SKILL.md step 5), and a rig that silently replaced the build under
 # test would be worse than no rig. Boot, driver, label — the app is the
 # operator's decision.
 #
-# Boots are SERIALISED and each one is waited out. Measured 17 Sep 2026: this
-# Mac sat at load 6 with seven simulators booted and the wall up, and booting
-# ONE more took it to 122 within 36 seconds, falling back once that boot
-# settled. Five at once is what took a session's four drivers down on 16 Sep.
+# Boots are SERIALISED and each one is waited out. Measured: a Mac sat at load
+# 6 with seven simulators booted and the wall up, and booting ONE more took it
+# to 122 within 36 seconds, falling back once that boot settled. Five boots at
+# once take down the drivers already running.
 # The cost is the boot, not the simulator, so the fix is to queue them rather
 # than to cap how many there are (item 74).
 RIG_OWNED="$RDIR/rig"
@@ -186,8 +184,8 @@ _rig_claim() {  # _rig_claim <udid> -- this session booted it, so it takes it do
 # hand-set (item 67). Booting the device settles that: it was shut down a moment
 # ago, so whatever name is on it belongs to a session that is gone.
 #
-# Measured 17 Sep 2026: this rig booted an iPhone 16e and the wall went on
-# showing `orange · f13f0e1`, a session that ended the previous afternoon.
+# Measured: this rig booted an iPhone 16e and the wall went on showing
+# `orange · f13f0e1`, a session that had ended the previous afternoon.
 _rig_rename() {  # _rig_rename <udid>
   local udid=$1 name group
   name=${PROFILE:-${APP_ID:-rig}}
@@ -260,8 +258,7 @@ _rig_status() {
   # Every label in ONE call, before the loop. An _ssh inside a loop that is
   # reading from a pipe eats the rest of the pipe — _ssh passes stdin to the
   # remote command — so the first pass of this printed one device out of seven.
-  # `up` has carried a comment about that trap for weeks and this is the third
-  # time it has been walked into (17 Sep; see also `ports adopt`).
+  # `up` and `ports adopt` carry the same trap.
   labels=$(_ssh "cd '$RDIR/labels' 2>/dev/null && grep -H '^by=' * 2>/dev/null | sed 's/:by=/ /'" 2>/dev/null)
   printf '%-38s %-7s %-7s %-5s %-22s %s\n' UDID DRIVER RELAY MINE BY DEVICE
   rows=(); mapfile -t rows <<< "$booted"
@@ -304,9 +301,9 @@ sh '$PLATFORM_SH' shutdown '$d' 2>/dev/null; true" >/dev/null 2>&1 || true
 # Labels have a reclaim path and boots do not (item 88). `rig down` takes only
 # what THIS session booted, deliberately — a teardown that takes a peer's
 # simulator mid-run is worse than one that leaves something behind — so a
-# simulator whose session has gone stays booted for ever. Measured 18 Sep 2026:
-# seven booted, a claim ledger empty since the previous afternoon, and five of
-# them last written to two days earlier.
+# simulator whose session has gone stays booted for ever. Measured: seven
+# booted, a claim ledger empty since the previous afternoon, and five of them
+# last written to two days earlier.
 #
 # The three tests are the label reclaim's, applied to the boot instead of the
 # name: nobody claims it, no driver is live on it, and nothing has written to it
@@ -316,8 +313,8 @@ sh '$PLATFORM_SH' shutdown '$d' 2>/dev/null; true" >/dev/null 2>&1 || true
 # breakfast, though it is only ten hours old.
 #
 # It shuts nothing down unless asked. Listing is safe; acting is a judgement,
-# and item 74's lesson was a session that killed four working simulators to
-# recover from a boot storm it had misread.
+# and item 74's lesson is that a misread boot storm leads to killing working
+# simulators.
 _rig_reap() {  # _rig_reap [--shutdown]
   local act=0
   [ "${1:-}" = "--shutdown" ] && act=1
@@ -334,10 +331,10 @@ _rig_reap() {  # _rig_reap [--shutdown]
   # did anything with it.
   #
   # Two levels deep, not one. A container directory's mtime only moves when its
-  # immediate contents change, so the container itself reported 16 Sep for a
-  # device driven all day on the 18th; Documents/ and Library/ inside it gave
-  # 18 Sep 12:56, which is exactly what a recursive find over the whole
-  # container returned, for the cost of a glob.
+  # immediate contents change, so the container itself reported a date two days
+  # old for a device driven all day; Documents/ and Library/ inside it gave the
+  # same time as a recursive find over the whole container, for the cost of a
+  # glob.
   rows=$(_ssh "sh '$PLATFORM_SH' last-used")
 
   # One pass, into a variable: a `while read` fed by a pipe runs in a subshell,
@@ -424,14 +421,14 @@ case "${1:-list}" in
   list|"") _list ;;
   up)
     # A driver start is a ~30s xcodebuild per device, and doing it while a
-    # simulator is still booting is how a session lost its drivers on 16 Sep: it
-    # read the machine as thrashing and killed things that were fine. Say what
+    # simulator is still booting makes the machine read as thrashing, which
+    # leads to killing things that are fine. Say what
     # the load is rather than letting it look like a toolkit failure.
     _l=$(_mac_load)
     if [ -n "$_l" ] && [ "${_l%%.*}" -ge "${LOAD_WARN:-40}" ]; then
       echo "the Mac's 1-minute load is $_l." >&2
       echo "  A simulator that is still booting does this on its own — one boot" >&2
-      echo "  measured 6 -> 122 in 36s on 17 Sep, falling back once it settled." >&2
+      echo "  has been measured taking it from 6 to 122 in 36s, falling back once it settled." >&2
       echo "  Starting drivers now adds a ~30s xcodebuild per device on top of" >&2
       echo "  it, and a driver started into a boot storm is the one that dies." >&2
       echo "  Wait for the boot to finish, then run this again. LOAD_WARN=<n>" >&2
@@ -490,8 +487,8 @@ case "${1:-list}" in
                # Read the whole list BEFORE the loop: _ports_remember goes over
                # SSH, and _ssh passes stdin to the remote command, so an ssh
                # call inside a loop reading from a pipe swallows every line not
-               # yet read and only the first entry survives. Measured here on
-               # 17 Sep — four live drivers, one adopted — and it is the same
+               # yet read and only the first entry survives. Measured here —
+               # four live drivers, one adopted — and it is the same
                # trap `up` carries a comment about.
                lines=(); mapfile -t lines < <(_driver_map --fresh)
                n=0

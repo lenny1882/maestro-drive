@@ -30,7 +30,7 @@ claim)
 # running ones. State is free text from the platform; the caller matches on it
 # only to say what it found.
 #
-# Booting is what costs the machine, not having booted. Measured 17 Sep 2026:
+# Booting is what costs the machine, not having booted. Measured:
 # seven simulators up sat at load 6; booting one more took load to 122 within
 # 36 seconds and it fell back as soon as that boot settled. So `devices` must be
 # cheap enough to call freely, and `boot` must serialise.

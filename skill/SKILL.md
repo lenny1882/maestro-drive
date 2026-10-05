@@ -17,10 +17,10 @@ emulator on the machine running the skill. In local transport `MAC_HOST` and
 `MAC_FQDN` are neither needed nor read, every URL is `127.0.0.1`, and the
 commands are the same ones. Where a line below says "on the Mac", read "on the
 machine with the device". `reference/setup.md` has what a local machine needs
-instead of the SSH setup. The local path has driven a real device once — an
-Android emulator on this machine, 21 Sep 2026, from inside a Claude session,
-which needs item 96's bridge server as well (BACKLOG item 94, 5.2). No local iOS
-simulator has been driven.
+instead of the SSH setup. The local path has driven a real device — an Android
+emulator on the machine running the skill; driving it from inside a Claude
+session needs item 96's bridge server as well (BACKLOG item 94, 5.2). No local
+iOS simulator has been driven.
 
 Across ssh, everything runs on the Mac and nothing is installed here. Two paths
 reach it:
@@ -40,8 +40,7 @@ reach it:
 port in as a literal `22087` with no override, and the session map has no
 invalidation path. So `inspect_screen` returns **whatever device is on 22087**,
 regardless of the `device_id` you pass, with a response that looks entirely
-correct. Measured on 12 Aug: asked for the iPhone, it returned the iPad's tree.
-Two real sessions lost time to this, one of them an hour.
+correct. Asked for the iPhone, it returns the iPad's tree.
 
 So: bring the drivers up yourself, drive through `driver.sh`, and treat any MCP
 reply about a device as unverified unless only one simulator is booted. A
@@ -63,19 +62,19 @@ every session and it can be bookmarked once. Post it again after any restart.
 
 It spawns Maestro's capture binary per device — one `simulator-server ios --id
 <udid>`, started by its own scan loop whether or not a browser is attached
-(measured 17 Sep 2026: seven booted, seven capture processes) — and never
+(measured: seven booted, seven capture processes) — and never
 touches an XCUITest driver, so it is safe to start in the middle of a run.
 
-**What costs the Mac is booting a simulator, not having one.** Measured 17 Sep
-2026 on this Mac: seven simulators booted, the wall up, ~1,470 processes inside
+**What costs the Mac is booting a simulator, not having one.** Measured on a
+Mac with seven simulators booted, the wall up, ~1,470 processes inside
 simulator runtimes, one-minute load **6**. Booting one more took load to **122
 within 36 seconds** while adding only ~170 processes, and it fell back as soon
 as that boot settled. So a device budget is the wrong instinct: several
 simulators sitting idle are cheap, and it is a boot storm that makes the machine
 look broken. Boot them **one at a time, waiting for each to settle**, and do not
 start drivers during a boot — `drivers.sh up` says so if the load is already
-high. A session that read a boot storm as a crowded machine on 16 Sep killed
-four working simulators to recover from it.
+high. Reading a boot storm as a crowded machine leads to killing working
+simulators that were not the cause.
 
 The URL is built from `MAC_FQDN` and `WALLPORT`. Where the Mac is reached some
 other way — a tunnel, another hostname, a reverse proxy — set `WALL_URL` in the
@@ -210,8 +209,8 @@ that silently replaced the build under test would be worse than no rig.
 
 **`rig reap` is the other half, and it is the one for somebody else's leftovers.**
 `rig down` can only ever take what this session booted, so a simulator whose
-session has gone stays booted for ever — seven were found on 18 Sep 2026 against
-a claim ledger empty since the previous afternoon. `reap` applies the label
+session has gone stays booted for ever — seven have been found booted against a
+claim ledger that had been empty since the previous afternoon. `reap` applies the label
 reclaim's three tests to the boot instead of the name: nobody claims it, no
 driver is live on it, and nothing has written to it since a previous calendar
 day. It **lists and stops**; `rig reap --shutdown` is the second command that
@@ -262,10 +261,10 @@ $SKILL/bin/drivers.sh ports forget [<udid>]
 ```
 
 Ports used to be handed out lowest-first among the drivers currently alive, and
-Maestro tears a driver down on every CLI or MCP run, so numbers moved. Twice on
-16 Sep 2026: an iPad's driver came back on 22087, which was the iPhone 16 Pro
-Max's port; and a session holding relay 9105 sent 22 swipes to **another
-session's iPhone** after a restart moved its iPad to 9106. `ports adopt` is for
+Maestro tears a driver down on every CLI or MCP run, so numbers moved: an
+iPad's driver came back on 22087, which had been the iPhone 16 Pro Max's port;
+and a caller holding relay 9105 sent 22 swipes to **another session's iPhone**
+after a restart moved its iPad to 9106. `ports adopt` is for
 a Mac whose drivers predate the map — it writes down what is running and
 restarts nothing.
 
@@ -277,15 +276,15 @@ devices another session has labelled on the wall before it does. Name yours:
 `drivers.sh up <udid>`.
 
 **Naming a device on the MCP server or the CLI destroys that device's driver,
-and then answers about a different device.** Measured 12 Aug: with the iPad on
+and then answers about a different device.** Measured: with the iPad on
 22087 and the iPhone on 22088, `maestro --device <iphone> hierarchy` tore down
 the iPhone's driver, found the iPad's alive on 22087, and returned the iPad's
 hierarchy. The MCP tools behave the same way, and so does a run that fails —
 the teardown happens when the command finishes either way (measured again
-13 Aug with three drivers up; the other two were untouched).
+with three drivers up; the other two were untouched).
 
 The damage shows up one call later, on whatever tries to use that device next,
-which is what made it cost ten minutes in a real session. `drivers.sh` now
+so the failure points at the wrong command. `drivers.sh` now
 records what it started, so `driver.sh` can say the driver was taken rather
 than that there never was one, and name what takes them:
 
@@ -308,7 +307,7 @@ documentation mirror's version in one round trip.
 Its working-tree line separates **build residue** from real changes:
 
 ```
-branch     unit/PROJ-1005-automated-logout-phase
+branch     feature/automated-logout-phase
 residue    ios/Podfile.lock pubspec.lock
            regenerated by any build, and tracked, so a branch switch
            stops on them. Discard when they are not a real change:
@@ -325,9 +324,9 @@ genuine dependency update, and only whoever made it knows which it was.
 **Read the "is that the code under test?" block before trusting anything on
 screen.** It compares the installed build's timestamp with the newest commit in
 the Mac's checkout. A build older than that commit cannot contain it, and
-preflight says so plainly. Two separate sessions worked this check out from
-scratch and **both found the simulator running a build from another branch** —
-without it, both reviews would have been worthless.
+preflight says so plainly. A simulator running **a build from another branch**
+is a common finding, and a review run against it says nothing about the branch
+under review.
 
 A build *newer* than the commit is not proof it came from that branch, because
 a checkout can move after a build, and the wording says as much. When that
@@ -409,7 +408,7 @@ than it is — and each is Flutter's answer, not the package's:
   untouched, which nothing reports.
 
 Then `bin/build.sh` builds and installs onto `$DEV`, or `--all` for every
-booted simulator. Measured 18 Sep 2026: 25 s end to end for an incremental
+booted simulator. Measured: 25 s end to end for an incremental
 build and install, and **a no-op rebuild is still 21-22 s** — Xcode re-runs
 Flutter's script phase whatever the staleness of its outputs. So when the
 artefact already exists, `--install-only <path>` installs it in **3 s** instead
@@ -504,14 +503,14 @@ and read its log as it goes. One sample per interval, one line each, with a
 does that a hand-written poll loop kept getting wrong:
 
 - **No deadline.** It runs until `watch stop`. A watcher given a fixed number of
-  checks ended ten minutes before the event it existed to catch, and the whole
-  run had to be set up again.
+  checks can end before the event it exists to catch, and the whole run then has
+  to be set up again.
 - **A failed read is not "no change".** A cycle that cannot read the device logs
   `ERR` and leaves the baseline alone, so a dropped driver can never be recorded
   as the list holding steady.
 - **`--context` goes on every line.** Whatever it matches — the filter chip, the
   tab, the mode — is written beside every sample, so the log proves which view
-  was being watched. One watcher spent an afternoon on the wrong filter.
+  was being watched, and a watcher on the wrong filter shows up in the first line.
 - **One watcher per device.** A second `watch` on a watched device refuses and
   names the first, because two writing one log makes every change arrive twice.
 
@@ -697,8 +696,8 @@ with this skill.
    file, not a driver call.** Before driving any screen, check whether a journey
    starts there — a journey's header names its starting screen, so this is a
    one-line check, not a reading exercise. If one does, run it; if none does,
-   write one as you go. Listing `maestro/journeys/` is not enough — the directory
-   has been listed and the screen hand-walked anyway.
+   write one as you go. Listing `maestro/journeys/` is not enough: the check is
+   which screen each journey starts on.
 2. **Never author a selector from a screenshot.** Copy the text verbatim from
    the hierarchy. Maestro's `text:` is a full-string regex, so a partial string
    does not match.
@@ -722,13 +721,13 @@ with this skill.
    which of the two works depends on the app. It says which it used, because
    return submits the focused field. The refusal prints the arithmetic behind it —
    check that against `driver.sh nodes` rather than against a screenshot before
-   using `--anyway`. One was overridden on the strength of a screenshot on
-   12 Aug and typed a stray character into the field underneath.
+   using `--anyway`. Overriding it on the strength of a screenshot types a stray
+   character into the field underneath.
 5. **Never add a `sleep` after a driver call.** Every action verb — `tapon`,
    `tap`, `type`, `text`, `key`, `button`, `erase`, `swipe`, `launch`, on the
    command line and in a journey alike — waits for the screen to go still
    before it returns, so a sleep after one waits for something that has already
-   happened. Four earlier sessions added 154 of them, one to six seconds each.
+   happened, and costs one to six seconds each.
    `isScreenStatic` stays false while a spinner turns, so the wait covers
    backend latency and not just animation; `SETTLE=0` turns it off for a screen
    that never stops moving and `SETTLE=<n>` shortens it.
@@ -747,16 +746,15 @@ with this skill.
    the field values, placeholders and layout. Decide from what it shows: dismiss
    a keyboard, tap what is already on screen, or run a different journey.
    Restarting discards state that was already correct (a remembered store, a
-   completed login) and costs 30–60 seconds. On 14 Sep a session restarted
-   twice after a journey failure, lost the stored store both times, and then
-   failed the login journey because the screen it expected was gone. Reading the
-   hierarchy would have shown the store was already set.
+   completed login) and costs 30–60 seconds. A restart after a journey failure
+   loses a stored store, and the login journey then fails because the screen it
+   expects is gone; the hierarchy would have shown the store was already set.
 9. **Put residency on the Mac.** Every Bash call here is its own PID and network
    namespace, so no tunnel, socket or background process survives. The Mac has
    no such limit and is reachable by name over HTTP through the sandbox proxy.
    Where something must run on this side across calls — a watcher, a sampler, a
    long poll — `nohup … &` is not it: it returns a pid, prints nothing wrong and
-   is dead by the next call (measured; 21 attempts over 15-16 Sep). The
+   is dead by the next call (measured over 21 attempts). The
    harness's `run_in_background: true` is the mechanism that survives, and
    `Monitor` with an until-loop is how to wait for one. Anything started that
    way starts outside the project, so pass `MAESTRO_DRIVE_CONF` to it.
@@ -764,10 +762,9 @@ with this skill.
 10. **Before waiting for a timed state, find the three ways to reach it.** Name
     the event, then name how it could be reached by *waiting*, by a *backend
     action*, and by a *config override* — and say which you are taking and why,
-    before the waiting starts. 15 Sep 2026 went from 12:46 to 21:56 across two
-    sessions waiting for request TTLs to expire so a list would shed rows; at
-    18:55 it turned out a **cancel** produces the same shed, and the next
-    afternoon that took forty-two seconds. Where the project has an API client,
+    before the waiting starts. Waiting for request TTLs to expire so a list
+    sheds rows takes hours; a **cancel** produces the same shed in forty-two
+    seconds. Where the project has an API client,
     the backend action is usually there already. Item 58's warning still applies
     to the third route: a timer fudged in the app's source races the driver's own
     latency, and a fudged build must be rebuilt from clean source before any real
@@ -804,9 +801,9 @@ readlink -f ~/.claude/skills/maestro-drive
 **If it is a copy, anything you write under the `~/.claude/skills` path is
 thrown away by the next install** — and a `find` under `~/.claude` does not
 follow a symlink either, so the source can read as missing rather than as
-elsewhere. Under the old `ship.sh`/`build/` arrangement that cost two sessions:
-findings written into `build/…/reference/`, and a rival `BACKLOG.md` created
-because the real one looked gone. `./install.sh --link` is what removes the
+elsewhere. Under the old `ship.sh`/`build/` arrangement that led to findings
+written into `build/…/reference/`, and a rival `BACKLOG.md` created because the
+real one looked gone. `./install.sh --link` is what removes the
 trap, because then the live path and the checkout are the same directory.
 
 A change wanted in this toolkit goes in that repo's `BACKLOG.md`, appended and

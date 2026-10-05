@@ -11,7 +11,7 @@
 #
 # Run ONCE, at setup: bin/init.sh records the answer as RJAVA in the project's
 # conf and every later command reads that. Not run per command — an interactive
-# shell with no tty can hang (measured 21 Sep 2026: one run in three took the
+# shell with no tty can hang (measured: one run in three took the
 # full 60s), and $TMO would turn that into a three-minute stall inside _ssh.
 set -u
 

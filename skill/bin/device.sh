@@ -111,8 +111,8 @@ case "${1:-list}" in
       # Read the whole map BEFORE the loop. `done < "$DEVICE_MAP"` puts the file
       # on the loop's stdin, and _ssh passes stdin to the remote command, so the
       # first probe ate the rest of the file and only one device was ever
-      # listed. Found 17 Sep 2026 by bin/lint-stdin.py, which exists because the
-      # same trap had just been walked into three times in one afternoon.
+      # listed. Found by bin/lint-stdin.py, which exists because this trap
+      # recurs.
       rows=(); mapfile -t rows < "$DEVICE_MAP"
       for row in "${rows[@]}"; do
         set -- $row; u=${1:-}; p=${2:-}

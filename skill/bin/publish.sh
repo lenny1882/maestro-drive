@@ -11,9 +11,8 @@
 #
 # Starting also turns dart:io HTTP profiling on, because it is OFF by default
 # and nothing says so: bin/net.sh comes back with an empty request list that
-# looks exactly like an app making no calls. That cost one session six minutes
-# and another the whole line of evidence — it read the source instead and never
-# found out why. The flag lives on the isolate, so it has to be set again after
+# looks exactly like an app making no calls, and the usual next step is to read
+# the source instead and never find out why. The flag lives on the isolate, so it has to be set again after
 # anything that replaces the isolate: a restart, a hot restart, clearState.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -47,9 +46,9 @@ _arm() { # _arm <base> <isolate>
   sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null || true
 }
 
-# Everything a later ad-hoc call needs, in one place. Both sessions reviewed on
-# 12 Aug went hunting through lib.sh and config.sh for $LDIR before they could
-# make a single VM Service call of their own — five and six round trips.
+# Everything a later ad-hoc call needs, in one place. Without it, finding $LDIR
+# means hunting through lib.sh and config.sh before a single VM Service call of
+# one's own — five or six round trips.
 _report() { # _report <base> <isolate> <profiling-state>
   cat <<TXT
   base URI    $1

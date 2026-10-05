@@ -3,20 +3,20 @@
 
 This exists because `expect` cannot ask the question. `expect` polls for one
 element, in the foreground, against a timeout, for a yes or no. The question
-that took two days on 15-16 Sep 2026 was "did the SET of rows change, when, and
-from what to what" — over hours, with nobody touching the device. Six sessions
-wrote their own version of this inside heredocs; no two logged the same fields,
-so two logs of one screen could not be compared (BACKLOG items 70, 72).
+here is "did the SET of rows change, when, and from what to what" — over hours,
+with nobody touching the device. Hand-written versions of this inside heredocs
+each logged different fields, so two logs of one screen could not be compared
+(BACKLOG items 70, 72).
 
-Four rules, each of them a failure somebody had:
+Four rules, each of them a failure seen in practice:
 
-  * NO DEADLINE by default. A watcher given 60 checks x 25s ended ten minutes
-    before the expiry it existed to catch, and the run had to be set up again.
+  * NO DEADLINE by default. A watcher given 60 checks x 25s can end before the
+    expiry it exists to catch, and the run then has to be set up again.
   * A FAILED READ IS NOT "NO CHANGE". A cycle that cannot read the device logs
     ERR and leaves the baseline alone, so a dropped driver can never be
     recorded as the list holding steady.
   * THE CONTEXT IS ON EVERY LINE. A log of ids alone does not say which filter
-    was in force, and one watcher spent an afternoon on the wrong one. Whatever
+    was in force, so a watcher on the wrong one goes unnoticed. Whatever
     --context matches is written to every line, so the log proves what was
     being watched rather than asserting it.
   * ONE WATCHER PER DEVICE. Two watchers on one device wrote to one log and
@@ -25,7 +25,7 @@ Four rules, each of them a failure somebody had:
 Liveness and stopping go through FILES, not pids. Every Bash call here gets its
 own PID namespace, so a pid recorded by one call is meaningless to the next —
 `kill -0` on it fails for a process that is running perfectly well, and `kill`
-cannot reach it either. Measured 17 Sep 2026 while building this: a pid-file
+cannot reach it either. Measured while building this: a pid-file
 lock reported "NOT watching" over a live watcher and then let a second one
 start, which is the exact failure this is meant to prevent. So the log's mtime
 is the heartbeat, and a stop is a file the watcher polls for.
@@ -75,12 +75,12 @@ def diff(was, now_):
     Counted, not set-based. A list can hold the same text more than once — four
     rows all reading "Search" is a real screen — and membership tests then say
     "nothing added, nothing removed, everything moved" when two rows genuinely
-    arrived. Measured 17 Sep 2026 on the springboard home screen, which is
+    arrived. Measured on the springboard home screen, which is
     exactly that shape.
 
     A row present in both has not left the list even if it has moved or changed
     visibility, and calling that "removed" would be wrong — that distinction is
-    the whole of what PROJ-1013 turned on.
+    the whole of what a list-expiry investigation turns on.
     """
     was_t = collections.Counter(t for t, _ in was)
     now_t = collections.Counter(t for t, _ in now_)

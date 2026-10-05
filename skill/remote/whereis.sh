@@ -6,7 +6,7 @@
 # Asked of the machine's own login shell, for the same reason remote/javahome.sh
 # asks it about the JDK: a tool that was installed anywhere but the default lives
 # on a PATH set in a shell init file, and a non-interactive shell does not read
-# one. Measured 21 Sep 2026 on this machine — Maestro is at
+# one. Measured on a machine where Maestro is at
 # /mnt/sda/User/Programs/maestro/bin, exported from ~/.bashrc, which ssh and any
 # launcher without a terminal both skip.
 #

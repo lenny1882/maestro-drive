@@ -45,7 +45,7 @@ fi
 # `writer | drain_grep -q` fails when grep matches, exits, and the writer — bash's
 # printf writes one line per write(2) into a pipe — is killed by SIGPIPE on its
 # next line: a false FAIL on text that matched. Rare, because it needs the
-# scheduler to run grep between two of the writer's writes; seen 24 Sep as two
+# scheduler to run grep between two of the writer's writes; seen as two
 # different tests failing once each in five runs. Assertions on a variable use
 # a here-string instead; this is for the ones that pipe a command.
 drain_grep() { local r=0; grep "$@" || r=$?; cat > /dev/null; return "$r"; }
@@ -86,8 +86,7 @@ done
 
 # _ssh passes stdin to the remote command, so an ssh call inside a loop reading
 # from stdin runs once and the rest of the list disappears with a zero exit.
-# Three sightings in one afternoon on 17 Sep 2026, in code written beside a
-# comment warning about it. This was the second half of ship.sh.
+# It has been written three times, in code beside a comment warning about it. This was the second half of ship.sh.
 python3 "$REPO/skill/bin/lint-stdin.py" \
   "$REPO"/skill/bin/*.sh "$REPO"/skill/remote/*.sh "$REPO"/skill/hooks/*.sh \
   "$REPO"/skill/setup/*.sh >"$TMP/lint" 2>&1 \
@@ -124,7 +123,7 @@ sed -n "/^static_default() {/,/^}/p;/^splice_profile() {/,/^}/p;/^drop_profile()
   && ok "static address declines to guess from a non-address" \
   || no "static address declines to guess from a non-address" "got $(static_default not-an-ip)"
 
-# A commented-out arm is not an arm. Found 18 Sep against a Mac whose
+# A commented-out arm is not an arm. Found against a Mac whose
 # HomeNet:Main arm had been commented out by hand: unanchored, the pattern
 # matched INSIDE the comment — starting after the #, because what follows it is
 # whitespace — and the run carried on to the next `;;` that did begin a line,
@@ -312,8 +311,8 @@ ssh_stub "$FR/bin"
 : > "$FR/ssh_config"; echo '{}' > "$FR/settings.json"
 printf '127.0.0.1\tlocalhost\n10.0.0.5\tsomething-unrelated\n' > "$FR/hosts"
 mkdir -p "$FR/lib"
-# The leading `n` answers "Change any of these?". Phase A stopped being
-# create-once on 18 Sep: a re-run now shows the username, the .local name and
+# The leading `n` answers "Change any of these?". Phase A is no longer
+# create-once: a re-run now shows the username, the .local name and
 # the key it recorded and offers to change them, because a renamed account on
 # the Mac was correctable only by editing every Host block by hand.
 # The `n` after the address answers "Try again?". A probe that fails now offers
@@ -370,7 +369,7 @@ fi
 # liveness probe ran `ssh <alias> true` in a loop and ate the rest of the run's
 # input whenever an alias actually answered — invisible when a person is typing,
 # fatal to a scripted run, and only reproducible against a reachable Mac, which
-# is why every test before 18 Sep 2026 missed it. ssh-copy-id is exempt: it must
+# is why earlier tests missed it. ssh-copy-id is exempt: it must
 # keep stdin to read the password.
 # Message text mentioning ssh is not an invocation: say/warn/would/ok all take
 # a quoted string, and one of them prints the very command a dry run WOULD run.
@@ -418,7 +417,7 @@ grep -qE 'ssh -tt "\$alias" "set -e; \$install_cmds"' "$W" \
 # says "Network is unreachable", and phase B reported it as Remote Login being
 # off and offered to write the block unverified — the two-of-three this item
 # exists to prevent, arrived at by believing a probe that never ran. Measured
-# 18 Sep 2026 against the live Mac: raw address 255, same address with the
+# against a live Mac: raw address 255, same address with the
 # ProxyCommand 0. Phase A's ssh-copy-id and its BatchMode proof are the same
 # shape, and are why a fresh machine cannot be set up from inside a session.
 bare_probe=$(python3 - "$W" <<'PROBE'
@@ -475,7 +474,7 @@ fi
 
 # --- a probe that fails says what to do about it ------------------------------
 # Remote Login being off is the failure this hits most, and it is the one a
-# person cannot guess the fix for. Before 18 Sep the wizard printed all three
+# person cannot guess the fix for. The wizard once printed all three
 # causes at once and offered only "write it anyway", so the two useful moves —
 # turn the setting on, then try again — were both absent. Each diagnosis is
 # checked for the action it should name and for the ones it should not: an
@@ -532,7 +531,7 @@ grep -q "did not say why" <<< "$d" \
   && ok "an unrecognised error says it is unrecognised" \
   || no "an unrecognised error says it is unrecognised" "$d"
 
-# The one this hit in the field, 18 Sep. Something is listening on 22 and hangs
+# The one this hit in the field. Something is listening on 22 and hangs
 # up mid-handshake, which on a Mac is Remote Login on but not for this account:
 # an account outside com.apple.access_ssh is dropped during the banner exchange
 # rather than told no, so it never arrives as Permission denied. It fell through
@@ -575,7 +574,7 @@ done
   || no "every arm that could be Remote Login says how to turn it on" "missed:$missing"
 
 # The sandbox proxy refusing an address, which is not the Mac at all. Measured
-# 18 Sep against a real Mac on a new network: an address in allowedDomains gets
+# against a real Mac on a new network: an address in allowedDomains gets
 # a connection the Mac then answers, one that is not gets "Bad Gateway" from
 # socat before anything leaves this machine — and ssh reports that as
 # kex_exchange_identification, which reads as a Mac refusing a login.
@@ -629,8 +628,8 @@ grep -q "sandbox proxy" <<< "$npx" \
   && no "outside a session: nothing is written before the probe" "it wrote allowedDomains first" \
   || ok "outside a session: nothing is written before the probe"
 
-# Two machines on one subnet with nothing passing between them. Found 18 Sep
-# after an afternoon on the Mac: Remote Login on for all users, sshd accepting
+# Two machines on one subnet with nothing passing between them. Found with
+# everything on the Mac checked: Remote Login on for all users, sshd accepting
 # its own loopback, the Mac holding the address it said it held, and neither
 # machine able to ping the other. The access point was refusing
 # station-to-station traffic, which nothing on either machine reveals — and
@@ -641,8 +640,8 @@ grep -q "does not answer ARP" <<< "$d" \
   && ok "same subnet with no ARP reply is named as the access point, not the Mac" \
   || no "same subnet with no ARP reply is named as the access point, not the Mac" "$d"
 
-# The useful part is that it says the Mac is fine, because the Mac is where an
-# afternoon goes otherwise.
+# The useful part is that it says the Mac is fine, because otherwise the Mac is
+# where the time goes.
 grep -q "Nothing on the Mac" <<< "$d" \
   && ok "isolation says explicitly that nothing on the Mac is wrong" \
   || no "isolation says explicitly that nothing on the Mac is wrong" "$d"
@@ -760,8 +759,8 @@ grep -q "unverified" <<< "$r" \
         "$(printf '%s' "$r" | tail -6)"
 
 # --- the write path, for real ------------------------------------------------
-# Everything above runs --dry-run, so until 18 Sep 2026 the wizard had never
-# written anything, even to a copy. Running it for real found three defects in
+# Everything above runs --dry-run, so until this section existed the wizard
+# had never written anything, even to a copy. Running it for real found three defects in
 # one pass. sudo is stubbed on PATH rather than invoked, so /etc/hosts here is a
 # file in $TMP and the real one is never touched.
 RW="$TMP/realwrite"; mkdir -p "$RW/lib" "$RW/bin"
@@ -956,7 +955,7 @@ grep -q "nothing is written" <<< "$l" \
 # and the second reads as a repeat of the first. Saying yes once left the file
 # untouched with no sudo prompt, which is indistinguishable from sudo failing,
 # and every test passed because each stream happened to carry a spare answer.
-# Reported 18 Sep 2026. So the assertion is the count: one yes writes the file.
+# So the assertion is the count: one yes writes the file.
 HW="$TMP/hostswrite"; mkdir -p "$HW/lib" "$HW/bin"
 ssh_stub "$HW/bin"
 printf '#!/bin/sh\ncase "$1" in -p) shift;; esac\nexec "$@"\n' > "$HW/bin/sudo"
@@ -1013,7 +1012,7 @@ printf '%s' "$hwn" | drain_grep -q -- "--hosts" \
         "$(printf '%s' "$hwn" | tail -6)"
 
 # --- phase A as an editor ----------------------------------------------------
-# What phase A records goes stale. The Mac's account was renamed on 18 Sep and
+# What phase A records goes stale. When the Mac's account is renamed,
 # the wizard had no way to say so: the username is read back out of a Host
 # block's User line, was never printed, and could only be corrected by editing
 # every block by hand. Three blocks here, because one Mac has one account name
@@ -1385,7 +1384,7 @@ jq -e '.mcpServers["someone-elses-server"] and .projects["/some/path"]
   || no "uninstall leaves other servers and account state alone" "$(jq -c 'keys' "$HOME/.claude.json")"
 
 echo "upgrading from the old name (item 98)"
-# The package was maestro-remote-mac until 21 Sep 2026. An upgrade across the
+# The package was maestro-remote-mac until item 98. An upgrade across the
 # rename is the one case the OWNS strip cannot see on its own: the entries
 # already in settings.json, and the directories already on disk, carry the old
 # name. Left behind they are not clutter — a second skill directory is a second

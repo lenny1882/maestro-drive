@@ -3,14 +3,11 @@
 # maestro-drive driver call that taps literal coordinates.
 #
 # Why. Hand-walking a screen the project already has a journey for is the most
-# expensive habit in this workflow and the most repeated: raised 21 Aug, 3 Sep
-# and twice on 4 Sep 2026. Three memories say don't, and all three were loaded
-# into context on the session that did it anyway. On 4 Sep `ls maestro/journeys/`
-# was the second tool call of the session, printed the project's login and
-# device-setup journeys, and both were then typed out by hand — nine round trips
-# and five raw `tap x y` calls for what those two files run in about a
-# minute. Prose in a skill or a memory is read before the screen is on the
-# table; this fires while it is.
+# expensive habit in this workflow and the most repeated. Listing
+# `maestro/journeys/` does not prevent it: a login and a device-setup journey
+# typed out by hand is nine round trips and five raw `tap x y` calls for what
+# those two files run in about a minute. Prose in a skill is read before the
+# screen is on the table; this fires while it is.
 #
 # What it matches. Any Bash command that mentions `driver.sh` AND contains a
 # `tap` or `swipe` verb followed by literal numbers — `driver.sh tap 293 325`,

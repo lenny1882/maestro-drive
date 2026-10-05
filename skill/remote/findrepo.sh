@@ -2,8 +2,8 @@
 # Runs ON THE MAC. Every git checkout under the home directory, with its origin,
 # one per line: "<path>\t<origin url or ->".
 #
-# Session B on 11 Aug 2026 spent three SSH calls hunting for the checkout by
-# hand — `ls -d ~/src/* ~/Development/* ~/Projects/*`, then a find. Guessing at
+# Hunting for the checkout by hand takes three SSH calls — `ls -d ~/src/*
+# ~/Development/* ~/Projects/*`, then a find. Guessing at
 # roots is the slow way round; the fast way is one bounded find that prunes the
 # caches, because those are where the thousands of directories are. On a real
 # Mac: 3.3 s and twelve checkouts, against 4.3 s and a screenful of .pub-cache

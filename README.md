@@ -6,15 +6,15 @@ is. `TRANSPORT` in the project's conf says which: `ssh` for a Mac across the
 network, which is what this was built for and what most of this page describes,
 or `local` for a device on the machine running the skill, where nothing goes
 over ssh and every URL is `127.0.0.1`. The local path has driven a real device
-once — an Android emulator on this machine, 21 Sep 2026; no local iOS simulator
+— an Android emulator on the machine running the skill; no local iOS simulator
 yet.
 
 The problem it solves is that the obvious route does not work. Maestro's own MCP
 server compiles the driver port in as a literal `22087` with no override, and
 its session map has no invalidation path, so `inspect_screen` returns whatever
 device is on that port **regardless of the `device_id` you pass** — with a
-response that looks entirely correct. Measured on 12 August 2026: asked for the
-iPhone, it returned the iPad's tree. Screenshot-driven tapping is no better:
+response that looks entirely correct. Measured: asked for the iPhone, it
+returned the iPad's tree. Screenshot-driven tapping is no better:
 a container's first child can be a marker that redefines the coordinate space
 for its siblings, so an element's reported frame is often not where the element
 is, and a tap computed off the picture lands somewhere else.
@@ -88,10 +88,9 @@ Or from a clone, if you intend to work on the toolkit:
 **Prefer `--link` if you will ever edit the skill.** It puts a symlink at
 `~/.claude/skills/maestro-drive` pointing at this repo's `skill/`, which
 means the live path and the source are the same directory. Without it they are
-not, and the failure that follows is a quiet one: three separate findings were
-once written straight into a published copy by sessions that believed it was the
-source, and all three would have been destroyed by the next publish with nobody
-the wiser.
+not, and the failure that follows is a quiet one: a finding written into the
+published copy in the belief that it is the source is destroyed by the next
+publish, and nothing reports it.
 
 Re-running the installer is safe and is how you upgrade. It rewrites its own
 entries in `~/.claude/settings.json` and `~/.claude.json` each time rather than
@@ -240,7 +239,7 @@ It runs three things. First the gates that must hold before anything is
 published: every shell and Python file parses, every shell script carries its
 exec bit, and no `ssh` call sits inside a loop reading from stdin — that last
 one silently runs the loop once and drops the rest of the list with a zero exit,
-and it was found three times in one afternoon. Then the packaging: install,
+and it is easy to write without noticing. Then the packaging: install,
 re-install without drift, uninstall, and an install from the release tarball
 rather than from the checkout. Then the skill itself — the 360 behaviour cases
 in `skill/test/run-tests.sh`, run out of the *installed* copy, against
@@ -252,6 +251,57 @@ but cannot run says so instead of reporting success. It also compares the
 installed tree against what belongs in it, file for file, ignoring the two
 things that appear only after use — `__pycache__`, and `reference/staging/`
 where `bin/notes.sh promote` parks findings.
+
+`skill/test/run-tests.sh` can be run on its own, from the checkout or from an
+installed copy. It runs only the skill's behaviour cases and skips the parse
+gates and the packaging round trip, so it is the quicker loop while editing a
+script under `skill/`. Run `./test/run-tests.sh` before committing; the release
+workflow runs that one and will not build a tarball past a failure.
+
+`bin/driver.sh` binds to a driver on the Mac as it loads, so the suite tests it
+against a fake device instead: a stub `curl` on `PATH` that always answers,
+always reports the screen as still and serves a captured hierarchy from
+`test/fixtures/`, plus a stub `lib.sh` in place of the real one. Flag parsing,
+the settle rule and the keyboard checks are all tested this way, offline. Reuse
+that harness for any new `driver.sh` behaviour rather than building another.
+
+## Code that runs on the Mac
+
+Anything under `skill/remote/`, or sent to the Mac as part of an SSH command,
+runs under macOS tools and, unless told otherwise, under the Mac's login shell,
+which is zsh. Three zsh differences have each broken a script here while every
+Linux test passed:
+
+- `path` is tied to `PATH` in zsh. A loop such as `while read -r st path`
+  empties `PATH` for the rest of the command, and the next lines fail with
+  `command not found`. Never use `path` as a variable name; `remote/gitstate.sh`
+  uses `_p`, and a test fails if `path` comes back.
+- An unquoted expansion is not word-split: `for g in $LIST` sees one word.
+- A variable used as a `case` pattern is matched literally, not as a glob.
+
+Because of the last two, `remote/gitstate.sh` and `remote/appcheck.sh` are run
+with `sh <file> --run …` rather than sourced into the shell SSH hands over. Give
+any new remote script the same entry point.
+
+Scripts that run on both machines must also allow for GNU and BSD tools
+differing. `stat -f` exists on GNU as well as BSD and means *file system
+status* there: it succeeds and prints something that is not a timestamp. Try
+`stat -c %Y` first and check the answer is numeric before falling back to
+`stat -f %m`, as `remote/appcheck.sh` does.
+
+## Working on the repo from inside a Claude Code session
+
+The sandbox allows writes only to the working directory and `$TMPDIR`. A write
+anywhere else is refused, and the refusal surfaces as `EROFS`, "Read-only file
+system", although the filesystem is writable. Do not try to remount anything;
+run the write from your own terminal.
+
+The sandbox writes a `.claude/.cc-writes` directory into whatever directory a
+command runs in, `skill/` included. This repo's `.gitignore` covers only
+`.claude/` at the root, so a copy under `skill/` shows as untracked, and an
+install from the checkout without `--link` copies it into
+`~/.claude/skills/maestro-drive` with the rest of `skill/`. Run commands from
+the repo root, and delete `skill/.claude/` if it appears.
 
 ## Releasing
 

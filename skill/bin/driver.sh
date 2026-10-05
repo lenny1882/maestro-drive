@@ -97,7 +97,7 @@ _up() { curl -s -o /dev/null -m 5 -w '%{http_code}' "$BASE/status" 2>/dev/null; 
 # it once and retry rather than making that the caller's problem.
 #
 # UNVERIFIED, deliberately kept: this recovers the case where a device's driver
-# is still alive but on a different port. Attempts on 12 Aug could not produce
+# is still alive but on a different port. Attempts to reproduce it could not produce
 # that case — naming a device to the MCP server or the CLI *destroys* that
 # device's driver rather than moving it, which the map refresh in _driver_bind
 # already reports correctly. This costs one SSH call on a path that is already
@@ -125,7 +125,7 @@ _devdrv_hint() {
   local t
   # A locked phone is the cheapest, commonest and most actionable cause: XCUITest
   # cannot attach to a locked springboard, and it surfaces as this same relay /
-  # connection failure rather than as a lock. Measured 10 Sep 2026 — unlocked, the
+  # connection failure rather than as a lock. Measured — unlocked, the
   # driver starts 3/3; on the PIN screen it fails every time. So check it first.
   # The verb self-gates: exit 2 means the question does not apply to this kind of
   # device, which is what a simulator udid gets, so nothing here needs to know
@@ -143,7 +143,7 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
   printf '%s\n' "$t" | sed 's/^/    /' >&2
   # The face-up crash (item 50) has a distinct cause and a distinct fix, so name
   # it before the generic XCTest-death message below — a restart alone does not
-  # help while the phone stays flat. Reproduced live 11 Sep: a raw /touch on a
+  # help while the phone stays flat. Reproduced live: a raw /touch on a
   # face-up XS Max kills the runner at ScreenSizeHelper.swift with "Not
   # implemented yet". The on-device runner still crashes even though the jar's
   # own ScreenSizeHelper.swift handles .faceUp — the runner is built from older
@@ -164,9 +164,9 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
   echo "  ~40-70s even with the CoreDevice tunnel still 'connected', so a full driver" >&2
   echo "  restart is the fix (bin/device.sh up <udid>) — a tunnel wake does nothing." >&2
   echo "  driver.sh restarts a registered device itself. If it keeps dying within a couple" >&2
-  echo "  of minutes, restart CoreDevice on the Mac: sudo killall -9 remoted. On 24 Sep that" >&2
-  echo "  took sessions from under 2 minutes to over 10; retrying and restarting the phone" >&2
-  echo "  did not (item 46)." >&2
+  echo "  of minutes, restart CoreDevice on the Mac: sudo killall -9 remoted. That takes" >&2
+  echo "  driver sessions from under 2 minutes to over 10; retrying and restarting the" >&2
+  echo "  phone do not (item 46)." >&2
 }
 
 # Is DEV a physical device this session brought up (bin/device.sh), rather than a
@@ -174,7 +174,7 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
 _is_device() { [ -n "${DEV:-}" ] && grep -q "^$DEV " "$DEVICE_MAP" 2>/dev/null; }
 
 # Count this phone's automatic restarts, and on the third within ten minutes
-# say what fixed that on 24 Sep: restarting CoreDevice on the Mac. Retrying,
+# say what fixes it: restarting CoreDevice on the Mac. Retrying,
 # restarting the phone and changing the driver all left sessions dying within
 # two minutes; `sudo killall -9 remoted` took them past ten (item 46). It needs
 # the Mac user's password, so it is said, not done.
@@ -185,8 +185,8 @@ _restarts_note() {
     mv -f "$f.tmp" "$f"
   n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
   [ "${n:-0}" -ge 3 ] || return 0
-  echo "note: this is restart $n for $DEV in 10 minutes. Sessions this short came from the" >&2
-  echo "  Mac's CoreDevice service on 24 Sep, not the phone or the driver. Restart it on the" >&2
+  echo "note: this is restart $n for $DEV in 10 minutes. Driver sessions this short come" >&2
+  echo "  from the Mac's CoreDevice service, not the phone or the driver. Restart it on the" >&2
   echo "  Mac, which needs its password:  sudo killall -9 remoted   (item 46)" >&2
 }
 
@@ -203,15 +203,15 @@ _ensure_device() {
   echo "note: the device driver for $DEV is not answering — restarting it (item 46)" >&2
   # Name the cause BEFORE restarting. The restart empties the phone's log, so
   # afterwards there is nothing left to read, and a restart that works never
-  # reaches the hint in _start. From 11 Sep, when the restart below started
-  # working, until 24 Sep, a phone lying flat crashed on every tap and came back
-  # silently, and the face-up crash was never named (items 50, 46).
+  # reaches the hint in _start. Without this, a phone lying flat crashed on
+  # every tap and came back silently, and the face-up crash was never named
+  # (items 50, 46).
   _devdrv_hint
   _restarts_note
   # bash <script>, not the path alone. device.sh used to ship without an execute
   # bit — the old rsync-to-build/ publish did not chmod and ~/.claude refuses
   # chmod +x — so a direct "$HERE/device.sh" failed with "Permission denied" and
-  # the recovery never ran, measured live on the XS Max, 11 Sep. The repo now
+  # the recovery never ran, measured live on the XS Max. The repo now
   # records the bit and git archive carries it into the release tarball, but the
   # call stays as it is: it costs nothing and it works whatever the mode is.
   bash "$HERE/device.sh" up "$DEV" "$DRIVER_PORT" >&2 || return 1
@@ -235,7 +235,7 @@ _start() {
   _push "$HERE/../remote/relay.py" "$RHELP/relay.py" || return 1
   # pkill matches any relay on this DPORT, whatever its target: a stale relay left
   # pointing at the wrong port holds the socket and beats the correct one to it,
-  # so an exact <DPORT> <DRIVER_PORT> match would leave it running (seen 10 Sep).
+  # so an exact <DPORT> <DRIVER_PORT> match would leave it running (seen live).
   _ssh "lsof -nP -iTCP:$DRIVER_PORT -sTCP:LISTEN >/dev/null 2>&1 || { echo 'nothing listening on $DRIVER_PORT — bin/drivers.sh up ${DEV} (or bin/device.sh up ${DEV} for a phone)' >&2; exit 1; }
 pkill -f 'relay.py $DPORT ' 2>/dev/null
 cd '$RDIR' && nohup python3 '$RHELP/relay.py' $DPORT $DRIVER_PORT >/dev/null 2>&1 &
@@ -255,14 +255,15 @@ _hier() {
 
 # A simulator that has stopped taking touches still serves /viewHierarchy
 # perfectly, so every read looks healthy and every write is silently discarded.
-# Measured 16 Sep 2026 after a load spike: `tapon` and `text` both returned ok,
-# the tree read correctly, and nothing reached the app. Two calls went on proving
-# it, and the natural reading — "the app is broken" — was the claim under test.
+# Measured after a load spike: `tapon` and `text` both returned ok, the tree
+# read correctly, and nothing reached the app. The natural reading — "the app is
+# broken" — is then indistinguishable from the claim under test.
 #
 # There is no route that asks the driver whether touch injection is alive, so
 # this is inferred: an action verb that leaves the hierarchy byte-for-byte
 # identical, twice running, is the signature. A genuinely static screen gives a
-# false positive, which costs a line of stderr; the missed case costs a session.
+# false positive, which costs a line of stderr; the missed case costs every
+# conclusion drawn after it.
 _WEDGE_SEEN=0
 _wedge_check() {  # _wedge_check <hierarchy-before> <hierarchy-after>
   [ -n "${1:-}" ] && [ "$1" = "${2:-}" ] || { _WEDGE_SEEN=0; return 0; }
@@ -271,7 +272,7 @@ _wedge_check() {  # _wedge_check <hierarchy-before> <hierarchy-after>
   echo "two actions in a row left the hierarchy byte-identical." >&2
   echo "  That is what a simulator with dead touch injection looks like: reads" >&2
   echo "  keep working, writes are discarded, and every verb still reports ok" >&2
-  echo "  (measured 16 Sep 2026 after a load spike). Confirm before concluding" >&2
+  echo "  (typically after a load spike on the Mac). Confirm before concluding" >&2
   echo "  anything about the app:  $0 probe" >&2
   _WEDGE_SEEN=0
 }
@@ -355,7 +356,7 @@ _resolve() {  # _resolve <pattern> [index] [--anyway|--enabled|--disabled] -- pr
 
 # The screen counts as moving while a loading spinner turns, so this waits on
 # backend latency as much as on animation — hence 20s rather than the 10 that
-# lost a run on 11 Aug when a screen waiting on a slow request came back late. It returns the
+# lost a run when a screen waiting on a slow request came back late. It returns the
 # moment the screen is still, so a generous limit costs nothing on a fast
 # screen. Override for a whole run with SETTLE=<seconds>.
 _settle() {  # _settle [timeout-seconds]
@@ -373,8 +374,8 @@ _settle() {  # _settle [timeout-seconds]
     esac
     # After 2s of "moving", ask the tree too (BACKLOG item 105). On a phone
     # /isScreenStatic said moving on 17-19 of 20 reads of a still screen, while
-    # the parsed tree was identical read to read on 16-17 of those — measured 24
-    # Sep 2026 on the XS Max, Settings and the home screen. Two identical trees
+    # the parsed tree was identical read to read on 16-17 of those — measured on
+    # the XS Max, Settings and the home screen. Two identical trees
     # count as settled, unless the tree holds an activity or progress indicator:
     # a spinner can turn without changing the tree, and settle is meant to wait
     # for it. A read costs about a second on a phone, so this only starts once
@@ -411,7 +412,7 @@ print("SPIN" if spins(d.get("axElement", d)) else
   done
   if [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' "$BASE/status" 2>/dev/null)" = 200 ]; then
     echo "settle: screen still moving after ${limit}s — the driver is up, so the screen itself" >&2
-    echo "  keeps changing (an animation, a clock, a spinner; a phone's home screen did on 24 Sep)." >&2
+    echo "  keeps changing (an animation, a clock, a spinner, a phone's home screen)." >&2
     echo "  SETTLE=0 skips the wait for such a screen." >&2
   else
     echo "settle: no still screen after ${limit}s, and the driver is not answering now" >&2
@@ -443,9 +444,9 @@ _type() {  # _type <pattern> <text>
 # The route is swipeV2, not swipe. POST /swipe is answered 200 whether or not it
 # does anything, and on an iPad Pro 11-inch driving a Flutter grid it did
 # nothing at all — fourteen consecutive calls, fourteen identical hierarchies
-# (16 Sep 2026), while the same payload to /swipeV2 moved the list first try.
+# while the same payload to /swipeV2 moved the list first try.
 # It is NOT simply dead: on an iPhone 16 Pro Max against springboard it paged
-# the home screen normally (measured 17 Sep 2026). So /swipe works somewhere and
+# the home screen normally (measured). So /swipe works somewhere and
 # not elsewhere, which is worse than a route that never works — swipeV2 is the
 # route Maestro itself posts and the one the driver's SwipeRouteHandlerV2 class
 # serves, so everything here goes through it. BACKLOG item 69.
@@ -475,8 +476,8 @@ _scrollto() {  # _scrollto <pattern> <direction> <timeout>
 }
 
 # --- watching a list change, with nobody touching the device ----------------
-# One watcher per device, because two writing one log made every change arrive
-# twice (15 Sep 2026).
+# One watcher per device, because two writing one log make every change arrive
+# twice.
 #
 # It runs in the FOREGROUND and streams. That is deliberate: `nohup ... &` from
 # this side is dead by the next call (item 71), so the caller starts this with
@@ -486,7 +487,7 @@ _scrollto() {  # _scrollto <pattern> <direction> <timeout>
 # LIVENESS AND STOPPING GO THROUGH FILES, NOT PIDS. Every Bash call gets its own
 # PID namespace, so a pid written by one call means nothing to the next: `kill
 # -0` fails on a process that is running fine, and `kill` cannot reach it.
-# Measured 17 Sep 2026 while building this — the first cut used a pid file, and
+# Measured while building this — the first cut used a pid file, and
 # it reported "NOT watching" over a live watcher and then let a second one
 # start, which is the failure the lock exists to prevent. So:
 #
@@ -562,9 +563,9 @@ _watch_status() {
   elif [ -r "$_WATCH_CLAIM" ]; then
     echo "NOT watching $DEV — a claim is there but the log has not moved for $(_watch_age)s; the watcher is gone"
   else
-    # Saying so plainly is the point of this verb. A session reported that it
-    # was watching for an hour while nothing ran, because the start had been
-    # refused at the permission prompt and nobody checked (15 Sep 2026).
+    # Saying so plainly is the point of this verb. A start refused at the
+    # permission prompt leaves nothing running, and without this the caller
+    # believes it is watching.
     echo "NOT watching $DEV"
   fi
   if [ -r "$_WATCH_LOG" ]; then
@@ -668,14 +669,14 @@ _expect_cmd() {  # _expect_cmd <command> <timeout>
 
 # --- putting the keyboard away ----------------------------------------------
 # There is no route for it. The driver's own client names eighteen
-# (`xcuitest/XCTestDriverClient.class`, re-read 13 Aug 2026) and not one of them
+# (`xcuitest/XCTestDriverClient.class`) and not one of them
 # hides the keyboard, because iOS exposes no API to do it. Maestro's own
 # `hideKeyboard` is Kotlin in the client: swipes from the middle of the screen,
 # then a check — which upstream documents as flaky, recommending a tap on
 # something non-interactive instead.
 #
 # On the app measured here that advice is simply wrong. Six taps on blank parts
-# of the screen and one swipe, on 13 Aug 2026, left the keyboard up every time;
+# of the screen and one swipe left the keyboard up every time;
 # `key return` put it away every time. So this tries both, in that order,
 # because the blank tap cannot do anything else and `key return` can:
 #
@@ -687,9 +688,9 @@ _expect_cmd() {  # _expect_cmd <command> <timeout>
 #                            caller to find out. --no-key stops before it.
 #
 # Either way the keyboard is read back afterwards. A tap meant to do nothing is
-# exactly the kind that fails silently, and session E spent about ten calls and
-# five minutes on 13 Aug concluding the keyboard would not drop — from readings
-# taken after a command that had re-opened the field and raised it again.
+# exactly the kind that fails silently, and a reading taken after a command that
+# re-opened the field and raised the keyboard again looks like a keyboard that
+# will not drop.
 
 # 0 the keyboard is up, 1 it is down, 2 the driver gave no answer. The third
 # case matters: an empty reply read as "down" would make dismiss report success
@@ -781,9 +782,8 @@ MSG
 # --- screenshots -----------------------------------------------------------
 # `/screenshot` hands back the device's native pixels, which on a
 # landscape-locked iPad means the picture arrives on its side and at twice the
-# points it is measured in. Both were corrected by hand until now — eight
-# `sips -r 270` calls in one session, then hand-written crops against a
-# 1206x2622 source in another.
+# points it is measured in. Without this, both have to be corrected by hand —
+# `sips -r 270` calls, then hand-written crops against a 1206x2622 source.
 #
 # So a shot is delivered upright and croppable in the same coordinates as
 # everything else here: points, app space, the numbers `driver.sh point` gives.
@@ -1116,11 +1116,10 @@ except Exception: print("")')
   settle)   _settle "${2:-10}" ;;
   script)   shift
             # --steps runs a sequence with no file. SKILL.md has always said to
-            # "recompose units on the command line", and until 17 Sep 2026 there
-            # was no way to: `script` took file names only, so trying a variant
-            # meant writing a scratch .journey into $TMPDIR. One session wrote
-            # six of them in an afternoon — invisible to the project, untested,
-            # and a fresh set every time.
+            # "recompose units on the command line", and without this there is
+            # no way to: with file names only, trying a variant means writing a
+            # scratch .journey into $TMPDIR — invisible to the project,
+            # untested, and a fresh set every time.
             if [ "${1:-}" = --steps ]; then
               [ $# -ge 2 ] || { echo "usage: $0 script --steps 'tapon \"^X$\"; expect \"^Y$\"'" >&2; exit 2; }
               shift
