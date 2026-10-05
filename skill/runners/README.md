@@ -239,14 +239,25 @@ executable path nor an `Info.plist`; `dumpsys package <id>` gives
 the Android answer takes. Until that is settled, the single most valuable check
 in `preflight.sh` does not cross to Android.
 
-**`android driver-up`, `driver-down`, `driver-scan` — a different driver
-entirely.** Maestro's Android driver is an instrumented APK reached through
-`adb forward`, not an `xcodebuild test-without-building` run, so nothing about
-`TEST_RUNNER_PORT` or the `maestro-driver-iosUITests-Runner` process scan
-survives. The open question is the one this package cares most about: whether
-the port can be chosen per device at all. `bin/drivers.sh` exists because
-Maestro's iOS client hardcodes 22087; if the Android client does the same, the
-several-devices-at-once property does not cross either.
+**`android driver-up`, `driver-down`, `driver-scan` — there is no standing
+driver.** Measured against Maestro 2.10.0 on two emulators at once. Every
+`maestro` run installs `dev.mobile.maestro` and `dev.mobile.maestro.test`,
+starts `am instrument … -e port <n>` and removes both APKs when it ends. The
+server listens on the device's own port `<n>`, and the host reaches it through
+one adb stream per socket, so nothing binds on the host and no `adb forward`
+exists. Two emulators therefore never collide on a port, and the ports map has
+nothing to allocate. Without `--driver-host-port`, `maestro test` picks a free
+port per run. A second run on the same emulator takes the driver from the
+first, which fails with `DeviceServerDiedException`.
+
+So `driver-up` exits 2: a driver started ahead of a flow would be replaced by
+the flow's own, and nothing in this package speaks its gRPC protocol.
+`driver-scan` lists the runs in flight as `<serial> <port> <pid>`, reading the
+port from the run's own `maestro.log`. `driver-down` stops a device's runs,
+removes the driver APKs and deletes the device's records from
+`~/.maestro/sessions`. A record left behind makes Maestro believe the device is
+still held for 21 seconds, and a run started in that window skips starting its
+own driver and fails.
 
 **`react-native variants` — two lists, not one.** iOS schemes live in
 `ios/*.xcodeproj`, Android product flavours in `android/app/build.gradle`, and

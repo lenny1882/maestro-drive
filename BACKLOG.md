@@ -6,8 +6,9 @@
 - **90.** The wall shows simulators only, and a phone is a device too — gated on finding a way to stream a physical device's screen.
 - **87.** Flutter and iOS are wired in, not plugged in.
 - **107.** The `MaterialApp.router` dropdown report has not been sent upstream — re-test against Flutter 3.49 first.
+- **108.** Android `boot` gives up on a second emulator that is still coming up.
 
-Next item number: 108.
+Next item number: 109.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -405,14 +406,49 @@ comments in `build.sh` and `driver.sh`.
   `DEFAULT_DRIVER_HOST_PORT = 7001` in `maestro/android/AndroidDeviceConnection`;
   it is validated at startup (`--driver-host-port 1` prints
   `Requested driver host port 1 is not available`, exit 1; 7099 runs the flow,
-  exit 0). So Android does not share the iOS client's hardcoded 22087, and
-  `bin/drivers.sh`'s ports map has an Android half to allocate into. The APKs
-  `maestro-app.apk` (11.7 MB) and `maestro-server.apk` (0.9 MB) are inside
-  `maestro-client.jar`, not `~/.maestro/deps`; they install as
-  `dev.mobile.maestro` and `dev.mobile.maestro.test` for a run and are gone
+  exit 0). The APKs `maestro-app.apk` (11.7 MB) and `maestro-server.apk`
+  (0.9 MB) are inside `maestro-client.jar`, not `~/.maestro/deps`; they install
+  as `dev.mobile.maestro` and `dev.mobile.maestro.test` for a run and are gone
   from `pm list packages` afterwards. `adb forward --list` stays empty during a
   flow and no host socket appears on 7001 or 7099: Maestro reaches the device
   through dadb, so `driver-scan` on Android cannot be `adb forward`.
+- 4.4 The three verbs, measured on `Pixel_6_Pro_API_34` and `Small_Phone`
+  running at once. Android has no standing driver, so the ports map has no
+  Android half:
+  - The port is the device's. `AndroidDriver` starts
+    `am instrument … -e port <n>`, the emulator's `/proc/net/tcp6` showed 7101
+    listening for `--driver-host-port 7101`, and the host connects through one
+    adb stream per socket (`AdbSocketFactory`).
+  - Two emulators ran flows side by side, both passing. Without
+    `--driver-host-port`, `maestro test` picks a free port per run (37131,
+    42439, 35277, 43091), not 7001.
+  - One emulator holds one run. A second run on it took the driver, and the
+    first failed with `DeviceServerDiedException … Command failed (tcp:7101)`.
+  - The driver process appears about 20 s into a run and is gone, with both
+    APKs, when the run ends.
+
+  `driver-up` exits 2 saying so: a driver started ahead of a flow would be
+  replaced by the flow's own, and nothing here speaks its gRPC protocol.
+
+  `driver-scan` prints `<serial> <port> <pid>` per `maestro.cli.AppKt` process.
+  The command line comes first, and the run's `maestro.log` (found through
+  `/proc/<pid>/fd`, or `lsof` where there is no `/proc`) fills in what it left
+  open. Two runs started in the same second share one `~/.maestro/tests/<time>/`
+  log, and reading only the log gave both processes the same device.
+
+  `driver-down` sends TERM to the device's runs and waits up to 10 s. It then
+  force-stops `dev.mobile.maestro`, uninstalls both APKs and deletes the
+  device's `ANDROID_<serial>_*` lines from `~/.maestro/sessions`. Measured
+  without that cleanup:
+  - TERM left both APKs installed.
+  - TERM also left the session record. Maestro counts a record as live for
+    21 s after its last heartbeat, so the next run on the device skipped
+    starting a driver and failed in 2 s.
+
+  With the cleanup, a run started straight after `driver-down` passed, and the
+  other emulator's run was untouched. Five offline tests.
+
+  `lsof` on macOS is not measured.
 
 *Stage 5.*
 
@@ -453,9 +489,6 @@ file.
   Done when `bin/build.sh --detect` reports an RN project and `--no-install`
   produces an artefact path. Needs node, a `react-native init` app and
   `pod install` on the Mac.
-- 4.4 Write `android driver-up`, `driver-down` and `driver-scan` against the
-  answers above. Still unmeasured: whether one emulator holds one driver as one
-  simulator does; it needs two emulators at once.
 - Android `last-used` still refuses in `runners/android/platform.sh`: an
   emulator's qcow2 userdata mtime moves whenever the emulator writes anything,
   so it shows the emulator is running, not that anything is driving it.
@@ -487,3 +520,21 @@ dropdown labels in `DRAFT-ISSUE.md` with generic ones, and post it once the
 exact text is approved.
 
 **Gated on.** Approval of the exact text before anything is posted.
+
+## 108. Android `boot` gives up on a second emulator that is still coming up — **OPEN**
+
+**What.** `runners/android/platform.sh boot` waits 180 s for a new serial to
+reach `device` state in `adb devices`, then exits 1 with "no new device
+appeared within 180s". Booting `Small_Phone` straight after
+`Pixel_6_Pro_API_34` on this machine (8 cores, 31 GB) hit that limit. The
+emulator's log ended at `Loading snapshot 'default_boot'...`, `adb devices`
+showed `emulator-5556 offline`, and the device reached `sys.boot_completed=1`
+shortly afterwards.
+
+**Why.** The caller is told the boot failed and is given no serial, while the
+emulator it started keeps running and finishes booting.
+
+**To do.** Count an `offline` serial that was not in the baseline as the new
+device, and keep waiting on it for `sys.boot_completed`. Then make the limit a
+setting and measure what two and three emulators booting back to back take
+here.

@@ -11,9 +11,9 @@
 # Four still refuse, and each refusal is a measurement rather than a gap in the
 # writing: `container` (appcheck's timestamp-and-plist pair has no Android
 # twin), `orientations` (the answer is in the APK, not in a container path),
-# `last-used` (an emulator image's mtime answers a different question) and the
-# driver trio (item 87's 4.4 — the port question IS answered, in the comment
-# there; the three verbs are that item's to write).
+# `last-used` (an emulator image's mtime answers a different question) and
+# `driver-up` (item 87's 4.4: a Maestro run brings its own driver and removes
+# it, so there is none to start ahead of one).
 #
 # Runs ON THE MACHINE WITH THE DEVICE, except `claim`.
 set -u
@@ -264,36 +264,116 @@ screenshot)
   "$ADB" -s "${1:?screenshot <id> <path>}" exec-out screencap -p > "${2:?path}"
   ;;
 
-driver-up|driver-down|driver-scan)
-  # UNANSWERED, and the largest of the three. Maestro's Android driver is not
-  # XCUITest and shares nothing with it: no xcodebuild, no TEST_RUNNER_PORT, no
-  # maestro-driver-iosUITests-Runner process to scan for. It is an instrumented
-  # APK reached through `adb forward`, which means the port mapping this package
-  # cares so much about is adb's rather than the driver's.
+driver-up)
+  # THERE IS NO STANDING DRIVER TO START. Measured against Maestro 2.10.0 on two
+  # emulators at once (item 87, 4.4):
   #
-  # ALL FOUR QUESTIONS WERE ANSWERED against Maestro 2.10.0. Item
-  # 87's 4.4 carries the answers and the commands; in short:
+  #   every `maestro` run installs dev.mobile.maestro and dev.mobile.maestro.test,
+  #     starts `am instrument … -e port <n>` and removes both APKs when it ends;
+  #     the driver process appeared about 20s into a run and was gone after it;
+  #   the server listens on the DEVICE's port <n> (/proc/net/tcp6 on the
+  #     emulator showed 7101 for --driver-host-port 7101) and the host reaches it
+  #     through an adb stream per socket (AdbSocketFactory), so nothing binds on
+  #     the host and two emulators both on the default 7001 ran side by side;
+  #   a second run on the same emulator took the driver from the first, which
+  #     failed with DeviceServerDiedException ... Command failed (tcp:7101).
   #
-  #   THE PORT CAN BE CHOSEN. `maestro --driver-host-port <n>` is a global
-  #     option, DEFAULT_DRIVER_HOST_PORT=7001 in maestro/android/
-  #     AndroidDeviceConnection, and it is validated at startup — `1` gave
-  #     "Requested driver host port 1 is not available" and exit 1. So Android
-  #     does NOT repeat the iOS client's hardcoded 22087, and several devices at
-  #     once crosses platforms.
-  #   THE APKS are maestro-app.apk and maestro-server.apk, inside Maestro's own
-  #     maestro-client.jar rather than ~/.maestro/deps, installed as
-  #     dev.mobile.maestro and dev.mobile.maestro.test for the length of a run
-  #     and gone again afterwards.
-  #   `adb forward --list` IS NOT THE ANALOGUE. It stayed empty throughout a
-  #     flow: Maestro talks to the adb server through dadb, so there is no
-  #     forward to scan and no host socket on the chosen port either.
-  #
-  # What is left here is writing the three verbs, which is 87's 4.4 and not
-  # this item's.
-  echo "runners/android $VERB: unanswered — Maestro's Android driver is an" >&2
-  echo "  instrumented APK behind 'adb forward', not an xcodebuild test run." >&2
-  echo "  See the comment in this file for what has to be measured first." >&2
+  # So a driver started here would be replaced and uninstalled by the next
+  # flow, and nothing in this package speaks its gRPC protocol anyway. The ports
+  # map has nothing to allocate either: the port lives on the device.
+  echo "runners/android driver-up: Android has no standing driver. Each maestro" >&2
+  echo "  run installs, starts and removes its own on the device, so there is" >&2
+  echo "  nothing to start ahead of a flow. driver-scan lists runs in flight." >&2
   exit 2
+  ;;
+
+driver-down)
+  # Stops every maestro run holding this device. MEASURED: TERM ended the run
+  # within a second and the driver process with it, but both APKs were still
+  # installed afterwards, where a run that finishes removes them. So the device
+  # is put back the way a finished run leaves it: force-stop, then uninstall.
+  # The other emulator's run carried on and passed.
+  #
+  # AND THE KILLED RUN'S SESSION RECORD STAYS. Maestro keeps
+  # ANDROID_<serial>_<uuid>=<heartbeat ms> in ~/.maestro/sessions, heartbeats
+  # every 5s, and counts a record as live for 21s (SessionStore). A run that
+  # finds a live record for its device does not start a driver of its own — it
+  # expects to share one — so the first run after a TERM failed in 2s with
+  # DeviceServerDiedException. Every run on this device is dead by now, so
+  # every record for it is stale and is removed. A heartbeat from another
+  # device's run that read the file before this write can put one back; it
+  # then lapses in 21s on its own.
+  _id=${1:?driver-down <id>}
+  _pids=$(sh "$0" driver-scan | awk -v d="$_id" '$1==d{print $3}')
+  [ -n "$_pids" ] && kill $_pids 2>/dev/null
+  _i=0
+  while [ -n "$_pids" ] && [ "$_i" -lt 20 ]; do
+    _left=
+    for _p in $_pids; do kill -0 "$_p" 2>/dev/null && _left="$_left $_p"; done
+    _pids=$_left
+    sleep 0.5
+    _i=$((_i + 1))
+  done
+  "$ADB" -s "$_id" shell am force-stop dev.mobile.maestro >/dev/null 2>&1
+  "$ADB" -s "$_id" uninstall dev.mobile.maestro.test >/dev/null 2>&1
+  "$ADB" -s "$_id" uninstall dev.mobile.maestro >/dev/null 2>&1
+  _ss="$HOME/.maestro/sessions"
+  if [ -f "$_ss" ] && grep -q "^ANDROID_${_id}_" "$_ss"; then
+    grep -v "^ANDROID_${_id}_" "$_ss" > "$_ss.$$" && mv -f "$_ss.$$" "$_ss"
+  fi
+  exit 0
+  ;;
+
+driver-scan)
+  # "<serial> <port> <pid>" per maestro run in flight: the run IS the driver's
+  # lifetime, so the live map is the maestro processes on this machine.
+  #
+  # The serial and port come from the run's own debug log, the line
+  # "Selected device emulator-5554 using port 43091". The command line is not
+  # enough: WITHOUT --driver-host-port, `maestro test` PICKS A FREE PORT PER RUN
+  # (measured 37131, 42439, 35277, 43091) rather than 7001, and without --device
+  # it picks the device itself. The log is the one the process holds open under
+  # ~/.maestro/tests/<time>/ — named by time, not pid, so it is found through
+  # the process's open files: /proc on Linux (measured), lsof elsewhere (not
+  # measured). The ~/.cache/maestro/logs/<time>_<pid>/ log carries the pid but
+  # was empty.
+  #
+  # ONE LOG CAN HOLD TWO RUNS. The directory is named to the second, so two
+  # runs started in the same second write to the same maestro.log, and taking
+  # its first "Selected device" line gave both processes the other run's
+  # device. So the command line goes first and the log only fills in what it
+  # left open: a log line counts when it agrees with --device and
+  # --driver-host-port wherever those were given, and only when exactly one
+  # line does. Anything still unknown prints as "?"; a run whose device cannot
+  # be named is left out, since a row is only useful keyed by device.
+  for _p in $(pgrep -f 'maestro\.cli\.AppKt' 2>/dev/null); do
+    if [ -d "/proc/$_p/fd" ]; then
+      _logs=$(for _f in /proc/"$_p"/fd/*; do readlink "$_f" 2>/dev/null; done | grep '/maestro\.log$')
+    else
+      _logs=$(lsof -a -p "$_p" -Fn 2>/dev/null | sed -n 's/^n\(.*\/maestro\.log\)$/\1/p')
+    fi
+    _sel=$(for _log in $_logs; do
+             sed -n 's/.*Selected device \([^ ]*\) using port \([0-9]*\).*/\1 \2/p' "$_log" 2>/dev/null
+           done | sort -u | tr '\n' ';')
+    ps -o args= -p "$_p" 2>/dev/null | awk -v pid="$_p" -v sel="$_sel" '{
+      d = ""; pt = ""
+      for (i = 1; i <= NF; i++) {
+        if ($i == "--device" || $i == "--udid") d = $(i + 1)
+        else if ($i ~ /^--(device|udid)=/) { d = $i; sub(/^[^=]*=/, "", d) }
+        else if ($i == "--driver-host-port") pt = $(i + 1)
+        else if ($i ~ /^--driver-host-port=/) { pt = $i; sub(/^[^=]*=/, "", pt) }
+      }
+      n = split(sel, lines, ";"); hit = 0
+      for (j = 1; j <= n; j++) {
+        if (split(lines[j], f, " ") != 2) continue
+        if ((d == "" || f[1] == d) && (pt == "" || f[2] == pt)) { hit++; hd = f[1]; hp = f[2] }
+      }
+      if (hit == 1) { d = hd; pt = hp }
+      if (pt == "") pt = "?"
+      if (d != "") print d, pt, pid
+    }'
+  done
+  exit 0
   ;;
 
 uninstall)

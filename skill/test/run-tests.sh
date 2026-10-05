@@ -2271,6 +2271,79 @@ sh "$RS/android/platform.sh" claim A0000001-0000-4000-8000-000000000001 2>/dev/n
   && no "android refuses a simulator UDID" "it claimed it" \
   || ok "android refuses a simulator UDID"
 
+# Item 87, 4.4. A maestro run brings its own driver and removes it, so there is
+# none to start: driver-up refuses, and the live map is the runs in flight.
+out=$(sh "$RS/android/platform.sh" driver-up emulator-5554 7101 2>&1); rc=$?
+{ [ "$rc" = 2 ] && grep -q 'no standing driver' <<< "$out"; } \
+  && ok "android driver-up exits 2 saying there is no standing driver" \
+  || no "android driver-up exits 2 saying there is no standing driver" "rc=$rc: $out"
+
+# driver-scan, offline. The pids do not exist, so the module reads open files
+# through lsof, which is stubbed. Two runs started in the same second share one
+# maestro.log (measured): each must still get its own device and port, which
+# only the command line can decide. A run with --device whose log has no
+# "Selected device" line yet gets "?" for the port, not a guess.
+AS="$TMP/a44"; mkdir -p "$AS/stub" "$AS/home/.maestro/tests/2026-10-05_150000"
+ALOG="$AS/home/.maestro/tests/2026-10-05_150000/maestro.log"
+printf '%s\n' \
+  '15:00:05.1 [ INFO] maestro.cli.command.TestCommand.runShardSuite: [shard 1] Selected device emulator-5556 using port 7101 with execution plan x' \
+  '15:00:05.2 [ INFO] maestro.cli.command.TestCommand.runShardSuite: [shard 1] Selected device emulator-5554 using port 37567 with execution plan x' \
+  > "$ALOG"
+: > "$AS/empty.log"
+cat > "$AS/stub/pgrep" <<'EOF'
+#!/bin/sh
+printf '%s\n' 999999901 999999902 999999903
+EOF
+cat > "$AS/stub/ps" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *999999901*) echo "java -classpath x maestro.cli.AppKt --device emulator-5554 test hold.yaml" ;;
+  *999999902*) echo "java -classpath x maestro.cli.AppKt --device emulator-5556 --driver-host-port 7101 test hold.yaml" ;;
+  *999999903*) echo "java -classpath x maestro.cli.AppKt --udid=emulator-5558 test hold.yaml" ;;
+esac
+EOF
+cat > "$AS/stub/lsof" <<EOF
+#!/bin/sh
+case "\$*" in
+  *999999903*) echo n$AS/empty.log ;;
+  *) echo n$ALOG ;;
+esac
+EOF
+chmod +x "$AS/stub/"*
+got=$(PATH="$AS/stub:$PATH" sh "$RS/android/platform.sh" driver-scan 2>&1)
+want=$(printf '%s\n' 'emulator-5554 37567 999999901' 'emulator-5556 7101 999999902' 'emulator-5558 ? 999999903')
+[ "$got" = "$want" ] \
+  && ok "android driver-scan gives each run its own device and port from a shared log" \
+  || no "android driver-scan gives each run its own device and port from a shared log" "got: $got"
+
+# driver-down: stops the runs on that device and no other, puts the device back
+# as a finished run leaves it, and drops that device's session records — a
+# record left behind made the next run skip starting a driver and fail in 2s.
+cat > "$AS/stub/adb" <<EOF
+#!/bin/sh
+echo "\$*" >> "$AS/adb.log"
+EOF
+chmod +x "$AS/stub/adb"
+rm -f "$AS/stub/pgrep" "$AS/stub/ps" "$AS/stub/lsof" "$AS/adb.log"
+printf '%s\n' 'ANDROID_emulator-5554_aaaa=1' 'ANDROID_emulator-5556_bbbb=2' 'IOS_X_cccc=3' \
+  > "$AS/home/.maestro/sessions"
+sh -c 'sleep 30; :' maestro.cli.AppKt --device emulator-5554 & d1=$!
+sh -c 'sleep 30; :' maestro.cli.AppKt --device emulator-5556 & d2=$!
+sleep 0.3
+HOME="$AS/home" PATH="$AS/stub:$PATH" sh "$RS/android/platform.sh" driver-down emulator-5554; rc=$?
+sleep 0.2
+{ [ "$rc" = 0 ] && ! kill -0 "$d1" 2>/dev/null && kill -0 "$d2" 2>/dev/null; } \
+  && ok "android driver-down stops the runs on that device and no other" \
+  || no "android driver-down stops the runs on that device and no other" "rc=$rc"
+grep -q 'emulator-5554 uninstall dev.mobile.maestro$' "$AS/adb.log" \
+  && grep -q 'emulator-5554 uninstall dev.mobile.maestro.test' "$AS/adb.log" \
+  && ok "android driver-down removes both driver APKs" \
+  || no "android driver-down removes both driver APKs" "$(cat "$AS/adb.log" 2>&1)"
+[ "$(cat "$AS/home/.maestro/sessions")" = "$(printf '%s\n' 'ANDROID_emulator-5556_bbbb=2' 'IOS_X_cccc=3')" ] \
+  && ok "android driver-down drops that device's session records and keeps the rest" \
+  || no "android driver-down drops that device's session records and keeps the rest" "$(cat "$AS/home/.maestro/sessions")"
+kill "$d2" 2>/dev/null; wait "$d1" "$d2" 2>/dev/null
+
 # ios and ios-device are exact complements: every device id belongs to one of
 # them and never to both, which is what lets a caller pick without knowing
 # which kind of device it holds.
