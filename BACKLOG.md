@@ -6,7 +6,6 @@
 - **90.** The wall shows simulators only, and a phone is a device too — gated on finding a way to stream a physical device's screen.
 - **87.** Flutter and iOS are wired in, not plugged in.
 - **107.** The `MaterialApp.router` dropdown report has not been sent upstream — re-test against Flutter 3.49 first.
-- **108.** Android `boot` gives up on a second emulator that is still coming up.
 
 Next item number: 109.
 
@@ -539,21 +538,3 @@ dropdown labels in `DRAFT-ISSUE.md` with generic ones, and post it once the
 exact text is approved.
 
 **Gated on.** Approval of the exact text before anything is posted.
-
-## 108. Android `boot` gives up on a second emulator that is still coming up — **OPEN**
-
-**What.** `runners/android/platform.sh boot` waits 180 s for a new serial to
-reach `device` state in `adb devices`, then exits 1 with "no new device
-appeared within 180s". Booting `Small_Phone` straight after
-`Pixel_6_Pro_API_34` on this machine (8 cores, 31 GB) hit that limit. The
-emulator's log ended at `Loading snapshot 'default_boot'...`, `adb devices`
-showed `emulator-5556 offline`, and the device reached `sys.boot_completed=1`
-shortly afterwards.
-
-**Why.** The caller is told the boot failed and is given no serial, while the
-emulator it started keeps running and finishes booting.
-
-**To do.** Count an `offline` serial that was not in the baseline as the new
-device, and keep waiting on it for `sys.boot_completed`. Then make the limit a
-setting and measure what two and three emulators booting back to back take
-here.

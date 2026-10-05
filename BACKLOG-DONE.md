@@ -3121,3 +3121,42 @@ and `drain_grep` does not. Verified with ten consecutive runs of both suites
 project conf sourced.
 
 ---
+
+## 108. Android `boot` gave up on a second emulator that was still coming up — **DONE**
+
+**What.** `runners/android/platform.sh boot` had two wait loops of 180 polls
+each, and both were wrong.
+
+- The first counted a new serial only once it read `device`. Booting
+  `Small_Phone` straight after `Pixel_6_Pro_API_34` (8 cores, 31 GB) left
+  `emulator-5556` at `offline` past 180 s, its log ending at
+  `Loading snapshot 'default_boot'...`. `boot` exited 1 with "no new device
+  appeared within 180s", and the emulator booted shortly afterwards.
+- The second polled `sys.boot_completed`, and when it ran out it printed the
+  serial and exited 0 whether or not boot had finished.
+
+**Why.** A slow boot was reported as a failure with no serial while the
+emulator kept running. An unfinished boot was reported as a success.
+
+**Done.**
+- One deadline now covers the whole boot: `BOOT_TMO`, default 420 s.
+- A new serial counts in any state, and the baseline is every serial in any
+  state.
+- `adb wait-for-device` is gone. It had no timeout of its own, and the
+  `sys.boot_completed` poll covers it.
+- Running out exits 1. The message names the serial if one appeared, and
+  otherwise the emulator's process ID and `kill <pid>`.
+- `drivers.sh rig up` passes `BOOT_TMO` through and gives its transport 30 s
+  more than it.
+
+Measured on this machine:
+- Three emulators booted back to back took 79 s, 167 s and 226 s, all exit 0,
+  with load 18 at the end. The third would have failed under the old 180 s.
+- `BOOT_TMO=20` on a fourth failed after 21 s with nothing on stdout. That
+  emulator went on to take `emulator-5560`, which is why the message now gives
+  its process ID.
+
+Two offline tests: a serial that is `offline` before it boots is waited out,
+and a boot that never completes fails naming the serial.
+
+---
