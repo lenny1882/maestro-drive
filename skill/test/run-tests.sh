@@ -2344,6 +2344,28 @@ grep -q 'emulator-5554 uninstall dev.mobile.maestro$' "$AS/adb.log" \
   || no "android driver-down drops that device's session records and keeps the rest" "$(cat "$AS/home/.maestro/sessions")"
 kill "$d2" 2>/dev/null; wait "$d1" "$d2" 2>/dev/null
 
+# last-used, offline. The date is the last touch or key input, from
+# PowerManager's mLastUserActivityTime in uptime ms. emulator-5554 was touched
+# 100000s (27.8h) of uptime ago, so its day is not today and reap may take it;
+# emulator-5556 was touched 60s ago. The line shape is API 34's and 36's.
+cat > "$AS/stub/adb" <<'EOF'
+#!/bin/sh
+case "$*" in
+  "devices") printf 'List of devices attached\nemulator-5554\tdevice\nemulator-5556\tdevice\nemulator-5558\toffline\n' ;;
+  *emulator-5554*) printf '100500.25 9.0\r\n mLastUserActivityTime(excludingAttention)=500000\r\n' ;;
+  *emulator-5556*) printf '600.10 9.0\r\n mLastUserActivityTime(excludingAttention)=540000\r\n' ;;
+esac
+EOF
+chmod +x "$AS/stub/adb"
+lu=$(PATH="$AS/stub:$PATH" sh "$RS/android/platform.sh" last-used 2>&1); rc=$?
+today=$(date +%Y%m%d)
+d54=$(awk -F'|' '$1=="emulator-5554"{print $2}' <<< "$lu")
+d56=$(awk -F'|' '$1=="emulator-5556"{print $2"|"$4}' <<< "$lu")
+{ [ "$rc" = 0 ] && [ -n "$d54" ] && [ "$d54" != "$today" ] && [ "$d56" = "$today|$today" ] \
+  && ! grep -q emulator-5558 <<< "$lu"; } \
+  && ok "android last-used dates each booted device by its last input, not by today" \
+  || no "android last-used dates each booted device by its last input, not by today" "rc=$rc: $lu"
+
 # ios and ios-device are exact complements: every device id belongs to one of
 # them and never to both, which is what lets a caller pick without knowing
 # which kind of device it holds.

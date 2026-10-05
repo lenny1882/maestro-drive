@@ -360,8 +360,8 @@ reimplemented the logic in shell; the new test reads the shipped file.
   because a container's own mtime moves only when its immediate contents
   change. It is now `last-used`: `<id>|<yyyymmdd>|<human>|<today>` for every
   booted device in one call, with today's date from the device's host so clock
-  skew cannot reap a live device. Android's `last-used` is unanswered: an
-  emulator image's mtime says the emulator runs, not that anyone drives it.
+  skew cannot reap a live device. Android's `last-used` is under *Android
+  `last-used`* below.
   `platform.sh boot` waits for the device; `drivers.sh` then waits for the
   machine, which decides whether the next boot or driver start survives.
 - `shot.sh` and `flow.sh`: the screenshot calls.
@@ -450,6 +450,28 @@ comments in `build.sh` and `driver.sh`.
 
   `lsof` on macOS is not measured.
 
+*Android `last-used`.* The date is the device's last touch or key input:
+PowerManager's `mLastUserActivityTime` in `dumpsys power`, in uptime
+milliseconds, turned into a time on this machine's clock. Three candidates were
+measured on `Pixel_6_Pro_API_34`:
+- The userdata qcow2's modified time moves whenever the emulator writes
+  anything.
+- `dumpsys usagestats` `lastTimeUsed` moved for the launcher and Settings on an
+  emulator nobody touched for a minute. Settings' `lastTimeVisible` equalled
+  the moment of the read.
+- `mLastUserActivityTime` held still across 90 s idle and three reads. It moved
+  on one `adb shell input tap` and on a Maestro `tapOn` (326361 → 455696 ms).
+  The line is the same on API 36 (`Small_Phone`).
+
+Boot sets it: a fresh API 36 boot read 53667 at 54.3 s uptime. So a device
+nobody has touched reports its boot time. A flow of `launchApp` and assertions
+sends no input and does not move it, as an iOS flow that writes nothing does not
+move the container walk.
+
+Live, `drivers.sh rig reap` listed both emulators with their last input time
+(16:06 and 16:07) and kept them as used today. One offline test checks that a
+device touched 27.8 h of uptime ago gets a day other than today.
+
 *Stage 5.*
 
 - 5.1 `SKILL.md` explains what a runner is and why there are two settings:
@@ -489,9 +511,6 @@ file.
   Done when `bin/build.sh --detect` reports an RN project and `--no-install`
   produces an artefact path. Needs node, a `react-native init` app and
   `pod install` on the Mac.
-- Android `last-used` still refuses in `runners/android/platform.sh`: an
-  emulator's qcow2 userdata mtime moves whenever the emulator writes anything,
-  so it shows the emulator is running, not that anything is driving it.
 
 **Gated on.** 2.2 needs a React Native checkout on the Mac; none of the
 sixteen there is React Native.

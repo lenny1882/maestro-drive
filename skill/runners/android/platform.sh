@@ -8,10 +8,9 @@
 # did and what it printed; where a verb still refuses, the comment says what was
 # run to establish that it has to.
 #
-# Four still refuse, and each refusal is a measurement rather than a gap in the
+# Three still refuse, and each refusal is a measurement rather than a gap in the
 # writing: `container` (appcheck's timestamp-and-plist pair has no Android
-# twin), `orientations` (the answer is in the APK, not in a container path),
-# `last-used` (an emulator image's mtime answers a different question) and
+# twin), `orientations` (the answer is in the APK, not in a container path) and
 # `driver-up` (item 87's 4.4: a Maestro run brings its own driver and removes
 # it, so there is none to start ahead of one).
 #
@@ -415,16 +414,45 @@ locked)
   ;;
 
 last-used)
-  # STILL REFUSES, and the reason was confirmed rather than assumed.
-  # The iOS answer walks CoreSimulator's per-app data containers for an mtime.
-  # An emulator's userdata is a qcow2 image whose mtime moves whenever the
-  # emulator writes anything at all, which is not the same question — it says
-  # the emulator is running, not that somebody is driving it. `rig reap` wants
-  # the second, so a wrong answer here is worse than none: it would keep a
-  # forgotten emulator alive forever.
-  echo "runners/android last-used: unanswered — an emulator disk image's mtime" >&2
-  echo "  says the emulator is running, not that anyone is using it." >&2
-  exit 2
+  # "<id>|<yyyymmdd>|<human>|<today>" for every booted device, for `rig reap`.
+  # The answer is the device's LAST TOUCH OR KEY INPUT, from PowerManager.
+  #
+  # Three candidates were measured (item 87); two answer a different question:
+  #   the userdata qcow2's mtime moves whenever the emulator writes anything,
+  #     so it says the emulator is running, not that anyone is driving it;
+  #   `dumpsys usagestats` lastTimeUsed moved for the launcher and Settings on
+  #     an emulator nobody touched for a minute, and Settings' lastTimeVisible
+  #     equalled the moment of the read itself;
+  #   `dumpsys power` mLastUserActivityTime held still across 90s idle and three
+  #     reads, moved on one `adb shell input tap`, and moved on a Maestro flow's
+  #     tapOn (326361 -> 455696 ms). Same line on API 34 and API 36.
+  #
+  # It is uptime milliseconds, so the epoch is now - (uptime - it). Boot sets
+  # it (54.3s uptime read 53667 on a fresh API 36 boot), so a device nobody has
+  # touched since boot reports its boot time, and one booted on a previous day
+  # and never driven since is that day's.
+  #
+  # NOT COUNTED: a flow that sends no input. launchApp plus assertions left it
+  # where it was. Neither does the iOS answer count a flow that writes nothing.
+  #
+  # Dates are this machine's, as on iOS: today comes from here, so clock skew
+  # between devices cannot make a live one look old.
+  _now=$(date +%s)
+  _today=$(date +%Y%m%d)
+  _fmt() { date -d "@$1" "$2" 2>/dev/null || date -r "$1" "$2" 2>/dev/null; }
+  for _s in $("$ADB" devices 2>/dev/null | sed -n 's/[[:space:]]*device$//p'); do
+    _r=$("$ADB" -s "$_s" shell 'cut -d" " -f1 /proc/uptime; dumpsys power | grep mLastUserActivityTime' </dev/null 2>/dev/null | tr -d '\r')
+    _up=$(printf '%s\n' "$_r" | sed -n '1s/\..*//p')
+    _la=$(printf '%s\n' "$_r" | sed -n 's/.*mLastUserActivityTime[^=]*=\([0-9]*\).*/\1/p' | head -1)
+    if [ -z "$_up" ]; then
+      echo "$_s|||$_today"
+      continue
+    fi
+    [ -n "$_la" ] || _la=0
+    _e=$((_now - _up + _la / 1000))
+    echo "$_s|$(_fmt "$_e" +%Y%m%d)|$(_fmt "$_e" '+%Y-%m-%d %H:%M')|$_today"
+  done
+  exit 0
   ;;
 
 capture-cmd)
