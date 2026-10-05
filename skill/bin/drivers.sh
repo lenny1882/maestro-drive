@@ -233,7 +233,10 @@ _rig_up() {
       echo "$d  booting"
       # One verb: it boots AND waits the device out. Returning before the boot
       # settles is what makes the next caller start a driver mid-storm.
-      TMO=300 _ssh "sh '$PLATFORM_SH' boot '$d'" >/dev/null 2>&1 || {
+      # The transport outlives the boot's own deadline, so a slow boot fails
+      # with the module's message rather than as a cut connection (item 108:
+      # a third emulator booted back to back here took 226s).
+      TMO=$(( ${BOOT_TMO:-420} + 30 )) _ssh "BOOT_TMO=${BOOT_TMO:-420} sh '$PLATFORM_SH' boot '$d'" >/dev/null 2>&1 || {
         echo "$d  would not boot" >&2; continue; }
       _rig_claim "$d"          # only what WE booted is ours to shut down
       _rig_settle "$d"

@@ -70,8 +70,8 @@ boot)
   #
   #   the serial is not knowable in advance, so the new one is found by
   #   difference against the serials that were there before;
-  #   `adb wait-for-device` returns while Android is still starting, so
-  #   sys.boot_completed is polled after it;
+  #   a serial in `adb devices` is not a booted device, so sys.boot_completed
+  #   is polled until it reads 1;
   #   the emulator has to outlive this script, so it is detached — a caller
   #   that returns and takes the device with it would be no boot at all.
   #
@@ -87,7 +87,29 @@ boot)
   [ -n "$_emu" ] || _emu="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}/emulator/emulator"
   [ -x "$_emu" ] || { echo "no emulator binary — set ANDROID_HOME or EMULATOR" >&2; exit 1; }
 
-  _before=$("$ADB" devices 2>/dev/null | sed -n 's/[[:space:]]*device$//p' | tr '\n' ' ')
+  # ONE DEADLINE, BOOT_TMO seconds, for the whole boot (item 108). There were
+  # two loops of 180 polls each, and both were wrong in a different way:
+  #
+  #   the first counted a serial only once it read `device`, but a second
+  #   emulator booted straight after another sat at `offline` past 180s
+  #   ("Loading snapshot 'default_boot'..." the last line of its log) and then
+  #   booted — so `boot` reported a failure for an emulator that came up;
+  #   the second, on running out, printed the serial and exited 0 whether or not
+  #   sys.boot_completed had ever read 1 — success for a device not yet booted.
+  #
+  # So a new serial counts in ANY state, the baseline is every serial in any
+  # state, and running out is a failure that names the serial left behind.
+  # `adb wait-for-device` went too: it has no timeout of its own, and the poll
+  # below covers it — getprop fails until the device is up.
+  #
+  # 420 by default. Three emulators booted back to back on this machine (8
+  # cores, 31 GB) took 79s, 167s and 226s, load 18 at the end; 180 would have
+  # failed the third. drivers.sh gives its transport 30s more than this.
+  _tmo=${BOOT_TMO:-420}
+  _t0=$(date +%s)
+  _left() { echo $((_tmo - ($(date +%s) - _t0))); }
+  _serials() { "$ADB" devices 2>/dev/null | sed 1d | awk 'NF{print $1}'; }
+  _before=" $(_serials | tr '\n' ' ') "
   _log=${RDIR:-/tmp}/emulator-$_avd.log
   mkdir -p "$(dirname "$_log")" 2>/dev/null || true
   if command -v setsid >/dev/null 2>&1; then
@@ -98,29 +120,35 @@ boot)
   _pid=$!
 
   _new=
-  _i=0
-  while [ "$_i" -lt 180 ]; do
+  while :; do
     kill -0 "$_pid" 2>/dev/null || {
       echo "the emulator exited while starting. Its log:" >&2
       tail -5 "$_log" >&2
       exit 1; }
-    for _s in $("$ADB" devices 2>/dev/null | sed -n 's/[[:space:]]*device$//p'); do
-      case " $_before " in *" $_s "*) ;; *) _new=$_s; break ;; esac
-    done
-    [ -n "$_new" ] && break
+    if [ -z "$_new" ]; then
+      for _s in $(_serials); do
+        case "$_before" in *" $_s "*) ;; *) _new=$_s; break ;; esac
+      done
+    fi
+    if [ -n "$_new" ] &&
+       [ "$("$ADB" -s "$_new" shell getprop sys.boot_completed </dev/null 2>/dev/null | tr -d '\r\n')" = 1 ]; then
+      echo "$_new"
+      exit 0
+    fi
+    [ "$(_left)" -gt 0 ] || break
     sleep 1
-    _i=$((_i + 1))
   done
-  [ -n "$_new" ] || { echo "no new device appeared within 180s. Its log:" >&2; tail -5 "$_log" >&2; exit 1; }
-
-  "$ADB" -s "$_new" wait-for-device
-  _i=0
-  while [ "$_i" -lt 180 ]; do
-    [ "$("$ADB" -s "$_new" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')" = 1 ] && break
-    sleep 1
-    _i=$((_i + 1))
-  done
-  echo "$_new"
+  if [ -n "$_new" ]; then
+    echo "$_new has not finished booting after ${_tmo}s (BOOT_TMO). It is still" >&2
+    echo "  running; 'platform.sh shutdown $_new' stops it. Its log:" >&2
+  else
+    # MEASURED with BOOT_TMO=20: the emulator was still starting and went on to
+    # take a serial, so it is named here rather than left to be found.
+    echo "no new device appeared within ${_tmo}s (BOOT_TMO). The emulator is" >&2
+    echo "  still running as pid $_pid; 'kill $_pid' stops it. Its log:" >&2
+  fi
+  tail -5 "$_log" >&2
+  exit 1
   ;;
 
 shutdown)

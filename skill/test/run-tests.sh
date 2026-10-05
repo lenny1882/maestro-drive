@@ -2366,6 +2366,45 @@ d56=$(awk -F'|' '$1=="emulator-5556"{print $2"|"$4}' <<< "$lu")
   && ok "android last-used dates each booted device by its last input, not by today" \
   || no "android last-used dates each booted device by its last input, not by today" "rc=$rc: $lu"
 
+# boot, offline (item 108). The new emulator's serial shows `offline` first —
+# a second emulator sat there past the old 180s and then booted — so it must
+# count as the new device. And a boot that never completes must fail naming
+# the serial, where the old loop printed it and exited 0.
+cat > "$AS/stub/emulator" <<'EOF'
+#!/bin/sh
+sleep 6
+EOF
+cat > "$AS/stub/adb" <<EOF
+#!/bin/sh
+st="$AS/boot.state"
+case "\$*" in
+  devices)
+    n=\$(cat "\$st.dev" 2>/dev/null || echo 0); echo \$((n + 1)) > "\$st.dev"
+    echo 'List of devices attached'
+    printf 'emulator-5554\tdevice\n'
+    [ "\$n" -ge 1 ] && printf 'emulator-5556\toffline\n'
+    ;;
+  *"getprop sys.boot_completed"*)
+    n=\$(cat "\$st.prop" 2>/dev/null || echo 0); echo \$((n + 1)) > "\$st.prop"
+    [ "\$(cat "\$st.mode")" = never ] && exit 1
+    [ "\$n" -ge 2 ] && echo 1
+    ;;
+esac
+EOF
+chmod +x "$AS/stub/emulator" "$AS/stub/adb"
+rm -f "$AS"/boot.state*; echo slow > "$AS/boot.state.mode"
+out=$(EMULATOR="$AS/stub/emulator" RDIR="$AS" BOOT_TMO=15 PATH="$AS/stub:$PATH" \
+      sh "$RS/android/platform.sh" boot Small_Phone 2>"$AS/boot.err"); rc=$?
+[ "$rc" = 0 ] && [ "$out" = emulator-5556 ] \
+  && ok "android boot takes a new serial that is still offline and waits it out" \
+  || no "android boot takes a new serial that is still offline and waits it out" "rc=$rc out=$out $(cat "$AS/boot.err")"
+rm -f "$AS"/boot.state*; echo never > "$AS/boot.state.mode"
+out=$(EMULATOR="$AS/stub/emulator" RDIR="$AS" BOOT_TMO=3 PATH="$AS/stub:$PATH" \
+      sh "$RS/android/platform.sh" boot Small_Phone 2>"$AS/boot.err"); rc=$?
+{ [ "$rc" = 1 ] && [ -z "$out" ] && grep -q 'emulator-5556 has not finished booting after 3s' "$AS/boot.err"; } \
+  && ok "android boot that never completes fails naming the serial, not success" \
+  || no "android boot that never completes fails naming the serial, not success" "rc=$rc out=$out $(cat "$AS/boot.err")"
+
 # ios and ios-device are exact complements: every device id belongs to one of
 # them and never to both, which is what lets a caller pick without knowing
 # which kind of device it holds.
