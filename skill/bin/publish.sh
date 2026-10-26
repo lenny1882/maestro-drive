@@ -45,6 +45,15 @@ _alive() { sh "$FW_LOCAL" alive "$1" "$2" >/dev/null 2>&1; }
 # ssh and directly in local transport — it reads the variable lib.sh sets.
 _arm() { # _arm <base> <isolate>; exit 2 when the framework has no capture
   sh "$FW_LOCAL" traffic-arm "$1" "$2" 2>/dev/null
+  _r=$?
+  # Exit 3: this framework arms on the machine with the device, against the
+  # endpoint inspect reported there (React Native's recorder, item 87 6.8).
+  # $STATE.device holds that endpoint; the published one is the relay's.
+  if [ "$_r" = 3 ] && read -r _db _ < "$STATE.device" 2>/dev/null; then
+    _ssh "RDIR='$RDIR' sh '$FW_REMOTE' traffic-arm '$_db' '$2'"
+    return
+  fi
+  return "$_r"
 }
 
 # Everything a later ad-hoc call needs, in one place. Without it, finding $LDIR
@@ -96,7 +105,12 @@ case "${1:-start}" in
     else
       _ssh "pkill -f 'relay.py $PUBPORT' && echo stopped || echo 'nothing running'"
     fi
-    rm -f "$STATE"
+    # A framework whose capture is a process (React Native's recorder) stops it
+    # here; the rest exit 2, which is nothing to stop.
+    if read -r _db _di < "$STATE.device" 2>/dev/null; then
+      _ssh "RDIR='$RDIR' sh '$FW_REMOTE' traffic-disarm '$_db' '$_di'" 2>/dev/null
+    fi
+    rm -f "$STATE" "$STATE.device"
     ;;
   status)
     read -r BASE ISO < "$STATE" 2>/dev/null || { echo "nothing published — run: $0"; exit 1; }
@@ -127,6 +141,7 @@ case "${1:-start}" in
     [ "$_rc" = 0 ] || exit 1
     VBASE=${V%% *}; ISO=${V##* }
     [ -n "$VBASE" ] || { echo "no debug endpoint — is a dev session running? bin/preflight.sh says." >&2; exit 1; }
+    printf '%s %s\n' "$VBASE" "$ISO" > "$STATE.device"
     RPORT=$(printf '%s' "$VBASE" | sed -E 's|.*:([0-9]+)/.*|\1|')
     RPATH=$(printf '%s' "$VBASE" | sed -E 's|.*:[0-9]+||')
 

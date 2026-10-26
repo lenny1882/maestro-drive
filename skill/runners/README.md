@@ -82,6 +82,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `traffic-arm <base> <session>` | either | turn HTTP capture on; print `<was> <now>`, each `on`, `off` or `unknown` | `ext.dart.io.httpEnableTimelineLogging` in `bin/publish.sh` |
 | `traffic-list <base> <session>` | either | one request per line: id, method, status, uri | `bin/net.sh` + `remote/net.py list` |
 | `traffic-one <base> <session> <id>` | either | one request in full: headers, both bodies | `bin/net.sh` + `remote/net.py one` |
+| `traffic-disarm <base> <session>` | Mac | stop a capture that is a process, printing `stopped`; exit 2 when there is none | nothing; Flutter capture is a flag |
 | `prefs-prefix` | either | the key prefix the framework's preferences API writes, or nothing | the `flutter` default in `bin/prefs.sh` |
 
 **Exit 2 means "this framework does not have that".** It is not a failure. A
@@ -89,6 +90,13 @@ plain Xcode app has no `inspect` and no `traffic-*`, and the caller must say
 "native apps have no traffic endpoint" rather than "the relay is broken" — the
 same distinction `vmservice.sh` already draws between "no VM service" and "not
 in debug", without which an empty result gets debugged as a broken relay.
+
+**Exit 3 means "run this on the machine with the device".** A `traffic-*` verb
+given the relay's published base, from the sandbox, exits 3 when its framework
+can only capture beside the endpoint: React Native's recorder attaches to
+Metro's inspector socket on that machine's loopback and logs there.
+`bin/publish.sh` then arms over SSH against the base `inspect` reported (kept in
+`$STATE.device`), and `bin/net.sh` takes its SSH path.
 
 **`build` stops at the artefact and does not install.** That was the one real
 change to today's shape, and it is **applied**: `remote/build.sh` now prints

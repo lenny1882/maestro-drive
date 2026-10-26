@@ -61,18 +61,27 @@ MSG
 
 if [ -f "$STATE" ] && read -r BASE ISO < "$STATE" \
    && sh "$FW_LOCAL" alive "$BASE" "$ISO" >/dev/null 2>&1; then
+  # Exit 3 from a traffic verb: this framework reads on the machine with the
+  # device (React Native's recorder log), so the SSH path below is the path.
   if [ -z "$ARG" ]; then
-    out=$(sh "$FW_LOCAL" traffic-list "$BASE" "$ISO"); rc=$?
+    _err=$(mktemp "${TMPDIR:-/tmp}/net-err.XXXXXX")
+    out=$(sh "$FW_LOCAL" traffic-list "$BASE" "$ISO" 2>"$_err"); rc=$?
+    [ "$rc" = 3 ] || cat "$_err" >&2
+    rm -f "$_err"
     [ "$rc" = 2 ] && exit 2
-    if [ -n "$out" ]; then printf '%s\n' "$out"; else _explain_empty "$BASE" "$ISO"; fi
+    if [ "$rc" != 3 ]; then
+      if [ -n "$out" ]; then printf '%s\n' "$out"; else _explain_empty "$BASE" "$ISO"; fi
+      exit
+    fi
   else
-    sh "$FW_LOCAL" traffic-one "$BASE" "$ISO" "$ARG"; rc=$?
+    out=$(sh "$FW_LOCAL" traffic-one "$BASE" "$ISO" "$ARG" 2>&1); rc=$?
     [ "$rc" = 2 ] && exit 2
+    [ "$rc" != 3 ] && { printf '%s\n' "$out"; exit "$rc"; }
   fi
-  exit
+else
+  echo "# no relay published - falling back to SSH (run ./publish.sh for ~7x)" >&2
 fi
 
-echo "# no relay published - falling back to SSH (run ./publish.sh for ~7x)" >&2
 d=$(_dev) || exit 1
 # The same three verbs, run on the machine WITH the device, against its own
 # loopback. The module curls direct there in both transports and the base URI is

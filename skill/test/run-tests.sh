@@ -2813,6 +2813,36 @@ if command -v git >/dev/null 2>&1; then
   { [ "$rc1" = 0 ] && [ "$rc2" = 1 ]; } \
     && ok "flutter alive is the VM Service answering getVersion" \
     || no "flutter alive is the VM Service answering getVersion" "rc=$rc1/$rc2"
+  # React Native traffic: recorder.cjs writes traffic.ndjson under
+  # $RDIR/rn-net/<session>; the verbs read it (item 87, 6.8).
+  RNF="$REPO/runners/react-native/framework.sh"
+  for v in traffic-arm traffic-list traffic-disarm; do
+    sh "$RNF" $v "http://10.0.0.5:9100/inspector/debug?device=d1&page=1" d1-1 >/dev/null 2>&1
+    [ $? = 3 ] || no "react-native $v given the relay's base exits 3" "wrong status"
+  done
+  ok "react-native traffic verbs given the relay's base exit 3 (run on the device's machine)"
+  rnr="$TMP/rn-rdir"; WS="ws://127.0.0.1:8081/inspector/debug?device=d1&page=1"
+  rio=$(RDIR=$rnr sh "$RNF" traffic-list "$WS" d1-1 2>&1); rc=$?
+  { [ "$rc" = 1 ] && grep -q 'never armed' <<< "$rio"; } \
+    && ok "react-native traffic-list before arming says capture was never armed" \
+    || no "react-native traffic-list before arming says capture was never armed" "rc=$rc: $rio"
+  mkdir -p "$rnr/rn-net/d1-1"; echo "connected 2026-10-26T20:00:00Z" > "$rnr/rn-net/d1-1/state"
+  printf '%s\n' '{"id":"r1","method":"GET","url":"https://x.test/p.json","status":200,"requestHeaders":{"user-agent":"A/1"},"responseHeaders":{"Content-Type":"application/json"},"body":"{\"ok\":1}"}' \
+    '{"id":"r2","method":"POST","url":"https://x.test/q","error":"net::ERR_FAILED"}' > "$rnr/rn-net/d1-1/traffic.ndjson"
+  rio=$(RDIR=$rnr sh "$RNF" traffic-list "$WS" d1-1 2>/dev/null); rc=$?
+  { [ "$rc" = 0 ] && grep -qE 'r1 +GET +200 +https://x.test/p.json' <<< "$rio" && grep -qE 'r2 +POST +ERR' <<< "$rio"; } \
+    && ok "react-native traffic-list prints id, method, status and URL, ERR for a failed request" \
+    || no "react-native traffic-list prints id, method, status and URL, ERR for a failed request" "rc=$rc: $rio"
+  rio=$(RDIR=$rnr sh "$RNF" traffic-one "$WS" d1-1 r1 2>&1); rc=$?
+  { [ "$rc" = 0 ] && grep -q 'GET https://x.test/p.json  -> 200' <<< "$rio" && grep -q '"user-agent": "A/1"' <<< "$rio" && grep -q '{"ok":1}' <<< "$rio"; } \
+    && ok "react-native traffic-one prints the request line, headers and body" \
+    || no "react-native traffic-one prints the request line, headers and body" "rc=$rc: $rio"
+  RDIR=$rnr sh "$RNF" traffic-disarm "$WS" d1-1 >/dev/null 2>&1
+  [ $? = 2 ] && ok "react-native traffic-disarm with no recorder running exits 2" \
+             || no "react-native traffic-disarm with no recorder running exits 2" "wrong status"
+  grep -q '"$rc" != 3' "$REPO/bin/net.sh" && grep -q 'STATE.device' "$REPO/bin/publish.sh" \
+    && ok "net.sh and publish.sh send an exit 3 to the device's machine" \
+    || no "net.sh and publish.sh send an exit 3 to the device's machine" "no exit-3 handling"
   sh "$REPO/runners/TEMPLATE/framework.sh" alive b s >/dev/null 2>&1
   [ $? = 2 ] && ok "a framework with no endpoint has no alive either (exit 2)" \
              || no "a framework with no endpoint has no alive either (exit 2)" "wrong status"

@@ -204,6 +204,15 @@ traffic-list)
   exit 2
   ;;
 
+# --- traffic-disarm <base> <session> -----------------------------------------
+# Stop a capture that is a running process; print `stopped`. Exit 2 when the
+# framework's capture is not a process, or none is running. bin/publish.sh stop
+# calls it. A traffic-* verb that can only run beside the endpoint exits 3 when
+# given the relay's base, and the callers re-run it on the device's machine.
+traffic-disarm)
+  exit 2
+  ;;
+
 # --- traffic-one <base> <session> <id> ---------------------------------------
 # One request in full: headers, request body, response body. Either side.
 traffic-one)

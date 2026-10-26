@@ -637,8 +637,40 @@ and flavours and app ids out of `build.gradle`.
     `http://192.168.4.39:9100` got 401, and no Origin failed. From the
     sandbox, Node's WebSocket cannot reach the relay at all (ENETUNREACH):
     unlike `curl`, it does not go through the sandbox's HTTP proxy.
-- 6.8 Traffic: a proxy-based verb, configured before the app starts, in place
-  of the `traffic-*` exit 2. Needs 6.4.
+- 6.8 Traffic. **CDP route done; proxy route open.** `traffic-arm` starts
+  `runners/react-native/recorder.cjs` (Node 22, detached) on the device's
+  machine, attached to `inspect`'s socket; it writes each finished request,
+  with headers and body, to `$RDIR/rn-net/<session>/traffic.ndjson`, and
+  reconnects every 2 s after an app restart. `traffic-list`, `traffic-one`
+  read it; `traffic-disarm` (new, exit 2 for Flutter and TEMPLATE) stops it.
+  Given the relay's base the verbs exit 3, a new contract code meaning "run
+  on the device's machine": `publish.sh` then arms over SSH against the base
+  `inspect` reported (kept in `$STATE.device`) and disarms on `stop`;
+  `net.sh` takes its SSH path. Live on `emulator-5554`: `publish.sh start`
+  said `profiling on (was off, now on …)`; after a `Page.reload`, `net.sh`
+  listed the symbolicate POST and `GET 200 …/products.json`, and `net.sh
+  <id>` printed the whole JSON body; `publish.sh stop` left no recorder.
+  Six offline tests. Measured before the design:
+  The stub's premise is out of date: React Native 0.88 implements
+  the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
+  build), and Android's `NetworkingModule` reports every request to it. Over
+  `inspect`'s socket, after `Network.enable`, an `XMLHttpRequest` in the app
+  gave `requestWillBeSent` (URL, method), `requestWillBeSentExtraInfo`
+  (headers), `responseReceived` (status, headers) and `loadingFinished`
+  (7342 bytes), and `Network.getResponseBody` returned the body (base64
+  JSON). The agent survived `Page.reload`: the app's own products request
+  at launch came through.
+  - Expo 58 replaces the global `fetch` with `expo/fetch`
+    (`expo/src/winter/runtime.native.ts`), which reports nothing: a `fetch`
+    completed with 200 and no event arrived. With
+    `EXPO_PUBLIC_USE_RN_FETCH=1` in Metro's environment (inlined into the
+    bundle; no native rebuild) the same `fetch` gave every event. That swaps
+    the fetch implementation under test.
+  - Events reach only a connected CDP client, so capture needs a recorder
+    attached before the requests, not a read afterwards.
+  - The proxy route: no mitmproxy on this machine; the app's only request is
+    HTTPS; the AVD is `google_apis` and debuggable, so root is available for
+    a system CA, which on API 34 lives in the conscrypt APEX.
 - 6.9 iOS: `variants`, `variant-for-appid` and `build`. Needs the Mac,
   `expo prebuild` to create `ios/` in the RN checkout, `pod install` and a cold
   Xcode build.

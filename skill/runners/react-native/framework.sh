@@ -318,22 +318,83 @@ alive)
   printf '%s' "$_l" | grep -q "\"id\": *\"$_id\""
   ;;
 
-traffic-arm|traffic-list|traffic-one)
-  # THE HONEST ANSWER, and the reason exit 2 exists in this contract.
+traffic-arm|traffic-list|traffic-one|traffic-disarm)
+  # CAPTURE THROUGH THE CDP NETWORK DOMAIN (BACKLOG item 87, 6.8). React Native
+  # 0.88 reports every request its networking module makes to the inspector,
+  # and recorder.cjs, attached to inspect's socket, writes each finished one to
+  # $RDIR/rn-net/<session>/traffic.ndjson. Two things are not like Flutter:
   #
-  # Flutter has this because dart:io routes every HTTP call through one runtime
-  # that can be asked to record them. React Native has no such chokepoint: fetch
-  # goes to NSURLSession on iOS and OkHttp on Android, and neither reports to the
-  # JS runtime. The CDP Network domain is not implemented by Hermes.
+  # - Events reach only a client attached when they happen, so arming starts a
+  #   process and nothing before it is recorded. It stays attached across a
+  #   reload and reconnects after an app restart.
+  # - It runs where the socket is: inspect's ws:// loopback URL. Given the
+  #   relay's http:// base, from the sandbox, every verb exits 3, "run this on
+  #   the device's machine", and publish.sh and net.sh do that.
   #
-  # So a React Native project reads traffic through a proxy the app is pointed
-  # at, which is a different shape entirely — it is configured before the app
-  # starts, not armed while it runs. Whoever wires that should add a verb for it
-  # rather than pretending this one works.
-  echo "React Native has no in-runtime HTTP capture: fetch goes to NSURLSession" >&2
-  echo "  and OkHttp, neither of which reports to the JS runtime. Read traffic" >&2
-  echo "  through a proxy the app is pointed at before it starts." >&2
-  exit 2
+  # An Expo app's fetch is expo/fetch, which reports nothing; Metro needs
+  # EXPO_PUBLIC_USE_RN_FETCH=1 for fetch to show here. XMLHttpRequest always does.
+  _verb=$VERB
+  _base=${1:?$_verb <base> <session>}; _sess=${2:?session}
+  case "$_base" in
+    ws://*) ;;
+    *) echo "react-native $_verb: capture runs on the device's machine, beside Metro" >&2; exit 3 ;;
+  esac
+  _d=$RDIR/rn-net/$(printf '%s' "$_sess" | tr -c 'A-Za-z0-9_-' _)
+  _live() { [ -r "$_d/pid" ] && kill -0 "$(cat "$_d/pid")" 2>/dev/null; }
+  case "$_verb" in
+    traffic-arm)
+      if _live; then echo "on on"; exit 0; fi
+      _node=
+      for _n in $(ls -d "$NVM_DIR"/versions/node/v*/bin/node 2>/dev/null | sort -V -r) "$(command -v node 2>/dev/null)"; do
+        [ -x "$_n" ] && [ "$("$_n" -p 'process.versions.node.split(".")[0] >= 22' 2>/dev/null)" = true ] && { _node=$_n; break; }
+      done
+      [ -n "$_node" ] || { echo "react-native traffic-arm: the recorder needs Node 22 or later" >&2; echo "off unknown"; exit 1; }
+      mkdir -p "$_d"; rm -f "$_d/state"
+      setsid "$_node" "$HERE/recorder.cjs" "$_base" "$_d" >> "$_d/recorder.log" 2>&1 < /dev/null &
+      _i=0
+      while [ $_i -lt 20 ]; do
+        grep -q '^connected' "$_d/state" 2>/dev/null && { echo "off on"; exit 0; }
+        sleep 0.5; _i=$((_i + 1))
+      done
+      echo "react-native traffic-arm: the recorder did not connect in 10 s; see $_d/recorder.log" >&2
+      echo "off unknown"; exit 1
+      ;;
+    traffic-disarm)
+      _live || exit 2
+      kill "$(cat "$_d/pid")"; echo "stopped"
+      ;;
+    traffic-list)
+      [ -r "$_d/state" ] || { echo "# capture was never armed for this session — run bin/publish.sh" >&2; exit 1; }
+      _live || echo "# the recorder is not running; this is what it saw before it stopped" >&2
+      [ -s "$_d/traffic.ndjson" ] || { echo "# no requests recorded since capture was armed ($(cat "$_d/state")). Expo apps: Metro needs EXPO_PUBLIC_USE_RN_FETCH=1 for fetch to report." >&2; exit 0; }
+      python3 -c '
+import json, sys
+for line in open(sys.argv[1]):
+    r = json.loads(line)
+    st = r.get("status", "ERR" if r.get("error") else "-")
+    print("%22s %-6s %-4s %s" % (r.get("id", "-"), r.get("method", "-"), st, r.get("url", "-")))
+' "$_d/traffic.ndjson"
+      ;;
+    traffic-one)
+      _id=${3:?traffic-one <base> <session> <id>}
+      [ -r "$_d/traffic.ndjson" ] || { echo "no requests recorded for this session" >&2; exit 1; }
+      python3 -c '
+import json, sys
+for line in open(sys.argv[1]):
+    r = json.loads(line)
+    if r.get("id") != sys.argv[2]:
+        continue
+    print("%s %s  -> %s" % (r.get("method", "-"), r.get("url", "-"), r.get("status", r.get("error", "-"))))
+    print("--- request headers ---"); print(json.dumps(r.get("requestHeaders", {}), indent=2))
+    if r.get("requestBody"):
+        print("--- request body ---"); print(r["requestBody"][:4000])
+    print("--- response headers ---"); print(json.dumps(r.get("responseHeaders", {}), indent=2))
+    print("--- response body ---"); print((r.get("body") or r.get("bodyError") or "")[:8000])
+    sys.exit(0)
+sys.exit("no request %s in this session" % sys.argv[2])
+' "$_d/traffic.ndjson" "$_id"
+      ;;
+  esac
   ;;
 
 prefs-prefix)
