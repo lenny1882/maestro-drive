@@ -1,6 +1,6 @@
 ---
 name: maestro-drive
-description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app must already be installed; this skill does NOT build or launch from source (that is flutter-hot-reload-mac). Works in any project; settings come from a per-project .maestro-drive.conf.
+description: DRIVE the app — tap, type, swipe, scroll, navigate and run whole UI journeys on an already-running iOS simulator or Android emulator app, on a remote Mac or on this machine. This is the skill for 'drive the app', 'start driving', 'test the UI', 'reproduce a bug', 'step through the app', or any interaction with the running app. The app is expected to be installed already; the skill builds and installs it only when asked. Works in any project; settings come from a per-project .maestro-drive.conf.
 allowed-tools:
   - Bash
   - Read
