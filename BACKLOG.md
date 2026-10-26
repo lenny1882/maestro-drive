@@ -592,8 +592,10 @@ and flavours and app ids out of `build.gradle`.
   stops with the target at the bottom edge, and Maestro counts it 100%
   visible underneath the toast: the taps at (720,2898) on `product-card-8` and
   (456,2783) on `recently-viewed-item-1` hit the toast and the screen did not
-  change. Still to do: `flow.sh -f` runs a flow in place, or ships its
-  directory, when the flow refers to other files.
+  change. Confirmed: with `launch.yaml` closing the toast first (a tap on its
+  X at 92%,92%, in a scratch copy), both flows passed, in 36 s and 21 s.
+  Still to do: `flow.sh -f` runs a flow in place, or ships its directory,
+  when the flow refers to other files.
 - 6.7 `inspect`: discover Metro's port, read `/json/list`, revalidate the
   target after a reload. The Hermes target appears only once the app connects.
   Needs 6.4.
