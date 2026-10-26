@@ -16,8 +16,11 @@
 - **120.** `flow.sh -f` cannot run a flow that `runFlow`s a file beside it.
 - **121.** `drivers.sh rig up` on Android announces a driver it will not start.
 - **122.** `prefs-read` on Android runs every `shared_prefs` file together, unnamed.
+- **123.** Any Claude session that ends stops the bridge another session is using.
+- **124.** A build through the bridge dies when its caller's time limit runs out.
+- **125.** A pattern-matched kill sent through the bridge can kill the bridge helper.
 
-Next item number: 123.
+Next item number: 126.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -750,6 +753,16 @@ and flavours and app ids out of `build.gradle`.
     with one VPN reset; the address is not the cause. A driven journey
     through this route needs a retry on a launch that has not loaded in
     10 s.
+  - Without Metro, no stall. A release build (`--mode release`, debug
+    keystore, same app id; 18 m 24 s cold, run detached because a call
+    held open past the caller's limit dies) installed over the debug one.
+    Ten launches through the VPN, each after `pm clear`: `products.json`
+    reached the proxy in 1–4 s every time, and the proxy recorded 100
+    requests to S3 (`products.json` and nine images per launch). One VPN
+    reset, on the 2nd, did not stop it. So the stall is in the dev build's
+    Metro traffic (the multipart bundle stream and long-lived sockets), and
+    the proxy route is sound for a build with its bundle inside. Afterwards
+    the debug APK went back and loads from Metro.
   Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
@@ -1046,3 +1059,61 @@ the stream as one document.
 **To do.** Print each file's name before its contents, and let the framework
 name the file that is its own (Flutter's `FlutterSharedPreferences.xml`).
 Reading AsyncStorage needs an app that uses it, to measure where it lands.
+
+## 123. Any Claude session that ends stops the bridge another session is using — **OPEN, raised 26 Oct 2026**
+
+**What.** `skill/hooks/rig-down-on-end.sh:55`, the SessionEnd hook, runs
+`bin/bridge-mcp.py --stop`. `stop()` writes `stop` to the helper named in
+`STATE`, which is `/tmp/claude-1000/.maestro-bridge`: one file per user, not
+per session, so it names whichever helper was started last by any session.
+On 26 Oct 2026 the helper this session had just started logged
+`stop requested` at 22:01:54, 22:08:16 and 22:19:13 with no stop sent from
+this session; the other bridge directories show paired stops through the day
+(18:38, 19:30, 19:42, 20:05). Each time, the next call failed:
+`Terminated` from `mac.sh`, or "no helper is running".
+
+**Why.** Two sessions on one machine is the normal case. A session in the
+middle of a build or a flow loses its transport when an unrelated one closes,
+and the failure reads as a hung command.
+
+**To do.** Record the helper per session (a state file keyed by the
+session id the hook receives, or the helper's directory kept by the MCP
+server that started it) and have the hook stop only that one.
+
+## 124. A build through the bridge dies when its caller's time limit runs out — **OPEN, raised 26 Oct 2026**
+
+**What.** `bin/build.sh --release --no-install` for `oneiota-products-rn`,
+run in the background from Claude Code with `BUILD_TMO=1800`, ended after
+about 11 minutes with the Gradle log cut mid-line and `exit 1`; the bridge
+logged the request's `exit 141`. The Bash tool caps a command at 10 minutes:
+when it killed the caller, the client's `cat` of the request's stdout FIFO
+went, the far side got SIGPIPE, and Gradle with it. `BUILD_TMO` cannot raise a
+limit that is the caller's. Run detached on the device's machine (setsid,
+logging to a file, waiting on the log in under-10-minute steps), the same
+build finished: `BUILD SUCCESSFUL in 18m 24s`. A cold debug build took
+13 m 49 s.
+
+**Why.** A cold React Native build is longer than the tool's limit, and the
+way it fails (a truncated log, exit 1, no Gradle error) points at the build.
+
+**To do.** Have `build.sh` start the framework's build detached on the
+device's machine and poll its log and status file, so no single call is
+held open for the length of the build.
+
+## 125. A pattern-matched kill sent through the bridge can kill the bridge helper — **OPEN, raised 26 Oct 2026**
+
+**What.** Twice on 26 Oct 2026 a stop command sent through `mac.sh` killed
+the bridge helper it was travelling through (`Exit code 144`, then "no
+helper is running"): `pkill -f 'node .*expo start'`, and a
+`ps -eo pid,args | awk '/[h]ttptoolkit-server\/client/'` whose pids went to
+`kill`. The command text the bridge runs is in the command line of a process
+on the same machine, so the pattern matched it.
+
+**Why.** The bridge is the only way in; killing it ends the session's access
+until it is restarted, and the next call hangs rather than failing.
+
+**To do.** In `SKILL.md`, say that anything stopped through the bridge is
+stopped by pid, found from the port it holds (`ss -ltnp`) or a pid file, not
+by `pkill -f` or a pattern over `ps` output. Where the package itself stops a
+process (`driver-down`, `traffic-disarm`, `publish.sh stop`'s `pkill -f
+'relay.py …'`), check it the same way.
