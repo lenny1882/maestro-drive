@@ -596,9 +596,25 @@ and flavours and app ids out of `build.gradle`.
   X at 92%,92%, in a scratch copy), both flows passed, in 36 s and 21 s.
   Still to do: `flow.sh -f` runs a flow in place, or ships its directory,
   when the flow refers to other files.
-- 6.7 `inspect`: discover Metro's port, read `/json/list`, revalidate the
-  target after a reload. The Hermes target appears only once the app connects.
-  Needs 6.4.
+- 6.7 **Done.** `inspect` reads Metro's `/json/list` on `RCT_METRO_PORT`
+  (8081 unless set, the port devsession asks) and prints
+  `ws://127.0.0.1:8081/inspector/debug?device=…&page=1 <target id>`; a CDP
+  `Runtime.evaluate` over that URL answered from Hermes. Measured:
+  - The inspector proxy returns 401 with no Origin. With Origin
+    `http://localhost:8081` it accepts the upgrade and drops the session
+    (1006) before a message reaches the device, in both Node's WebSocket and
+    the `ws` package. URL and Origin on 127.0.0.1 work; a client must send it.
+  - The target id and URL stayed the same across CDP `Page.reload` and an app
+    force-stop and restart, and kept answering; only the runtime was new (a
+    global counter went back to 1). After a force-stop the list is empty
+    within 2 s. So nothing is cached: the list is read every call.
+  - Metro's `POST /reload` answered 200 and reloaded nothing, with or without
+    `CI`; `Page.reload` reloaded. `CI=1 expo start` prints that reloads are
+    disabled; `CI=` (empty) fails with `GetEnv.NoBoolean`; `CI=false` works.
+  - Exit 1 for no Metro, for Metro with no app connected, and for two targets
+    of `APP_ID` (it lists them and does not guess; matching a target to a
+    serial is not written). Five offline tests stub `curl`. `publish.sh`
+    against React Native has not been run.
 - 6.8 Traffic: a proxy-based verb, configured before the app starts, in place
   of the `traffic-*` exit 2. Needs 6.4.
 - 6.9 iOS: `variants`, `variant-for-appid` and `build`. Needs the Mac,

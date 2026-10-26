@@ -260,21 +260,48 @@ devsession)
   ;;
 
 inspect)
-  # PLAUSIBLE, NOT MEASURED. Metro serves a Chrome DevTools Protocol target list
-  # at http://localhost:8081/json/list, and each entry carries a
-  # webSocketDebuggerUrl for the Hermes runtime. The contract wants
-  # `<base-uri> <session-id>`, and the natural mapping is the base URL plus the
-  # target's id.
+  # MEASURED against `expo start` (Expo 58, RN 0.88) and emulator-5554. Prints
+  # `<webSocketDebuggerUrl> <target id>` for the app's Hermes target in Metro's
+  # /json/list, e.g.
+  #   ws://127.0.0.1:8081/inspector/debug?device=6795…&page=1 6795…-1
+  # A CDP Runtime.evaluate over that URL answered.
   #
-  # Two things to establish before trusting it. Metro's port is 8081 by default
-  # and moves when something else has it, so it has to be discovered like the
-  # Dart VM Service port is rather than assumed. And a target list survives a
-  # reload while the target behind it does not, so the cached pair needs the
-  # same re-validation vmservice.sh does — a dead target that still answers is
-  # the failure where an empty traffic list reads as a quiet app.
-  echo "runners/react-native inspect: not written — Metro's CDP target list at" >&2
-  echo "  /json/list is the endpoint; the port must be discovered, not assumed." >&2
-  exit 2
+  # The port is the one devsession asks: RCT_METRO_PORT, 8081 unless set. It
+  # is what the app's build was told, so it is the port the app connects to.
+  #
+  # 127.0.0.1, NOT localhost. The inspector proxy refuses the upgrade (401)
+  # without an Origin, and with Origin http://localhost:8081 it accepts the
+  # upgrade and then drops the session (1006) before any message reaches the
+  # device. URL and Origin both 127.0.0.1 work. A client must send that Origin.
+  #
+  # NO CACHE, so the cache argument is unused. The target id and URL stayed the
+  # same across a CDP Page.reload and an app force-stop and restart, and kept
+  # answering; only the runtime behind them was new (a global set before read
+  # back unset). A pair cannot go stale while the app is connected, and after a
+  # restart the list is empty until the app reconnects, which is read fresh
+  # every call. Metro's POST /reload answered 200 and reloaded nothing.
+  _port=${RCT_METRO_PORT:-8081}
+  _l=$(curl -s -m 3 "http://127.0.0.1:$_port/json/list" 2>/dev/null) || _l=
+  if [ -z "$_l" ]; then
+    echo "no Metro answers on :$_port — see devsession." >&2; exit 1
+  fi
+  printf '%s' "$_l" | APP_ID="${APP_ID:-}" python3 -c '
+import json, os, sys
+try:
+    ts = json.load(sys.stdin)
+except ValueError:
+    sys.exit("Metro on :%s did not return a target list" % sys.argv[1])
+app = os.environ["APP_ID"]
+ts = [t for t in ts if t.get("webSocketDebuggerUrl") and (not app or t.get("appId") == app)]
+if not ts:
+    sys.exit("Metro is running but no app%s is connected to it: the Hermes target "
+             "appears once the app has loaded its bundle." % (" " + app if app else ""))
+if len(ts) > 1:
+    sys.exit("%d targets, and nothing here yet tells which is this device:\n%s" % (len(ts),
+             "\n".join("  %s  %s" % (t["id"], t.get("deviceName", "?")) for t in ts)))
+t = ts[0]
+print(t["webSocketDebuggerUrl"].replace("ws://localhost:", "ws://127.0.0.1:", 1), t["id"])
+' "$_port"
   ;;
 
 traffic-arm|traffic-list|traffic-one)

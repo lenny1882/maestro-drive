@@ -2754,12 +2754,43 @@ if command -v git >/dev/null 2>&1; then
     && ok "an unreachable endpoint is unknown rather than off" \
     || no "an unreachable endpoint is unknown rather than off" "rc=$rc: $ta"
 
-  # And the two failures publish.sh must keep apart. React Native has a debug
-  # endpoint that is not written yet; a plain Xcode app has none at all. Both
-  # exit 2, and neither is "the relay is broken".
-  sh "$REPO/runners/react-native/framework.sh" inspect dev cache >/dev/null 2>&1
-  [ $? = 2 ] && ok "a framework with no written inspect exits 2, not 1" \
-              || no "a framework with no written inspect exits 2, not 1" "wrong status"
+  # And the two failures publish.sh must keep apart. A framework with no debug
+  # endpoint exits 2; one whose endpoint is not up exits 1. Neither is "the
+  # relay is broken".
+  sh "$REPO/runners/TEMPLATE/framework.sh" inspect dev cache >/dev/null 2>&1
+  [ $? = 2 ] && ok "a framework with no inspect exits 2, not 1" \
+              || no "a framework with no inspect exits 2, not 1" "wrong status"
+
+  # React Native's inspect reads Metro's /json/list; curl is stubbed with a
+  # fixture shaped like the one measured against expo start (item 87, 6.7).
+  istub="$TMP/inspect-stub"; mkdir -p "$istub"
+  _rni() { PATH="$istub:$PATH" sh "$REPO/runners/react-native/framework.sh" inspect emulator-5554 cache 2>&1; }
+  _tgt() { printf '{"id":"%s-1","appId":"%s","deviceName":"%s","webSocketDebuggerUrl":"ws://localhost:8081/inspector/debug?device=%s&page=1"}' "$1" "$2" "$3" "$1"; }
+  printf '#!/bin/sh\nexit 7\n' > "$istub/curl"; chmod +x "$istub/curl"
+  rio=$(_rni); rc=$?
+  { [ "$rc" = 1 ] && grep -q 'no Metro answers on :8081' <<< "$rio"; } \
+    && ok "react-native inspect with no Metro exits 1 and points at devsession" \
+    || no "react-native inspect with no Metro exits 1 and points at devsession" "rc=$rc: $rio"
+  printf '#!/bin/sh\nprintf "[]"\n' > "$istub/curl"
+  rio=$(_rni); rc=$?
+  { [ "$rc" = 1 ] && grep -q 'no app.*connected' <<< "$rio"; } \
+    && ok "react-native inspect with Metro but no app connected exits 1 and says so" \
+    || no "react-native inspect with Metro but no app connected exits 1 and says so" "rc=$rc: $rio"
+  printf '#!/bin/sh\nprintf %%s %s\n' "'[$(_tgt d1 dev.x 'Pixel - API 34')]'" > "$istub/curl"
+  rio=$(_rni); rc=$?
+  { [ "$rc" = 0 ] && [ "$rio" = "ws://127.0.0.1:8081/inspector/debug?device=d1&page=1 d1-1" ]; } \
+    && ok "react-native inspect prints the target's URL on 127.0.0.1 and its id" \
+    || no "react-native inspect prints the target's URL on 127.0.0.1 and its id" "rc=$rc: $rio"
+  printf '#!/bin/sh\nprintf %%s %s\n' "'[$(_tgt d1 dev.x A),$(_tgt d2 dev.y B)]'" > "$istub/curl"
+  rio=$(APP_ID=dev.y _rni); rc=$?
+  { [ "$rc" = 0 ] && [ "${rio##* }" = d2-1 ]; } \
+    && ok "react-native inspect keeps only APP_ID's target" \
+    || no "react-native inspect keeps only APP_ID's target" "rc=$rc: $rio"
+  printf '#!/bin/sh\nprintf %%s %s\n' "'[$(_tgt d1 dev.x A),$(_tgt d2 dev.x B)]'" > "$istub/curl"
+  rio=$(_rni); rc=$?
+  { [ "$rc" = 1 ] && grep -q '2 targets' <<< "$rio" && grep -q 'd2-1' <<< "$rio"; } \
+    && ok "react-native inspect refuses to guess between two targets, and lists them" \
+    || no "react-native inspect refuses to guess between two targets, and lists them" "rc=$rc: $rio"
   # The traffic verbs run on EITHER side, so every file they touch must resolve
   # from the module rather than from $RDIR — which is a path on the MAC and
   # means nothing in the sandbox. net.py was once addressed as $RDIR/net.py,
