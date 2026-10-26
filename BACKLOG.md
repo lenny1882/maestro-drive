@@ -694,6 +694,26 @@ and flavours and app ids out of `build.gradle`.
     Packet … 192.168.4.39:8000`, the app at "Downloading 10.2%"), where two
     earlier launches through it had loaded. So both routes at once is still
     not measured.
+  - Why the VPN drops connections, not found. HTTP Toolkit's Android app
+    reaches the proxy at the LAN address (192.168.4.39:8000), not through
+    `adb reverse`. On the next launch the bundle loaded, and the app's
+    inspector WebSocket registered with Metro through the proxy
+    (`via=http://127.0.0.1:8081`), then closed after 16.0 s with code 1005
+    and did not come back; a direct one, VPN off, had lasted 5 min. Around
+    it the VPN logged `closed session` then `Ack for unknown session … Sent
+    RST`: it drops sessions and resets the app's next packet. Metro served
+    every bundle in about 65 ms and the proxy logged no error.
+  - The proxy alone, VPN off, emulator untouched: on a fresh session with the
+    same rules, the first WebSocket upgrade to `10.0.2.2:8081/inspector/device`
+    through it (curl `-x`) got `101` and registered with Metro; every upgrade
+    after it on that session (curl three times, the `ws` package in both
+    request forms, a raw socket) got no answer at all, while plain HTTP
+    through the same proxy (`/status`, `example.com`) kept answering. So
+    Mockttp, as driven here, forwards one WebSocket and stalls the rest. That
+    fits the app: its first inspector connection got through, and after it
+    closed none of its reconnects did. Not known: why the first closed after
+    16 s, and whether the stall is the `transformRequest.replaceHost` rule or
+    WebSocket pass-through in general.
   Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
