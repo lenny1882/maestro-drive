@@ -650,6 +650,14 @@ today's label from a different live session, naming that session. Cheap: the
 label file is already on the Mac. A `PreToolUse` hook on `flutter run -d
 <udid>` over `mac.sh`/`ssh` would catch the hand-launched case too.
 
+The same check belongs on the paths that destroy another session's state
+rather than replace its app: `simctl erase`, `simctl uninstall`, and
+`drivers.sh` taking over a device's port or driver. The hook on Bash covers
+those as well as `flutter run -d <udid>`. The rule exists today only as a
+hugoboss-flutter-runner project memory that is missing from that project's
+`MEMORY.md` index, so no session has loaded it, and no other project that
+drives a simulator would see it even if one had.
+
 ## 113. The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven — **OPEN**
 
 **What.** The Android runner works on the machine running the skill (items 94,
@@ -701,3 +709,39 @@ scripts as they stood before the skill was packaged. Their own README says
 part of the project. Git history keeps the files without it.
 
 **To do.** `git rm -r remote-STALE-pre-skill/`.
+
+## 118. Nothing stops screenshot-driven element finding or raw-coordinate taps — **OPEN**
+
+**What.** Elements get found by reading a screenshot and tapped by raw x/y,
+rather than by reading the view hierarchy and resolving with `tapon`, `find`
+or `--index`. `skill/hooks/gate-journey-first.sh` bumps a raw `tap`/`swipe`
+once per session and then lets every later one through, and nothing at all
+fires on a screenshot: neither the maestro-mac `take_screenshot` tool nor
+`shot.sh`. The rule lives in four hugoboss-flutter-runner project memories,
+dated 21 Aug, 3 Sep, 15 Sep and 5 Oct 2026, and was broken again on 20 Oct.
+
+**Why.** Project memories never reach the other projects that drive an app,
+and four of them in one project have not held. A hook ships with the skill,
+so every project gets it.
+
+**To do.** A `PreToolUse` hook beside `gate-journey-first.sh` that denies the
+screenshot calls (`take_screenshot`, `shot.sh`) and any driver call or journey
+step that taps raw x/y, unless the view hierarchy was read earlier in the same
+turn. The refusal says to read the tree and resolve with `tapon`, `find` or
+`--index`. Decide whether it replaces the raw-tap half of
+`gate-journey-first.sh` or sits beside it. Once it ships, the four memories
+can be deleted.
+
+## 119. `SKILL.md` does not say that driving and building are different skills — **OPEN**
+
+**What.** The skill descriptions separate `maestro-drive` (drive an app that
+is already installed) from `flutter-hot-reload-mac` (build and run from
+source), but `skill/SKILL.md` says neither. The distinction is otherwise a
+hugoboss-flutter-runner project memory missing from that project's
+`MEMORY.md` index.
+
+**Why.** A session that reads only the skill body, not its description, has
+nothing telling it which skill to reach for, and no session loads the memory.
+
+**To do.** One short section near the top of `SKILL.md`: what this skill does
+not do, and which skill does it.
