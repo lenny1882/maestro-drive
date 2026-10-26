@@ -712,8 +712,35 @@ and flavours and app ids out of `build.gradle`.
     Mockttp, as driven here, forwards one WebSocket and stalls the rest. That
     fits the app: its first inspector connection got through, and after it
     closed none of its reconnects did. Not known: why the first closed after
-    16 s, and whether the stall is the `transformRequest.replaceHost` rule or
-    WebSocket pass-through in general.
+    16 s.
+  - The stall is the host rewrite. Fresh session each, four curl upgrades
+    each, every one closed by curl after 4 s: to `127.0.0.1:8081` with a
+    plain `ws-passthrough`, 4 of 4 reached Metro; to `127.0.0.1:8081` with
+    the `replaceHost` rule (a no-op there), 4 of 4; to `10.0.2.2:8081` with
+    the rule rewriting it to `127.0.0.1:8081`, the first reached Metro and
+    the next three got no answer. Likely the rewrite is applied to the first
+    upgrade only and the rest dial 10.0.2.2, which the host cannot reach; the
+    proxy logged no timeout inside 4 s, so that is not confirmed.
+  - **Pointing the app at Metro's LAN address removes the rewrite, and both
+    routes then ran together.** The app's `debug_http_host` preference
+    (`shared_prefs/<app-id>_preferences.xml`, read by
+    `PackagerConnectionSettings`) set to `192.168.4.39:8081`; Metro listens
+    on every interface. VPN off, the app loaded and registered
+    `via=http://192.168.4.39:8081`. VPN on, with only pass-through rules
+    (no rewrite) besides the two proxy checks: the proxy carried both bundle
+    downloads, `/status`, `/symbolicate` and every Metro WebSocket; Metro
+    registered three inspector connections in a row through it (the
+    rewrite had stalled the second); the target was still listed after
+    60 s; over it the CDP route got `requestWillBeSent` and
+    `responseReceived` for an XHR to `products.json`, and the proxy recorded
+    the same request, decrypted. Still failing: on the next relaunch the
+    bundle download stalled at 2.6 %, and on that run the VPN reached the
+    proxy at 100.111.114.95 rather than the LAN address. So the bundle
+    stall is separate from the rewrite and from the address. This HTTP
+    Toolkit app build also refuses to connect without notification
+    permission (`pm grant … POST_NOTIFICATIONS` settles it). A `clearState`
+    launch erases `debug_http_host`. Afterwards: HTTP Toolkit uninstalled,
+    the preference removed, the emulator rebooted (CA gone), the app loads.
   Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
@@ -1010,4 +1037,3 @@ the stream as one document.
 **To do.** Print each file's name before its contents, and let the framework
 name the file that is its own (Flutter's `FlutterSharedPreferences.xml`).
 Reading AsyncStorage needs an app that uses it, to measure where it lands.
-
