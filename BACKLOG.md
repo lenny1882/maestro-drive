@@ -650,7 +650,39 @@ and flavours and app ids out of `build.gradle`.
   said `profiling on (was off, now on …)`; after a `Page.reload`, `net.sh`
   listed the symbolicate POST and `GET 200 …/products.json`, and `net.sh
   <id>` printed the whole JSON body; `publish.sh stop` left no recorder.
-  Six offline tests. Measured before the design:
+  Six offline tests.
+  - **Proxy route, measured by hand; no verbs yet.** HTTP Toolkit's server
+    (1.26.1, `~/.local/share/httptoolkit-server`) started headless with
+    `start -c ~/.config/httptoolkit --token <ours>`, the desktop app closed.
+    Its Mockttp admin API (45456, Origin `https://app.httptoolkit.tech`)
+    started a session with `recordTraffic: true` on port 8000;
+    `POST /interceptors/android-adb/activate/8000` (45457, Bearer token)
+    rooted `emulator-5554`, injected the CA into the system store, installed
+    its app (v1.7.0) and set `adb reverse tcp:8000`. Four things it needed:
+    - The app checks the proxy through `http://android.httptoolkit.tech/config`
+      (JSON `{certificate: <PEM>}`) and `http://amiusing.httptoolkit.tech/certificate`,
+      which HTTP Toolkit's UI answers. A pass-through rule sent them to the
+      internet and the app said it could not connect; two rules answering
+      them with `ca.pem` fixed it.
+    - Android's VPN consent dialog (OK) and a notification prompt, tapped
+      through Maestro.
+    - The VPN carries the app's Metro traffic, to 10.0.2.2:8081, which means
+      nothing on the host: the app stayed blank. A rule forwarding
+      `10.0.2.2:8081` to `127.0.0.1:8081`, for HTTP and WebSockets
+      (`forwarding: {targetHost}`), let the bundle load.
+    - OkHttp's disk cache answered `products.json` on a plain relaunch, so
+      nothing reached the proxy; a `clearState` launch sent it.
+    Then `mockedEndpoints { seenRequests }` listed the decrypted
+    `GET https://…/products.json`, nine expo-image requests (its own client,
+    which the CDP route never sees) and another app's analytics POST (the VPN
+    is device-wide). With Metro restarted without `EXPO_PUBLIC_USE_RN_FETCH`
+    (bundle 1299 modules, against 1322 with it), a `clearState` launch's
+    `products.json` was recorded too. Against: with the VPN up, the app's
+    inspector WebSocket reached the proxy (three recorded) but Metro listed
+    no target, so the two routes do not run together yet. `seenRequests`
+    holds requests only; responses need the `responseCompleted`
+    subscription.
+  Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
   build), and Android's `NetworkingModule` reports every request to it. Over
