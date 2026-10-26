@@ -613,8 +613,18 @@ and flavours and app ids out of `build.gradle`.
     disabled; `CI=` (empty) fails with `GetEnv.NoBoolean`; `CI=false` works.
   - Exit 1 for no Metro, for Metro with no app connected, and for two targets
     of `APP_ID` (it lists them and does not guess; matching a target to a
-    serial is not written). Five offline tests stub `curl`. `publish.sh`
-    against React Native has not been run.
+    serial is not written). Five offline tests stub `curl`.
+  - `publish.sh` against React Native: `start` brings the relay up (9100 to
+    8081; `/json/list` read through it from the sandbox) and writes the state
+    file, but its report is Flutter's. It prints `profiling unknown (could not
+    be set …; net.sh may come back empty)` where `traffic-arm` exited 2, and a
+    by-hand line of `curl "$BASE/getVM"`. `status` says "not reachable — the
+    app has probably restarted" with the relay up and the app connected, and
+    `net.sh` says "no relay published": both test the relay with the Dart VM
+    Service's `getVersion` (`bin/publish.sh` `_vm`, `bin/net.sh:63`). `net.sh`
+    then exits 2 with React Native's own "no in-runtime HTTP capture" text,
+    which is right. To do: the liveness probe and the report lines come from
+    the module. Through the relay the Origin rule above is not measured.
 - 6.8 Traffic: a proxy-based verb, configured before the app starts, in place
   of the `traffic-*` exit 2. Needs 6.4.
 - 6.9 iOS: `variants`, `variant-for-appid` and `build`. Needs the Mac,
