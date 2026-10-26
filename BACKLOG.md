@@ -6,8 +6,15 @@
 - **90.** The wall shows simulators only, and a phone is a device too — gated on finding a way to stream a physical device's screen.
 - **87.** Flutter and iOS are wired in, not plugged in.
 - **107.** The `MaterialApp.router` dropdown report has not been sent upstream — re-test against Flutter 3.49 first.
+- **109.** `wall.sh label <name> <udid>` labels the wrong device and reports success.
+- **110.** `script --steps '…' file.journey` swallows the file name into the last step.
+- **111.** The ambiguity refusal says "pass --index", and `tapon` refuses `--index`.
+- **112.** Nothing stops a second session launching onto a device another session has labelled.
+- **113.** The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven.
+- **114.** `lib/update-check.sh` is installed and nothing runs it.
+- **115.** `remote-STALE-pre-skill/` is still tracked.
 
-Next item number: 109.
+Next item number: 116.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -535,6 +542,119 @@ is gone in 3.49, record that in `UPSTREAM.md` and close this item without
 posting. If not, decide where the report goes (a new issue, a comment on
 #189686, or a comment on #100946), replace the app-specific caption and
 dropdown labels in `DRAFT-ISSUE.md` with generic ones, and post it once the
-exact text is approved.
+exact text is approved. Either way, when the item closes, move
+`flutter-router-dropdown-repro/` out of this repo — it is a Flutter bug
+reproduction, not part of the skill, and nothing installs or tests it.
 
 **Gated on.** Approval of the exact text before anything is posted.
+
+## 109. `wall.sh label <name> <udid>` labels the wrong device and reports success — **OPEN**
+
+**What.** The usage is `label [<udid>] <name> [--group <g>]`. Passing the UDID
+after the name — `wall.sh label "<release>: <ticket> iPad" EF266A1C-…
+--group <project>` — labelled the `DEV` device (C61983AE, the
+iPhone) with the text `<release>: <ticket> iPad EF266A1C-BB33-…` and
+printed it as a success. Measured 21 Oct 2026.
+
+**Why.** A wrong name on a shared wall is exactly what the label exists to
+prevent, and the success line hides it unless it is read closely.
+
+**To do.** When any trailing word matches a UDID, either take it as the target
+or refuse with the usage line; never fold it into the name.
+
+## 110. `script --steps '…' file.journey` swallows the file name into the last step — **OPEN**
+
+**What.** `driver.sh script --steps 'expect "ID - 1927-92626"' 22-cancel-request.journey`
+ran one step, printed `ok … expect "ID - 1927-92626" 22-cancel-request.journey`,
+and never ran the journey. The same happened with `--steps 'expect "Item
+Picked Up" 10' 19-deliver.journey`. Measured twice, 21 Oct 2026.
+
+**Why.** It reads as a pass. The steps that were meant to change state (a
+cancel, a deliver) did not run, and nothing said so.
+
+**To do.** Either run trailing journey names after the inline steps, or refuse
+when `--steps` is followed by anything.
+
+## 111. The ambiguity refusal says "pass --index", and `tapon` refuses `--index` — **OPEN**
+
+**What.** `resolve: /^Continue$/ matches 2 nodes; narrow the pattern or pass
+--index`. `tapon "^Continue$" --index 0` and `--index 1` both die in
+`resolve.py`'s argparse with `argument --index: expected one argument`; the
+positional `tapon "^Continue$" 0` works. Measured 21 Oct 2026. Item 29 fixed
+`--anyway` in the same position but not `--index`.
+
+**To do.** Accept `--index N` in `_resolve`'s flag sorting, or make the refusal
+say `tapon <pattern> <index>`.
+
+## 112. Nothing stops a second session launching onto a device another session has labelled — **OPEN**
+
+**What.** 21 Oct 2026, one iPhone 16 Pro (C61983AE): this session had labelled
+it and was driving a branch build; a peer session, on another ticket, ran `flutter run`
+onto the same UDID at 16:37 and again at 16:44, and SpringBoard logged
+"Termination requested by simulator host" each time. The driver went with it
+(`nothing listening on 22087`), the app came back as the other branch's build,
+and the first symptom on this side was the tree turning into the home screen
+mid-journey. `drivers.sh rig status` did show `BY cyan · d978fd3` against the
+device; nothing read it before the launch.
+
+**Why.** Two reviews of two branches on one simulator each look like the app
+misbehaving. Finding the cause took the SpringBoard log, the Mac's process
+list and `/tmp/p26-*.log`.
+
+**To do.** A check the launch paths can call — `build.sh`, `drivers.sh up`,
+and the hot-reload skill's `start.sh` — that refuses when the device carries
+today's label from a different live session, naming that session. Cheap: the
+label file is already on the Mac. A `PreToolUse` hook on `flutter run -d
+<udid>` over `mac.sh`/`ssh` would catch the hand-launched case too.
+
+## 113. The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven — **OPEN**
+
+**What.** The Android runner works on the machine running the skill (items 94,
+96), but over `TRANSPORT=ssh` the far side is assumed to be macOS.
+`REMOTE_ENV` in `skill/bin/lib.sh:128` replaces `PATH` with
+`/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.maestro/bin`, so `adb` and the emulator
+from an Android SDK are not found unless they sit in `/usr/bin`.
+`skill/setup/wizard.sh` is Mac-only: `systemsetup` for Remote Login, a launchd
+plist for the fixed address, and `.local` mDNS names. Nothing has been run
+against a remote Linux host. Windows has no POSIX shell for the `sh` scripts
+short of WSL.
+
+**Why.** An Android emulator needs KVM, and a Linux box with it is a cheaper
+device host than a Mac. The runner modules already answer every Android verb
+that can be answered; only the transport and the setup stand in the way.
+
+**To do.** Add the Android SDK's `platform-tools` and `emulator` directories to
+`REMOTE_ENV`, taken from a conf value that `bin/init.sh --detect` asks the
+remote host for, as it does for `RJAVA`. Give the wizard a non-Mac path that
+skips Remote Login, launchd and mDNS. Then drive an emulator on a remote Linux
+host end to end and record what broke. Rename `MAC_HOST` and `MAC_FQDN`, or
+alias them, once the remote is not always a Mac.
+
+## 114. `lib/update-check.sh` is installed and nothing runs it — **OPEN**
+
+**What.** `install.sh:84-88` copies `lib/update-check.sh` into
+`~/.local/share/maestro-drive/` and `install.sh:233-235` records the installed
+version with it. Its header describes a once-a-day check of the GitHub Releases
+API, run in the background so an unreachable remote never holds up a session.
+No hook, no `skill/` script and no MCP server calls it, and `manifest.sh`
+registers nothing for it.
+
+**Why.** A user who installed from the tarball never hears that a release is
+out. `./update.sh --check` only answers when someone thinks to run it.
+
+**To do.** Register a `SessionStart` hook in `manifest.sh` that runs the check
+in the background, and have the skill say once per session when the state file
+records a newer release. Or, if the check is not wanted, delete the script and
+its two call sites in `install.sh`.
+
+## 115. `remote-STALE-pre-skill/` is still tracked — **OPEN**
+
+**What.** Five files at the repo root, `remote-STALE-pre-skill/`, are the
+scripts as they stood before the skill was packaged. Their own README says
+"Superseded — do not edit, do not run", and they refer to
+`~/.claude/skills/maestro-remote-mac`, the package's old name.
+
+**Why.** A reader new to the repo sees a top-level directory that looks like
+part of the project. Git history keeps the files without it.
+
+**To do.** `git rm -r remote-STALE-pre-skill/`.
