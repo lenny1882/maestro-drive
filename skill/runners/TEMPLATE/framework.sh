@@ -170,6 +170,15 @@ inspect)
   exit 2
   ;;
 
+# --- alive <base> <session> -------------------------------------------------
+# Exit 0 if the endpoint inspect reported still answers for that session, 1 if
+# not. Runs on EITHER side, like the traffic verbs, through $grpc_proxy when it
+# is set. publish.sh status and net.sh's fast path ask this; a framework with
+# no debug endpoint keeps the exit 2.
+alive)
+  exit 2
+  ;;
+
 # --- traffic-arm <base> <session> --------------------------------------------
 # Turn HTTP capture on. Print TWO words: the state found, then the state after
 # arming. Each is `on`, `off` or `unknown`.

@@ -164,6 +164,14 @@ inspect)
   bash "$HERE/vmservice.sh" "$_dev" "$_cache"
   ;;
 
+alive)
+  # Does the published endpoint still answer for this session? The VM Service's
+  # getVersion returns a "type" while the app runs under it. publish.sh status
+  # and net.sh's fast path ask this rather than speaking the protocol.
+  _base=${1:?alive <base> <session>}
+  _curl --max-time 4 "$_base/getVersion" 2>/dev/null | grep -q '"type"'
+  ;;
+
 traffic-arm)
   # dart:io HTTP profiling is OFF by default and lives on the isolate, so it has
   # to be re-armed after anything that replaces the isolate: a restart, a hot

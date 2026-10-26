@@ -78,6 +78,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
 | `devsession` | Mac | is a hot-reload session live? print the processes, exit 0; exit 1 with the consequence when not | `pgrep -fl flutter_tools` in `bin/preflight.sh` |
 | `inspect <device> <cache>` | Mac | print `<base-uri> <session-id>` for the app's live debug endpoint, or exit 1 with the reason | `remote/vmservice.sh` |
+| `alive <base> <session>` | either | exit 0 if the endpoint `inspect` reported still answers for that session, 1 if not | `getVersion` in `bin/publish.sh` status and `bin/net.sh` |
 | `traffic-arm <base> <session>` | either | turn HTTP capture on; print `<was> <now>`, each `on`, `off` or `unknown` | `ext.dart.io.httpEnableTimelineLogging` in `bin/publish.sh` |
 | `traffic-list <base> <session>` | either | one request per line: id, method, status, uri | `bin/net.sh` + `remote/net.py list` |
 | `traffic-one <base> <session> <id>` | either | one request in full: headers, both bodies | `bin/net.sh` + `remote/net.py one` |

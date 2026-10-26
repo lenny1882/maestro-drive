@@ -304,6 +304,20 @@ print(t["webSocketDebuggerUrl"].replace("ws://localhost:", "ws://127.0.0.1:", 1)
 ' "$_port"
   ;;
 
+alive)
+  # MEASURED through publish.sh's relay. The base is inspect's ws:// URL, or
+  # the relay's http:// one; Metro's /json/list on the same host and port lists
+  # the session id while the app is connected and drops it within 2 s of a
+  # force-stop. The CDP socket itself is not opened: it wants Origin
+  # http://127.0.0.1:<metro port>, which a client must send whichever host it
+  # dials (through the relay too; the relay's own origin gets 401).
+  _base=${1:?alive <base> <session>}; _id=${2:?session}
+  _root=$(printf '%s' "$_base" | sed -E 's#^(ws|http)s?://([^/]*).*#http://\2#')
+  if [ -n "${grpc_proxy:-}" ]; then _l=$(curl -s -x "$grpc_proxy" --max-time 4 "$_root/json/list" 2>/dev/null)
+  else _l=$(curl -s --max-time 4 "$_root/json/list" 2>/dev/null); fi
+  printf '%s' "$_l" | grep -q "\"id\": *\"$_id\""
+  ;;
+
 traffic-arm|traffic-list|traffic-one)
   # THE HONEST ANSWER, and the reason exit 2 exists in this contract.
   #

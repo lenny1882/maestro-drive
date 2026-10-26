@@ -60,7 +60,7 @@ MSG
 }
 
 if [ -f "$STATE" ] && read -r BASE ISO < "$STATE" \
-   && curl -s -x "$grpc_proxy" --max-time 4 "$BASE/getVersion" 2>/dev/null | grep -q '"type"'; then
+   && sh "$FW_LOCAL" alive "$BASE" "$ISO" >/dev/null 2>&1; then
   if [ -z "$ARG" ]; then
     out=$(sh "$FW_LOCAL" traffic-list "$BASE" "$ISO"); rc=$?
     [ "$rc" = 2 ] && exit 2

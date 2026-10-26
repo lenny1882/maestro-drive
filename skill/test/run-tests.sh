@@ -2791,6 +2791,35 @@ if command -v git >/dev/null 2>&1; then
   { [ "$rc" = 1 ] && grep -q '2 targets' <<< "$rio" && grep -q 'd2-1' <<< "$rio"; } \
     && ok "react-native inspect refuses to guess between two targets, and lists them" \
     || no "react-native inspect refuses to guess between two targets, and lists them" "rc=$rc: $rio"
+
+  # alive: publish.sh status and net.sh ask the module whether the published
+  # endpoint answers. They once asked the Dart VM Service's getVersion of
+  # Metro and called a live relay "not reachable" (item 87, 6.7).
+  printf '#!/bin/sh\nprintf %%s %s\n' "'[{\"id\": \"d1-1\"}]'" > "$istub/curl"
+  PATH="$istub:$PATH" sh "$REPO/runners/react-native/framework.sh" alive "ws://127.0.0.1:8081/inspector/debug?device=d1&page=1" d1-1; rc1=$?
+  PATH="$istub:$PATH" sh "$REPO/runners/react-native/framework.sh" alive "http://10.0.0.5:9100/inspector/debug?device=d1&page=1" d9-1; rc2=$?
+  { [ "$rc1" = 0 ] && [ "$rc2" = 1 ]; } \
+    && ok "react-native alive finds the session in /json/list, and only that session" \
+    || no "react-native alive finds the session in /json/list, and only that session" "rc=$rc1/$rc2"
+  printf '#!/bin/sh\necho "$*" > "%s/args"; printf %%s %s\n' "$istub" "'[]'" > "$istub/curl"
+  PATH="$istub:$PATH" sh "$REPO/runners/react-native/framework.sh" alive "http://10.0.0.5:9100/inspector/debug?device=d1&page=1" d1-1 >/dev/null 2>&1
+  grep -q 'http://10.0.0.5:9100/json/list' "$istub/args" \
+    && ok "react-native alive asks /json/list on the base's own host and port" \
+    || no "react-native alive asks /json/list on the base's own host and port" "$(cat "$istub/args")"
+  printf '#!/bin/sh\nprintf %%s %s\n' "'{\"type\":\"Version\"}'" > "$istub/curl"
+  PATH="$istub:$PATH" sh "$REPO/runners/flutter/framework.sh" alive http://127.0.0.1:1/x iso; rc1=$?
+  printf '#!/bin/sh\nexit 7\n' > "$istub/curl"
+  PATH="$istub:$PATH" sh "$REPO/runners/flutter/framework.sh" alive http://127.0.0.1:1/x iso; rc2=$?
+  { [ "$rc1" = 0 ] && [ "$rc2" = 1 ]; } \
+    && ok "flutter alive is the VM Service answering getVersion" \
+    || no "flutter alive is the VM Service answering getVersion" "rc=$rc1/$rc2"
+  sh "$REPO/runners/TEMPLATE/framework.sh" alive b s >/dev/null 2>&1
+  [ $? = 2 ] && ok "a framework with no endpoint has no alive either (exit 2)" \
+             || no "a framework with no endpoint has no alive either (exit 2)" "wrong status"
+  grep -qE 'getVersion|getVM' "$REPO/bin/net.sh" "$REPO/bin/publish.sh" \
+    && grep -nE 'getVersion|getVM' "$REPO/bin/net.sh" "$REPO/bin/publish.sh" | grep -v '^[^:]*:[0-9]*: *#' | grep -q . \
+    && no "publish.sh and net.sh speak no VM Service RPC of their own" "$(grep -nE 'getVersion|getVM' "$REPO/bin/net.sh" "$REPO/bin/publish.sh" | grep -v ': *#')" \
+    || ok "publish.sh and net.sh speak no VM Service RPC of their own"
   # The traffic verbs run on EITHER side, so every file they touch must resolve
   # from the module rather than from $RDIR — which is a path on the MAC and
   # means nothing in the sandbox. net.py was once addressed as $RDIR/net.py,

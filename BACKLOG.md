@@ -623,8 +623,20 @@ and flavours and app ids out of `build.gradle`.
     `net.sh` says "no relay published": both test the relay with the Dart VM
     Service's `getVersion` (`bin/publish.sh` `_vm`, `bin/net.sh:63`). `net.sh`
     then exits 2 with React Native's own "no in-runtime HTTP capture" text,
-    which is right. To do: the liveness probe and the report lines come from
-    the module. Through the relay the Origin rule above is not measured.
+    which is right. **Fixed:** a framework verb `alive <base> <session>`
+    answers the liveness question (Flutter: `getVersion`; React Native: the
+    session id in `/json/list` on the base's host and port; TEMPLATE exit 2),
+    and `publish.sh` status, its by-hand line and `net.sh` ask it. `start`
+    reports a `traffic-arm` exit 2 as `profiling none (the react-native runner
+    has no in-runtime HTTP capture …)`. Live: `status` said reachable, then
+    not reachable 3 s after a force-stop, then reachable after the app came
+    back; `net.sh` took the relay path and exited 2 with React Native's text.
+    Five offline tests.
+  - Through the relay (9100), a CDP evaluate run on the device's machine
+    answered with Origin `http://127.0.0.1:8081`; the relay's own Origin
+    `http://192.168.4.39:9100` got 401, and no Origin failed. From the
+    sandbox, Node's WebSocket cannot reach the relay at all (ENETUNREACH):
+    unlike `curl`, it does not go through the sandbox's HTTP proxy.
 - 6.8 Traffic: a proxy-based verb, configured before the app starts, in place
   of the `traffic-*` exit 2. Needs 6.4.
 - 6.9 iOS: `variants`, `variant-for-appid` and `build`. Needs the Mac,
