@@ -13,8 +13,11 @@
 - **113.** The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven.
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
+- **120.** `flow.sh -f` cannot run a flow that `runFlow`s a file beside it.
+- **121.** `drivers.sh rig up` on Android announces a driver it will not start.
+- **122.** `prefs-read` on Android runs every `shared_prefs` file together, unnamed.
 
-Next item number: 116.
+Next item number: 123.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -682,6 +685,15 @@ and flavours and app ids out of `build.gradle`.
     no target, so the two routes do not run together yet. `seenRequests`
     holds requests only; responses need the `responseCompleted`
     subscription.
+  - The inspector through the VPN, two causes. The WebSocket rule's rewrite
+    was ignored: `ws-passthrough` takes `transformRequest: {replaceHost:
+    {targetHost}}`, not the HTTP step's `forwarding`, and with it a probe
+    upgrade through the proxy registered with Metro (`Got new device
+    connection … via=http://127.0.0.1:8081`). Then the app itself did not get
+    that far: on two relaunches the VPN reset the bundle download (`Sent RST
+    Packet … 192.168.4.39:8000`, the app at "Downloading 10.2%"), where two
+    earlier launches through it had loaded. So both routes at once is still
+    not measured.
   Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
@@ -889,3 +901,52 @@ nothing telling it which skill to reach for, and no session loads the memory.
 
 **To do.** One short section near the top of `SKILL.md`: what this skill does
 not do, and which skill does it.
+
+## 120. `flow.sh -f` cannot run a flow that `runFlow`s a file beside it — **OPEN, raised 26 Oct 2026**
+
+**What.** `flow.sh -f <file>` sends the file's text to the device's machine
+and writes it to `$RDIR/flows/_adhoc.yaml`; nothing else travels. Every flow
+in `oneiota-products-rn/maestro/flows/` starts with
+`runFlow: ../subflows/launch.yaml`, and `flow.sh -f flows/01-product-list.yaml`
+failed with `Invalid File Path at /tmp/maestro-mac/flows/_adhoc.yaml:6:3`
+(item 87, 6.6). `maestro test maestro/` run in place passed four of six.
+
+**Why.** A project's own flows are the ones worth running, and Maestro's
+documented layout is a `flows/` directory beside the subflows it calls.
+
+**To do.** When the transport puts the file on the same machine as the device
+(bridge, local), run it where it is. Over ssh, ship the flow's directory, or
+the files its `runFlow` lines name, keeping their relative paths.
+
+## 121. `drivers.sh rig up` on Android announces a driver it will not start — **OPEN, raised 26 Oct 2026**
+
+**What.** `drivers.sh rig up Pixel_6_Pro_API_34` printed
+`Pixel_6_Pro_API_34  starting on 22087 (about 30s)` and then
+`runners/android driver-up: Android has no standing driver …`, the module's
+exit 2. Before that it printed `carrying on at load unknown after 0s`
+(item 87, 6.4).
+
+**Why.** The first line says a driver is starting on a port when none will;
+the second reads like a failed load check.
+
+**To do.** Ask `driver-up` first, or treat its exit 2 as "no standing driver"
+and print that instead of the start line. Say why the load is unknown on
+Android, or skip the settle wait there.
+
+## 122. `prefs-read` on Android runs every `shared_prefs` file together, unnamed — **OPEN, raised 26 Oct 2026**
+
+**What.** `runners/android/platform.sh prefs-read` is
+`cat /data/data/<app>/shared_prefs/*.xml`. For `oneiota-products-rn`,
+`prefs.sh` printed two XML documents back to back with nothing saying which
+file each was (`WebViewChromiumPrefs.xml`,
+`expo.modules.kotlin.PersistentDataManager.xml`; item 87, 6.5). The verb's own
+comment counts 28 files for a Flutter app. AsyncStorage's SQLite store is not
+read at all.
+
+**Why.** A key cannot be traced to the SDK that wrote it, and no parser reads
+the stream as one document.
+
+**To do.** Print each file's name before its contents, and let the framework
+name the file that is its own (Flutter's `FlutterSharedPreferences.xml`).
+Reading AsyncStorage needs an app that uses it, to measure where it lands.
+
