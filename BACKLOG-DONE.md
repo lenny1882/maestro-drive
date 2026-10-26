@@ -3160,3 +3160,48 @@ Two offline tests: a serial that is `offline` before it boots is waited out,
 and a boot that never completes fails naming the serial.
 
 ---
+
+## Measured and rejected
+
+Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the
+measurement or reason that killed it. Ported on 26 Oct 2026 from the
+pre-release handoff notes, which are being deleted. Read this before
+re-proposing any of them.
+
+- **The minimal keyboard fix** — switch the guard off whenever its width does
+  not match the screen — instead of transforming system frames into app space.
+  Measured wrong: the iPad keyboard's widest node comes back as 1255 against a
+  1194 screen, inside any sane tolerance, so the test would have passed and the
+  guard stayed broken.
+- **Deriving the keyboard band from the keyboard's position** rather than its
+  size. Position is the half that arrives in the wrong coordinate space, and it
+  had already produced a false positive on iPad and a false negative on iPhone.
+- **Detecting the transposed space by comparing the root frame's aspect against
+  `/deviceInfo`.** It cannot work: `/deviceInfo` returns 1194x834, identical to
+  the app root, so there is nothing to compare. The status bar is the only
+  element whose true position is knowable.
+- **A cheap TCP probe to pick the SSH host.** Measured impossible: from inside
+  the sandbox `/dev/tcp` fails against both addresses, including the live one.
+  The host is selected with a real SSH attempt.
+- **`MAC_HOSTS` as a second variable**, and auto-discovering `mac-*` aliases
+  from `~/.ssh/config`. Predictable beats clever, and the sandbox only permits
+  specific hosts anyway. `MAC_HOST` takes a space-separated list instead.
+- **Retrying on any non-zero exit** rather than on ssh 255 and timeout 124 only.
+  It would re-run remote commands that had already succeeded, and half of what
+  goes through `_ssh` taps a screen.
+- **A blank-area tap alone for `dismiss`**, which is what upstream recommends.
+  Measured: it never worked on the app under test. And `key return` alone,
+  which always worked there but submits the focused field and can commit the
+  wrong dropdown row silently.
+- **Assuming a driver route might hide the keyboard.** The jar's eighteen routes
+  were read again; none hides it, and Maestro's own `hideKeyboard` is
+  client-side Kotlin.
+- **A `MAESTRO_VARS` list in the conf, and a blanket `set -a`**, for exporting
+  project values. The user chose the `APP_*` prefix.
+- **`notes.sh` warning about a credential rather than refusing.** A warning in
+  an agent workflow gets read and ignored.
+- **Adding a `Host bitbucket.org` block to the Mac's `~/.ssh`** for item 22.
+  The Mac's ssh config is the user's; the toolkit says what it wants and lets
+  the user write it.
+
+---
