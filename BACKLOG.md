@@ -866,6 +866,47 @@ part of the project. Git history keeps the files without it.
 
 **To do.** `git rm -r remote-STALE-pre-skill/`.
 
+## 116. `erase --all` locks the simulator's touch input for about twenty minutes — **OPEN, raised 26 Oct 2026**
+
+**What.** `erase --all` posts `eraseText` with `charactersToErase: 9999`. The
+driver turns that into one long synthesized key gesture, and while it runs
+testmanagerd refuses every other gesture. Measured 26 Oct 2026 on iPhone 16 Pro
+Max 6EA2EBFE (hugoboss-flutter-runner, a rename sheet holding 14 characters):
+from 12:30:52 the simulator log shows `Error tapping: XCTDaemonErrorDomain
+Code=21 … only one gesture can be performed at a time` for every tap and key,
+and the app ignored all input until about 12:50. `driver.sh` reported `ok` for
+the taps throughout. `drivers.sh up` on the device did not clear it: the lock is
+in testmanagerd, not the driver.
+
+**Why.** From outside it looks exactly like an app whose text field and buttons
+have stopped responding. It cost about twenty minutes and nearly became an app
+defect report.
+
+**To do.** Make `erase --all` read the focused field's value length from the
+hierarchy and erase that many characters plus a small margin, not 9999. When a
+tap fails with Code=21, have `driver.sh` say so instead of printing `ok`.
+
+## 117. A driver dies on an XCTest screenshot timeout and nothing says why — **OPEN, raised 26 Oct 2026**
+
+**What.** The iPad Pro 11-inch (M4) EF266A1C driver ended four times in about
+an hour on 26 Oct 2026 (hugoboss-flutter-runner, landscape app). Its log,
+`/tmp/maestro-mac/drv/driver-EF266A1C-….log`, ends each time with
+`testHttpServer : Failed to get screenshot: Timed out while requesting
+screenshot.`, after which the test case fails and xcodebuild restarts with
+"Interface orientation changed to Landscape Right". The wall's
+`simulator-server` capture for the same device was running throughout. The
+next `driver.sh` call says only that the relay did not answer, or that the
+driver "is gone" and that Maestro runs destroy drivers, which was not the
+cause: no Maestro process touched the device.
+
+**Why.** The message points at the wrong cause, and the restart flips the
+device to landscapeRight, so raw app-space taps then land on the wrong points
+until `orient landscapeLeft` is sent again.
+
+**To do.** When a driver has gone, have `driver.sh` tail its log and print the
+last error line. After `drivers.sh up` on a device whose app is landscape-only,
+restore the orientation the device had before.
+
 ## 118. Nothing stops screenshot-driven element finding or raw-coordinate taps — **OPEN**
 
 **What.** Elements get found by reading a screenshot and tapped by raw x/y,
