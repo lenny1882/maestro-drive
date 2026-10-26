@@ -546,8 +546,15 @@ and flavours and app ids out of `build.gradle`.
   Android `installed-info` prints `when=<date>` and `appcheck` reads
   `epoch=<seconds>`, so on Android this version comparison is the only check
   that fires.
-- 6.3 `devsession` against a running `expo start`. The `pgrep` pattern
-  (`cli.js start\|metro`) may not match Expo's Metro. Needs Metro running.
+- 6.3 **Done.** `devsession` against a running `expo start` (node v22.21.1,
+  through the bridge). The old `pgrep` pattern (`cli.js start\|metro`) said
+  "none" beside a running Metro: Expo's processes are `npm exec expo start` and
+  `node …/node_modules/.bin/expo start`. The verb now asks Metro: `GET
+  :$RCT_METRO_PORT/status` (8081 unless set) answers `packager-status:running`.
+  A process match names it, through `ps`, because `pgrep -l` prints only
+  `node` on Linux; with no answer on the port it says a Metro process is
+  running elsewhere. Two offline tests stub `curl`. `CI=1 expo start` disables
+  reloads.
 - 6.4 Install and launch on an emulator. A debug build loads its bundle from
   Metro, so Android `install` needs `adb reverse tcp:8081 tcp:8081`, which
   `expo run:android` does and `platform.sh install` does not. Needs 6.3.

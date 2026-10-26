@@ -229,17 +229,33 @@ GLOBS
   ;;
 
 devsession)
-  # DOCUMENTED, NOT MEASURED. Metro is the dev server, and its absence costs
-  # much more than Flutter's does: a debug React Native build loads its JS
-  # bundle FROM Metro, so with no Metro the app does not merely lose its
-  # inspector, it fails to start. That is the opposite of the Flutter case, where
-  # driving is unaffected and only the traffic reads are lost — so the wording
-  # below must not be copied from there.
-  _f=$(pgrep -fl 'cli.js start\|metro' 2>/dev/null | head -2)
-  if [ -n "$_f" ]; then printf '%s\n' "$_f"; exit 0; fi
-  echo 'none — no Metro bundler is running. Unlike a Flutter app, a debug React'
-  echo '       Native build loads its bundle from Metro, so the app itself may'
-  echo '       not start. Check that before reading anything as an app bug.'
+  # MEASURED against `expo start` (Expo 58, RN 0.88). Metro is the dev server,
+  # and its absence costs much more than Flutter's does: a debug React Native
+  # build loads its JS bundle FROM Metro, so with no Metro the app does not
+  # merely lose its inspector, it fails to start. That is the opposite of the
+  # Flutter case, where driving is unaffected and only the traffic reads are
+  # lost — so the wording below must not be copied from there.
+  #
+  # Metro is asked, not looked for. Under Expo the processes are `npm exec expo
+  # start` and `node …/node_modules/.bin/expo start`; neither says `metro` or
+  # `cli.js start`, and a pattern for them said "none" beside a running Metro.
+  # Its /status answers `packager-status:running`. RCT_METRO_PORT is the port
+  # the app's build was told, 8081 unless set. The process match only names it.
+  _port=${RCT_METRO_PORT:-8081}
+  _s=$(curl -s -m 3 "http://localhost:$_port/status" 2>/dev/null)
+  # pgrep -l prints the command line on macOS and only `node` on Linux, so ps
+  # prints it.
+  _p=$(pgrep -f 'node .*(expo|react-native|cli\.js) start' 2>/dev/null | head -2 | paste -sd, -)
+  _f=; [ -n "$_p" ] && _f=$(ps -o pid=,args= -p "$_p" 2>/dev/null)
+  if [ "$_s" = packager-status:running ]; then
+    echo "Metro is running on :$_port"
+    [ -n "$_f" ] && printf '%s\n' "$_f"
+    exit 0
+  fi
+  echo "none — no Metro bundler answers on :$_port. Unlike a Flutter app, a debug"
+  echo '       React Native build loads its bundle from Metro, so the app itself'
+  echo '       may not start. Check that before reading anything as an app bug.'
+  [ -n "$_f" ] && { echo "       A Metro process is running but not on :$_port:"; printf '       %s\n' "$_f"; }
   exit 1
   ;;
 

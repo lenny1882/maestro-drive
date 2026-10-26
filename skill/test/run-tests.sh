@@ -2725,10 +2725,19 @@ if command -v git >/dev/null 2>&1; then
   { [ "$rc" = 1 ] && grep -q 'Driving still works' <<< "$dso"; } \
     && ok "flutter devsession says driving is unaffected" \
     || no "flutter devsession says driving is unaffected" "rc=$rc: $dso"
-  dso=$(sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  # Metro is asked on its /status, so curl is stubbed: down, then running. A
+  # real Metro on this machine must not decide the result.
+  mstub="$TMP/metro-stub"; mkdir -p "$mstub"
+  printf '#!/bin/sh\nexit 7\n' > "$mstub/curl"; chmod +x "$mstub/curl"
+  dso=$(PATH="$mstub:$PATH" sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
   { [ "$rc" = 1 ] && grep -q 'may *not start' <<< "$dso"; } \
     && ok "react-native devsession says the app may not start at all" \
     || no "react-native devsession says the app may not start at all" "rc=$rc: $dso"
+  printf '#!/bin/sh\necho "$*" > "%s/args"\nprintf packager-status:running\n' "$mstub" > "$mstub/curl"
+  dso=$(PATH="$mstub:$PATH" RCT_METRO_PORT=8099 sh "$REPO/runners/react-native/framework.sh" devsession 2>&1 | tr '\n' ' '); rc=$?
+  { [ "$rc" = 0 ] && grep -q 'running on :8099' <<< "$dso" && grep -q 'localhost:8099/status' "$mstub/args"; } \
+    && ok "react-native devsession is live when Metro's /status says running, on RCT_METRO_PORT" \
+    || no "react-native devsession is live when Metro's /status says running, on RCT_METRO_PORT" "rc=$rc: $dso"
   grep -q 'DEVSESSION_PGREP' "$REPO/bin/preflight.sh" \
     && no "preflight asks the module rather than pgrepping for itself" "it still has its own pattern" \
     || ok "preflight asks the module rather than pgrepping for itself"
