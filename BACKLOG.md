@@ -741,6 +741,15 @@ and flavours and app ids out of `build.gradle`.
     permission (`pm grant … POST_NOTIFICATIONS` settles it). A `clearState`
     launch erases `debug_http_host`. Afterwards: HTTP Toolkit uninstalled,
     the preference removed, the emulator rebooted (CA gone), the app loads.
+  - The bundle stall, counted: ten force-stop-and-start launches in that
+    setup, all through 192.168.4.39:8000. Eight registered an inspector
+    connection with Metro in 2–3 s; two (the 3rd and 5th) had not after
+    60 s. Those two were the only launches where the VPN logged `Sent RST`,
+    once each, and the 5th's OkHttp logged `Connection reset`. So about one
+    launch in five stalls through HTTP Toolkit's VPN, and each stall comes
+    with one VPN reset; the address is not the cause. A driven journey
+    through this route needs a retry on a launch that has not loaded in
+    10 s.
   Measured before the design:
   The stub's premise is out of date: React Native 0.88 implements
   the CDP Network domain (`jsinspector-modern/network`, ungated in a debug
