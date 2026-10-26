@@ -555,12 +555,45 @@ and flavours and app ids out of `build.gradle`.
   `node` on Linux; with no answer on the port it says a Metro process is
   running elsewhere. Two offline tests stub `curl`. `CI=1 expo start` disables
   reloads.
-- 6.4 Install and launch on an emulator. A debug build loads its bundle from
-  Metro, so Android `install` needs `adb reverse tcp:8081 tcp:8081`, which
-  `expo run:android` does and `platform.sh install` does not. Needs 6.3.
-- 6.5 Prefs. Read what `prefs.sh` shows for the running app; AsyncStorage on
-  Android is SQLite, so it should not be there. Needs 6.4.
-- 6.6 Drive the app's own `maestro/flows` through `flow.sh`. Needs 6.4.
+- 6.4 **Done on an emulator.** `drivers.sh rig up Pixel_6_Pro_API_34` booted
+  `emulator-5554` in 1 m 50 s; `build.sh --install-only` put the 242 MB debug
+  APK on it in 18 s; `am start` reached `MainActivity` in 1.7 s. With
+  `adb reverse --list` empty, Metro logged `Android Bundled 12059ms` and the
+  product list rendered about 16 s after launch (blank before that). An
+  emulator needs no `adb reverse`: React Native's debug default on an emulator
+  is the host alias 10.0.2.2:8081. A physical Android device still would;
+  not measured. Two wrong lines from `rig up` on Android: "starting on 22087
+  (about 30s)" before `driver-up` exits 2, and "carrying on at load unknown
+  after 0s".
+- 6.5 **Done, and the AsyncStorage half cannot be answered with this app.**
+  `prefs.sh` and `prefs.sh --all` ran end to end on `emulator-5554` and print
+  the same thing: two XML documents back to back, with no file names.
+  `shared_prefs/` holds `WebViewChromiumPrefs.xml` (`lastVersionCodeUsed`) and
+  `expo.modules.kotlin.PersistentDataManager.xml` (empty), both left by SDKs.
+  Neither is the app's. `oneiota-products-rn` depends on no storage library (no
+  AsyncStorage, SecureStore, SQLite or MMKV), and there is no `databases/`
+  directory, so where AsyncStorage's keys land is still not measured. `files/`
+  holds the 5.9 MB `BridgelessReactNativeDevBundle.js` Metro served. Still to
+  do: `prefs-read` concatenates every `shared_prefs/*.xml` without naming them
+  (its own comment counts 28 files for a Flutter app), and a React Native app
+  with AsyncStorage needs its SQLite store read (`databases/RKStorage` by
+  AsyncStorage's own documentation; not seen here).
+- 6.6 **Run; `flow.sh` cannot run these flows, and two fail on a debug-build
+  toast.** `flow.sh -f flows/01-product-list.yaml` failed with
+  `Invalid File Path at …/_adhoc.yaml:6:3`: it copies the flow's body alone,
+  so the `runFlow: ../subflows/launch.yaml` every flow starts with has nothing
+  beside it. (Before that, `$RDIR/flows` did not exist under the bridge until
+  `install.sh` ran.) `maestro --device emulator-5554 test maestro/` in place
+  ran all six in 3 m 17 s: product list, detail, basket and load-error retry
+  pass; recently viewed and out of stock fail. Both fail on the same thing.
+  The debug build's LogBox toast "Open debugger to view warnings" (raised by
+  the app's own `unstable_settings.initialRouteName` deprecation) sits at
+  [35,2782][1405,2949] after every `clearState` launch. `scrollUntilVisible`
+  stops with the target at the bottom edge, and Maestro counts it 100%
+  visible underneath the toast: the taps at (720,2898) on `product-card-8` and
+  (456,2783) on `recently-viewed-item-1` hit the toast and the screen did not
+  change. Still to do: `flow.sh -f` runs a flow in place, or ships its
+  directory, when the flow refers to other files.
 - 6.7 `inspect`: discover Metro's port, read `/json/list`, revalidate the
   target after a reload. The Hermes target appears only once the app connects.
   Needs 6.4.
