@@ -13,6 +13,12 @@ set -u
 
 VERB=${1:-}; [ $# -gt 0 ] && shift
 : "${RDIR:=/tmp/maestro-mac}"
+HERE=$(cd "$(dirname "$0")" && pwd)
+: "${NVM_DIR:=$HOME/.nvm}"
+
+# The bin dir of a node react-native accepts, as the first word of a line
+# whose rest says why. See project.py node.
+_node_bin() { python3 "$HERE/project.py" node "$1" "$NVM_DIR"; }
 
 case "$VERB" in
 
@@ -38,78 +44,170 @@ PY
   ;;
 
 describe)
-  # DOCUMENTED, NOT MEASURED. The shape to aim for is remote/build.sh --detect:
-  # one fact per line, labelled, writing nothing.
-  #
-  # The three that will present as a different problem than they are, which is
-  # the bar remote/build.sh sets:
-  #   node is pinned by nvm/asdf/volta and is on no PATH a non-interactive SSH
-  #     shell has, so a bare `node` says "command not found" — the same failure
-  #     fvm produces for Flutter, and the same fix: prefer the pinned one.
-  #   CocoaPods under a different Ruby, identically to the Flutter iOS path.
-  #   the JS dependencies are not installed, so the build fails somewhere deep
-  #     rather than saying `node_modules` is absent.
-  _repo=${1:?describe <repo>}
+  # One fact per line, labelled, writing nothing — the shape of the Flutter
+  # build.sh --detect. The facts are the ones that fail as something else:
+  #   the node on PATH is nvm's default, not one react-native accepts, and
+  #     Gradle's autolinking step dies running it rather than naming node
+  #   node_modules is absent, and the build fails deep inside Gradle
+  #   no android/ (an Expo app before `expo prebuild`), so there is no Gradle
+  #     project to run at all
+  _repo=${1:?describe <repo>}; _appid=${2:-}
   [ -r "$_repo/package.json" ] || { echo "describe: no package.json in $_repo" >&2; exit 1; }
-  _rn=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("dependencies") or {}).get("react-native",""))' \
-        "$_repo/package.json" 2>/dev/null)
-  echo "toolchain  $(command -v node 2>/dev/null || echo 'node not on PATH')"
-  echo "           $(node --version 2>/dev/null)"
-  echo "react-native ${_rn:-unknown}"
-  [ -d "$_repo/node_modules" ] || echo "deps       node_modules is absent — the build will fail obscurely"
+  python3 - "$_repo/package.json" <<'PY'
+import json, sys
+d = (json.load(open(sys.argv[1])).get("dependencies") or {})
+print("react-native", d.get("react-native", "unknown"))
+if "expo" in d:
+    print("expo        ", d["expo"])
+PY
+  if _n=$(_node_bin "$_repo" 2>&1); then
+    echo "node        $("${_n%% *}/node" --version)  ${_n%% *}  (${_n#* })"
+  else
+    echo "node        none usable — $_n"
+  fi
+  [ -d "$_repo/node_modules" ] || echo "deps        node_modules is absent — run npm install; the build fails inside Gradle without it"
+  if [ -d "$_repo/android" ]; then
+    _fl=$(python3 "$HERE/project.py" flavours "$_repo" | tr '\n' ' ')
+    echo "android     $_repo/android"
+    echo "flavours    ${_fl:-none}"
+    if [ -n "$_appid" ]; then
+      if _v=$(python3 "$HERE/project.py" for-appid "$_repo" "$_appid" 2>&1); then
+        echo "app id      $_appid builds as ${_v:-the only variant}"
+      else
+        echo "app id      $_v"
+      fi
+    fi
+    _sdk=$(sed -n 's/^sdk\.dir=//p' "$_repo/android/local.properties" 2>/dev/null)
+    echo "sdk         ${_sdk:-${ANDROID_HOME:-${ANDROID_SDK_ROOT:-none — set ANDROID_HOME or android/local.properties sdk.dir}}}"
+    echo "java        ${JAVA_HOME:-$(command -v java 2>/dev/null || echo 'none on PATH')}"
+    for _m in debug release; do
+      _a=$(find "$_repo/android/app/build/outputs/apk" -name "*-$_m.apk" 2>/dev/null | head -1)
+      [ -n "$_a" ] && echo "last build  $_a  $(date -r "$_a" '+%Y-%m-%d %H:%M')"
+    done
+  else
+    echo "android     none — no android/ directory; an Expo app needs 'npx expo prebuild' first"
+  fi
+  [ -d "$_repo/ios" ] || echo "ios         none — no ios/ directory"
   exit 0
   ;;
 
 variants)
-  # SETTLED (item 87, 4.2): `variants <repo> [--platform <p>]`. This is
-  # the framework that needs it — iOS schemes live in ios/*.xcodeproj and
-  # Android product flavours in android/app/build.gradle, and they need not
-  # share names. With no --platform, return every variant the project has,
-  # deduplicated; with one, only that platform's.
-  #
-  # Still unwritten because there is no React Native checkout to write it
-  # against. The contract question is answered; this is now only work.
-  echo "runners/react-native variants: not written — needs a checkout to write" >&2
-  echo "  against. The contract question is settled: it takes --platform." >&2
-  exit 2
+  # item 87, 4.2: `variants <repo> [--platform <p>]`. Android product flavours
+  # come from android/app/build.gradle. iOS schemes are not read yet: the
+  # checkout this was written against has no ios/.
+  _repo=${1:?variants <repo> [--platform <p>]}; _plat=${3:-android}
+  [ "${2:-}" = --platform ] || _plat=android
+  case "$_plat" in
+    android|android-device) python3 "$HERE/project.py" flavours "$_repo" ;;
+    *) echo "runners/react-native variants: $_plat schemes are not read yet —" >&2
+       echo "  written against a checkout with android/ only." >&2
+       exit 2 ;;
+  esac
   ;;
 
 variant-for-appid)
-  # On iOS this is exactly the Flutter answer — Xcode names each configuration
-  # <Debug|Release>-<flavour> and each carries its own PRODUCT_BUNDLE_IDENTIFIER
-  # — because it is Xcode's doing, not Flutter's. On Android the evidence is
-  # applicationId/applicationIdSuffix per productFlavor in build.gradle, which is
-  # a different file and a different parse.
-  echo "runners/react-native variant-for-appid: not written — see variants." >&2
-  echo "  Takes the same --platform: an app id is per-platform too." >&2
-  exit 2
+  # On Android the evidence is applicationId and applicationIdSuffix per
+  # flavour and per build type in build.gradle. Prints the flavour, or nothing
+  # when the project has none and the app id is its own.
+  _repo=${1:?variant-for-appid <repo> <app-id> [--platform <p>]}; _id=${2:?app-id}
+  _plat=android; [ "${3:-}" = --platform ] && _plat=${4:-android}
+  case "$_plat" in
+    android|android-device) python3 "$HERE/project.py" for-appid "$_repo" "$_id" ;;
+    *) echo "runners/react-native variant-for-appid: $_plat is not read yet — see variants." >&2
+       exit 2 ;;
+  esac
   ;;
 
 build)
-  # DOCUMENTED, NOT MEASURED. Stops at the artefact and installs nothing, as the
-  # contract requires:
-  #   ios      npx react-native build-ios --mode Debug, output under
-  #            ios/build/Build/Products/<Config>-iphonesimulator/*.app
-  #   android  ./gradlew assembleDebug, output under
-  #            android/app/build/outputs/apk/<flavour>/<mode>/*.apk
+  # Stops at the artefact and installs nothing, as the contract requires.
+  # Android only: ./gradlew assemble<Flavour><Mode> in android/, with a node
+  # react-native accepts at the front of PATH, because Expo's and React
+  # Native's Gradle plugins run node for autolinking and for the JS bundle.
   #
-  # Name the exact output path rather than globbing for it: the tree holds stale
-  # output from earlier builds, and a wildcard picking one of those over the
+  # The artefact is the file Gradle's output-metadata.json names in the
+  # variant's own output directory, not a glob over outputs/apk: the tree holds
+  # stale APKs from earlier builds, and a wildcard picking one of those over the
   # fresh output is a bug this package has already had once.
-  echo "runners/react-native build: not written — see the comment in this file" >&2
-  exit 2
+  _repo=${1:?build <repo> --platform <p> --mode <m> [--variant <v>]}; shift
+  _plat=android; _mode=debug; _variant=; _appid=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --platform) _plat=$2; shift 2 ;;
+      --mode)     _mode=$2; shift 2 ;;
+      --variant)  _variant=$2; shift 2 ;;
+      --app-id)   _appid=$2; shift 2 ;;
+      --target|--device) shift 2 ;;
+      *) echo "runners/react-native build: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+  case "$_plat" in
+    android|android-device) ;;
+    *) echo "runners/react-native build: $_plat is not written — the checkout it was" >&2
+       echo "  written against has android/ only." >&2
+       exit 2 ;;
+  esac
+  case "$_mode" in
+    debug|release) ;;
+    *) echo "runners/react-native build: --mode $_mode — React Native builds debug or release" >&2; exit 2 ;;
+  esac
+  [ -x "$_repo/android/gradlew" ] || { echo "runners/react-native build: no android/gradlew in $_repo —
+  an Expo app needs 'npx expo prebuild' first" >&2; exit 1; }
+  [ -d "$_repo/node_modules" ] || { echo "runners/react-native build: node_modules is absent in $_repo — run npm install" >&2; exit 1; }
+  _n=$(_node_bin "$_repo") || exit 1
+  _nb=${_n%% *}
+
+  # The app id is the evidence for the flavour, as on iOS: when it names one,
+  # build that one, and refuse rather than guess when it names several.
+  if [ -z "$_variant" ] && [ -n "$_appid" ]; then
+    _variant=$(python3 "$HERE/project.py" for-appid "$_repo" "$_appid") || exit 1
+  fi
+  if [ -z "$_variant" ] && [ -n "$(python3 "$HERE/project.py" flavours "$_repo")" ]; then
+    echo "runners/react-native build: the project has flavours and nothing says which:" >&2
+    python3 "$HERE/project.py" flavours "$_repo" | sed 's/^/  /' >&2
+    echo "  pass --flavor, or set APP_ID to the one under test." >&2
+    exit 2
+  fi
+  _cap() { printf '%.1s' "$1" | tr '[:lower:]' '[:upper:]'; printf '%s' "${1#?}"; }
+  _task="assemble$(_cap "$_variant")$(_cap "$_mode")"
+  _out="$_repo/android/app/build/outputs/apk/${_variant:+$_variant/}$_mode"
+
+  # Gradle's output goes to stderr so that stdout carries only the artefact.
+  echo "build       $_task with node $("$_nb/node" --version)" >&2
+  _t0=$(date +%s)
+  (cd "$_repo/android" && PATH="$_nb:$PATH" ./gradlew --console=plain "$_task") >&2 \
+    || { echo "runners/react-native build: ./gradlew $_task failed" >&2; exit 1; }
+  _apk=$(python3 - "$_out/output-metadata.json" <<'PY'
+import json, os, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(os.path.join(os.path.dirname(sys.argv[1]), d["elements"][0]["outputFile"]))
+except Exception as e:
+    print(f"cannot read {sys.argv[1]}: {e}", file=sys.stderr)
+    sys.exit(1)
+PY
+  ) || exit 1
+  # No mtime check against the start of the build: a build with nothing to do
+  # leaves the APK UP-TO-DATE and untouched, and it is still the current one.
+  [ -f "$_apk" ] || { echo "runners/react-native build: Gradle named $_apk and it is not there" >&2; exit 1; }
+  echo "build       $(( $(date +%s) - _t0 ))s" >&2
+  echo "artifact $_apk"
   ;;
 
 version)
-  # DOCUMENTED, NOT MEASURED, and it is NOT package.json's version — that is the
-  # JS package's, and the iOS build number comes from CFBundleVersion in the
-  # Xcode project while Android's comes from versionCode in build.gradle. So the
-  # honest answer is that a React Native project has two, one per platform, and
-  # this verb returns one. Settle that before writing it — same shape as the
-  # `variants` question.
-  echo "runners/react-native version: unanswered — iOS and Android carry their" >&2
-  echo "  own build numbers, and this verb returns one. See variants." >&2
-  exit 2
+  # item 87, 6.2: `version <repo> [--platform <p>]`, the named platform's pair,
+  # as `variants` takes it. Not package.json's version, which is the JS
+  # package's: Android's is versionName+versionCode in android/app/build.gradle,
+  # iOS's is in the Xcode project. Expo's app.json carries them too, but they
+  # reach Gradle only on the next `expo prebuild`, so build.gradle is what a
+  # build from this checkout produces. A flavour that sets its own is not read:
+  # this verb is given no app id to tell which flavour is installed.
+  _repo=${1:?version <repo> [--platform <p>]}
+  _plat=android; [ "${2:-}" = --platform ] && _plat=${3:-android}
+  case "$_plat" in
+    android|android-device) python3 "$HERE/project.py" version "$_repo" || exit 2 ;;
+    *) echo "runners/react-native version: $_plat is not read yet — see variants." >&2
+       exit 2 ;;
+  esac
   ;;
 
 residue)

@@ -120,8 +120,9 @@ build)
 version)
   # pubspec.yaml's `version: 3.0.4+43` is exactly the pair iOS reports as
   # CFBundleShortVersionString and CFBundleVersion, so the two compare directly
-  # with no mapping.
-  _repo=${1:?version <repo>}
+  # with no mapping. --platform is ignored, as in `variants`: the one pubspec
+  # version is both platforms'.
+  _repo=${1:?version <repo> [--platform <p>]}
   _v=$(sed -n 's/^version:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_repo/pubspec.yaml" 2>/dev/null | head -1)
   [ -n "$_v" ] || { echo "runners/flutter version: no version: line in $_repo/pubspec.yaml" >&2; exit 2; }
   echo "$_v"

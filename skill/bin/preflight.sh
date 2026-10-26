@@ -54,7 +54,7 @@ printf '%s' '$AC' | base64 -d > '$RDIR/appcheck.sh' 2>/dev/null
 # Run with sh, do NOT source — same reason as gitstate.sh above.
 # The fourth argument is what a build from this checkout WOULD produce, which is
 # the only thing a device can be compared against.
-BV=\$(RDIR='$RDIR' sh '$FW' version '$REPO' 2>/dev/null) || BV=
+BV=\$(RDIR='$RDIR' sh '$FW' version '$REPO' --platform '${PLATFORM:-ios}' 2>/dev/null) || BV=
 sh '$RDIR/appcheck.sh' --run '$RDIR/appinfo' '$REPO' '${BUILD_MARKER:-}' \"\$BV\"
 echo; echo '== supported orientations =='
 if [ -n \"\$C\" ]; then

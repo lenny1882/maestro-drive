@@ -112,9 +112,10 @@ build)
   exit 2
   ;;
 
-# --- version <repo> ----------------------------------------------------------
-# The version and build a build FROM THIS CHECKOUT would produce, as
-# `<version>+<build>` — the form Flutter's pubspec.yaml already uses.
+# --- version <repo> [--platform <p>] -----------------------------------------
+# The version and build a build FROM THIS CHECKOUT would produce for that
+# platform, as `<version>+<build>` — the form Flutter's pubspec.yaml already
+# uses. A framework whose version spans both platforms ignores --platform.
 #
 # It exists for the platforms that cannot report when an app was installed. A
 # phone gives a version and a build and no timestamp at all, so "is the app on

@@ -510,16 +510,59 @@ in both failure modes and in success; `traffic-arm` in both states;
 value, and `bin/secrets.sh check` reported no project value in any tracked
 file.
 
-**To do.**
+*2.2, React Native on Android.* Written against `oneiota-products-rn`
+(`~/claude-sandbox`): Expo 58, React Native 0.88, a prebuilt `android/`, no
+`ios/`, no product flavours, app id `dev.sandbox.oneiotaproducts`. iOS was the
+plan; the checkout decided Android. `claim`, `describe`, `variants`,
+`variant-for-appid` and `build` are written for Android and exit 2 on iOS.
+`runners/react-native/project.py` does the two parses: the node to build with,
+and flavours and app ids out of `build.gradle`.
 
-- 2.2 React Native on iOS end to end: fill in `describe`, `build` and
-  `residue` in `runners/react-native/framework.sh` against a real checkout.
-  Done when `bin/build.sh --detect` reports an RN project and `--no-install`
-  produces an artefact path. Needs node, a `react-native init` app and
-  `pod install` on the Mac.
+- Node: the default on `PATH` is nvm's v14.21.3 and React Native 0.88 needs
+  `^22.13.0 || ^24.3.0 || >= 26.0.0`. A repo `.nvmrc` or `.node-version` wins
+  when nvm has it; otherwise the newest nvm node the range accepts (v22.21.1).
+  Gradle's autolinking step runs node, so the wrong one fails inside Gradle.
+- The artefact is the file `output-metadata.json` names in the variant's own
+  output directory, not a glob. No mtime check: a no-op build leaves the APK
+  untouched and it is still current.
+- `bin/build.sh --detect` reports the RN project and `--no-install` printed
+  `artifact …/android/app/build/outputs/apk/debug/app-debug.apk`, through the
+  bridge (item 96), because the Bash sandbox blocks writes to the checkout and
+  `~/.gradle`. Cold build: 13 m 49 s, 460 of 488 tasks executed, a 242 MB debug
+  APK. `bin/build.sh` now copies its output to `$LDIR/build.log`.
 
-**Gated on.** 2.2 needs a React Native checkout on the Mac; none of the
-sixteen there is React Native.
+**To do.** Quickest first; each says what it waits on.
+
+- 6.1 **Done.** Offline tests for `project.py`: gradle fixtures with flavours,
+  `applicationId` and suffixes per flavour and build type, and node ranges.
+  Eighteen cases, including `build` against a stub `gradlew` that records its
+  task, which catches the `assembleD<newline>ebug` bug.
+- 6.2 **Done.** `version <repo> [--platform <p>]` returns the named
+  platform's `<version>+<build>`, as `variants` takes `--platform`; Flutter
+  ignores the flag and `bin/preflight.sh` passes `$PLATFORM`. Android reads
+  `versionName` and `versionCode` from `build.gradle` (`1.0.0+1` for
+  `oneiota-products-rn`), not `package.json` or Expo's `app.json`. Half a
+  pair exits 2. A flavour's own values are not used: the verb has no app id.
+  Android `installed-info` prints `when=<date>` and `appcheck` reads
+  `epoch=<seconds>`, so on Android this version comparison is the only check
+  that fires.
+- 6.3 `devsession` against a running `expo start`. The `pgrep` pattern
+  (`cli.js start\|metro`) may not match Expo's Metro. Needs Metro running.
+- 6.4 Install and launch on an emulator. A debug build loads its bundle from
+  Metro, so Android `install` needs `adb reverse tcp:8081 tcp:8081`, which
+  `expo run:android` does and `platform.sh install` does not. Needs 6.3.
+- 6.5 Prefs. Read what `prefs.sh` shows for the running app; AsyncStorage on
+  Android is SQLite, so it should not be there. Needs 6.4.
+- 6.6 Drive the app's own `maestro/flows` through `flow.sh`. Needs 6.4.
+- 6.7 `inspect`: discover Metro's port, read `/json/list`, revalidate the
+  target after a reload. The Hermes target appears only once the app connects.
+  Needs 6.4.
+- 6.8 Traffic: a proxy-based verb, configured before the app starts, in place
+  of the `traffic-*` exit 2. Needs 6.4.
+- 6.9 iOS: `variants`, `variant-for-appid` and `build`. Needs the Mac,
+  `expo prebuild` to create `ios/` in the RN checkout, `pod install` and a cold
+  Xcode build.
+- 6.10 Record the results of 6.1–6.9 here. Needs all of them.
 
 ## 107. The `MaterialApp.router` dropdown report has not been sent upstream — **OPEN**
 

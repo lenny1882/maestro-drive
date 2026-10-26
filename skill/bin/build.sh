@@ -45,6 +45,14 @@ set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 HERE=$(cd "$(dirname "$0")" && pwd)
 
+# Everything this prints also goes to $LDIR/build.log, stdout and stderr kept
+# apart, so a build run in a terminal can be read back by the session that
+# asked for it.
+BUILD_LOG="$LDIR/build.log"
+if : > "$BUILD_LOG" 2>/dev/null; then
+  exec > >(tee -a "$BUILD_LOG") 2> >(tee -a "$BUILD_LOG" >&2)
+fi
+
 [ -n "${REPO:-}" ] || { echo "build: REPO is not set — the checkout on the Mac.
   Add it to .maestro-drive.conf, or bin/init.sh --host <alias> --detect." >&2; exit 2; }
 

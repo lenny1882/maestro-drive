@@ -2824,6 +2824,167 @@ else
 fi
 
 echo
+echo "react-native project reads (item 87, 2.2)"
+RNP="python3 $REPO/runners/react-native/project.py"
+RNF="$REPO/runners/react-native/framework.sh"
+rn="$TMP/rn"; mkdir -p "$rn/android/app" "$rn/node_modules/react-native"
+cat > "$rn/android/app/build.gradle" <<'GRADLE'
+android {
+    defaultConfig {
+        applicationId 'com.example.shop'
+        versionCode 1
+    }
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+        }
+        release {
+        }
+    }
+    flavorDimensions "env"
+    productFlavors {
+        uat {
+            dimension "env"
+            applicationIdSuffix ".uat"
+        }
+        prod {
+            dimension "env"
+        }
+        // old { applicationIdSuffix ".old" }
+        /* gone {
+        } */
+        partner {
+            dimension "env"
+            applicationId = "com.partner.shop"
+        }
+    }
+}
+GRADLE
+out=$($RNP flavours "$rn" | tr '\n' ' ')
+[ "$out" = "uat prod partner " ] \
+  && ok "flavours lists productFlavors in order and skips commented-out ones" \
+  || no "flavours lists productFlavors in order and skips commented-out ones" "got: '$out'"
+out=$($RNP for-appid "$rn" com.example.shop.uat.debug); rc=$?
+{ [ "$rc" = 0 ] && [ "$out" = uat ]; } \
+  && ok "an app id is the flavour suffix plus the build type suffix" \
+  || no "an app id is the flavour suffix plus the build type suffix" "rc=$rc: '$out'"
+out=$($RNP for-appid "$rn" com.partner.shop); rc=$?
+{ [ "$rc" = 0 ] && [ "$out" = partner ]; } \
+  && ok "a flavour's own applicationId replaces defaultConfig's" \
+  || no "a flavour's own applicationId replaces defaultConfig's" "rc=$rc: '$out'"
+$RNP for-appid "$rn" com.example.shop.old >/dev/null 2>&1
+[ $? = 1 ] && ok "an app id no variant builds is refused" \
+           || no "an app id no variant builds is refused" "it matched"
+# Two flavours building one app id is the case where guessing installs the
+# wrong app, so it is refused with both named.
+sed 's/applicationId = "com.partner.shop"/applicationIdSuffix ".uat"/' \
+  "$rn/android/app/build.gradle" > "$TMP/rn-dup.gradle"
+rnd="$TMP/rn-dup"; mkdir -p "$rnd/android/app"; mv "$TMP/rn-dup.gradle" "$rnd/android/app/build.gradle"
+out=$($RNP for-appid "$rnd" com.example.shop.uat 2>&1); rc=$?
+{ [ "$rc" = 1 ] && grep -q 'uat partner' <<< "$out"; } \
+  && ok "two flavours with one app id are refused, both named" \
+  || no "two flavours with one app id are refused, both named" "rc=$rc: $out"
+rn0="$TMP/rn-plain"; mkdir -p "$rn0/android/app"
+printf 'android {\n  defaultConfig {\n    applicationId "dev.plain"\n  }\n}\n' > "$rn0/android/app/build.gradle"
+out=$($RNP for-appid "$rn0" dev.plain); rc=$?
+{ [ "$rc" = 0 ] && [ -z "$out" ]; } \
+  && ok "a project with no flavours matches its own app id with no flavour" \
+  || no "a project with no flavours matches its own app id with no flavour" "rc=$rc: '$out'"
+
+# node: the nvm default here was v14 and React Native 0.88 refuses it inside
+# Gradle, so the pick comes from react-native's own engines.node.
+nvm="$TMP/nvm"
+for v in v14.21.3 v20.1.0 v22.21.1 v24.0.0; do
+  mkdir -p "$nvm/versions/node/$v/bin"
+  printf '#!/bin/sh\necho %s\n' "$v" > "$nvm/versions/node/$v/bin/node"
+  chmod +x "$nvm/versions/node/$v/bin/node"
+done
+printf '{"engines":{"node":"^22.13.0 || ^24.3.0 || >= 26.0.0"}}' > "$rn/node_modules/react-native/package.json"
+out=$($RNP node "$rn" "$nvm"); rc=$?
+{ [ "$rc" = 0 ] && [ "${out%% *}" = "$nvm/versions/node/v22.21.1/bin" ]; } \
+  && ok "node is the newest nvm version react-native's range accepts (not 24.0, below ^24.3)" \
+  || no "node is the newest nvm version react-native's range accepts (not 24.0, below ^24.3)" "rc=$rc: $out"
+echo 20 > "$rn/.nvmrc"
+out=$($RNP node "$rn" "$nvm"); rc=$?
+{ [ "$rc" = 0 ] && [ "${out%% *}" = "$nvm/versions/node/v20.1.0/bin" ]; } \
+  && ok "a repo .nvmrc wins over the range" \
+  || no "a repo .nvmrc wins over the range" "rc=$rc: $out"
+echo 18 > "$rn/.nvmrc"
+$RNP node "$rn" "$nvm" >/dev/null 2>&1
+[ $? = 1 ] && ok "an .nvmrc nvm does not have is refused, not replaced" \
+           || no "an .nvmrc nvm does not have is refused, not replaced" "it picked one"
+rm "$rn/.nvmrc"
+printf '{"engines":{"node":">= 30.0.0"}}' > "$rn/node_modules/react-native/package.json"
+out=$($RNP node "$rn" "$nvm" 2>&1); rc=$?
+{ [ "$rc" = 1 ] && grep -q 'v22.21.1' <<< "$out"; } \
+  && ok "no acceptable node is refused, naming what nvm has" \
+  || no "no acceptable node is refused, naming what nvm has" "rc=$rc: $out"
+printf '{"engines":{"node":"~22.1"}}' > "$rn/node_modules/react-native/package.json"
+$RNP node "$rn" "$nvm" >/dev/null 2>&1
+[ $? = 1 ] && ok "a range it cannot parse is refused rather than guessed" \
+           || no "a range it cannot parse is refused rather than guessed" "it picked one"
+$RNP node "$rn0" "$nvm" >/dev/null 2>&1
+[ $? = 1 ] && ok "no node_modules is refused, since the range is unknown" \
+           || no "no node_modules is refused, since the range is unknown" "it picked one"
+
+# build, with a gradlew that records its task and writes what Gradle would. The
+# task name was once assembleD<newline>ebug: cut's trailing newline in _cap.
+printf '{"engines":{"node":"^22.13.0"}}' > "$rn/node_modules/react-native/package.json"
+cat > "$rn/android/gradlew" <<'GW'
+#!/bin/sh
+task=$(printf '%s\n' "$@" | grep '^assemble')
+printf '%s\n' "$task" > ../gradle-task
+case $task in assembleUatDebug) d=app/build/outputs/apk/uat/debug ;; *) exit 1 ;; esac
+mkdir -p "$d"; : > "$d/app-uat-debug.apk"
+printf '{"elements":[{"outputFile":"app-uat-debug.apk"}]}' > "$d/output-metadata.json"
+GW
+chmod +x "$rn/android/gradlew"
+out=$(NVM_DIR="$nvm" sh "$RNF" build "$rn" --platform android --mode debug \
+      --app-id com.example.shop.uat.debug 2>/dev/null); rc=$?
+{ [ "$rc" = 0 ] && [ "$(cat "$rn/gradle-task")" = assembleUatDebug ]; } \
+  && ok "build runs assemble<Flavour><Mode>, the flavour taken from the app id" \
+  || no "build runs assemble<Flavour><Mode>, the flavour taken from the app id" \
+        "rc=$rc task='$(cat "$rn/gradle-task" 2>/dev/null)'"
+[ "$out" = "artifact $rn/android/app/build/outputs/apk/uat/debug/app-uat-debug.apk" ] \
+  && ok "build's stdout is only the artifact line Gradle's metadata names" \
+  || no "build's stdout is only the artifact line Gradle's metadata names" "got: $out"
+NVM_DIR="$nvm" sh "$RNF" build "$rn" --platform android >/dev/null 2>&1
+[ $? = 2 ] && ok "build refuses to pick a flavour when nothing says which" \
+           || no "build refuses to pick a flavour when nothing says which" "it built one"
+sh "$RNF" build "$rn" --platform android --mode profile >/dev/null 2>&1
+[ $? = 2 ] && ok "build refuses a mode React Native does not have" \
+           || no "build refuses a mode React Native does not have" "it ran"
+# version (6.2): the named platform's pair, read from build.gradle, since
+# package.json's version is the JS package's.
+printf 'android {\n  defaultConfig {\n    applicationId "dev.plain"\n    versionCode 7\n    versionName "2.1.0"\n  }\n  productFlavors {\n    beta {\n      versionName = "2.2.0-beta"\n    }\n  }\n}\n' \
+  > "$rn0/android/app/build.gradle"
+out=$(sh "$RNF" version "$rn0" --platform android); rc=$?
+{ [ "$rc" = 0 ] && [ "$out" = "2.1.0+7" ]; } \
+  && ok "react-native version is Android's versionName+versionCode" \
+  || no "react-native version is Android's versionName+versionCode" "rc=$rc: '$out'"
+out=$($RNP version "$rn0" beta); rc=$?
+{ [ "$rc" = 0 ] && [ "$out" = "2.2.0-beta+7" ]; } \
+  && ok "a flavour's versionName replaces defaultConfig's, its versionCode kept" \
+  || no "a flavour's versionName replaces defaultConfig's, its versionCode kept" "rc=$rc: '$out'"
+out=$(sh "$RNF" version "$rn" --platform android 2>/dev/null); rc=$?
+{ [ "$rc" = 2 ] && [ -z "$out" ]; } \
+  && ok "half a version pair says nothing (exit 2), not a mismatch" \
+  || no "half a version pair says nothing (exit 2), not a mismatch" "rc=$rc: '$out'"
+mkdir -p "$TMP/fl"; printf 'name: x\nversion: 3.0.4+43\n' > "$TMP/fl/pubspec.yaml"
+out=$(sh "$REPO/runners/flutter/framework.sh" version "$TMP/fl" --platform android)
+[ "$out" = "3.0.4+43" ] \
+  && ok "flutter version ignores --platform: one pubspec version for both" \
+  || no "flutter version ignores --platform: one pubspec version for both" "got: '$out'"
+grep -q "version '\$REPO' --platform" "$REPO/bin/preflight.sh" \
+  && ok "preflight asks for the version of the platform it is checking" \
+  || no "preflight asks for the version of the platform it is checking" "no --platform"
+for v in variants build version; do
+  sh "$RNF" $v "$rn" --platform ios >/dev/null 2>&1
+  [ $? = 2 ] && ok "react-native $v --platform ios exits 2: not written" \
+             || no "react-native $v --platform ios exits 2: not written" "wrong status"
+done
+
+echo
 echo "finding the checkout on the Mac"
 # Two URLs for one repository barely look alike, and matching on the directory
 # name alone picks the wrong one whenever two repositories share a name.

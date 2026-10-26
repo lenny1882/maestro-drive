@@ -74,7 +74,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `variants <repo> [--platform <p>]` | Mac | one buildable variant name per line; `--platform` is optional and ignored by a framework whose variants span both | `_flavours` |
 | `variant-for-appid <repo> <app-id> [--platform <p>]` | Mac | the variants that produce that app id, one per line | `_flavour_for_appid` |
 | `build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]` | Mac | builds, and prints `artifact <path>` as its last line | `remote/build.sh` lines 264-292 |
-| `version <repo>` | Mac | `<version>+<build>` a build from this checkout would produce — what a device is compared against, having no install time | nothing; the check did not exist |
+| `version <repo> [--platform <p>]` | Mac | `<version>+<build>` a build from this checkout would produce for that platform — what a device is compared against, having no install time; ignored by a framework whose version spans both | nothing; the check did not exist |
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
 | `devsession` | Mac | is a hot-reload session live? print the processes, exit 0; exit 1 with the consequence when not | `pgrep -fl flutter_tools` in `bin/preflight.sh` |
 | `inspect <device> <cache>` | Mac | print `<base-uri> <session-id>` for the app's live debug endpoint, or exit 1 with the reason | `remote/vmservice.sh` |
