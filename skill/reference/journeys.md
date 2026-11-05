@@ -30,7 +30,7 @@ never reached.
 | `tapon <pattern> [index]` | resolve the pattern to a point, tap it, wait for the screen to settle |
 | `tapon? <pattern>` | tap if the pattern is on screen, skip silently if not |
 | `scrollto <pattern> [direction] [max]` | swipe repeatedly until the pattern appears (default: down, 20 swipes) |
-| `type <pattern> <text>` | `tapon` the field, then type into it |
+| `type [--index n] <pattern> <text>` | `tapon` the field, then type into it; `--index` picks a match when the pattern finds several, and goes before the pattern because the rest of the line is the text |
 | `text <string>` | type into whatever already has focus |
 | `tap <x> <y>` | raw screen points, for when there is nothing to match on |
 | `key <name>` | `return`, `delete`, and the rest of the driver's key names |

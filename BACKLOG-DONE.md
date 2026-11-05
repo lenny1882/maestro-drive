@@ -3352,6 +3352,48 @@ missing, and stderr is no longer discarded, so `xcodebuild failed:` reaches the
 caller. Run live on 5 Nov 2026: an unstamped cache was re-extracted and the stamp
 matched the jar. The cause of the single `Mach error -308` was not established.
 
+## 132. `bench.sh` hands ssh the whole `MAC_HOST` list — **DONE**
+
+**What.** `bin/bench.sh:27` runs `ssh "${SSH_OPTS[@]}" "$MAC_HOST" true` directly.
+With three aliases in `MAC_HOST` it prints `hostname contains invalid characters` and
+reports 0.00 s for each round trip. Measured 5 Nov 2026. The rest of the script goes
+through `_ssh` and is correct.
+
+**Why.** It prices the round trip at nothing, and that is what the script is for.
+
+**Done.** `bench.sh` calls `_pick_host` before the round trips. Run live on 5 Nov 2026
+with three aliases in `MAC_HOST`: 0.37 s, 0.32 s and 0.25 s. No simulator was booted, so
+that run's hierarchy timings are not real timings.
+
+## 133. `docs-refresh.sh` does not follow redirects, so one page comes back empty — **DONE**
+
+**What.** `https://docs.maestro.dev/index.md` answers 307, the script's `curl` has no
+`-L`, and `skill/docs/pages/index.md` is 0 bytes after the 5 Nov 2026 refresh. It is
+the only page under 200 bytes.
+
+**Why.** The mirror counts 163 pages and has 162.
+
+**Done.** Both `curl` calls have `-L`, and the script lists any page that comes back
+empty. A full refresh on 5 Nov 2026 changed only `skill/docs/pages/index.md`, from 0 to
+9,145 bytes, and listed no empty pages.
+
+## 134. The ambiguity refusal says "pass --index", and `type` has no index — **DONE**
+
+**What.** `driver.sh type "^Search$" "wifi"` in Settings refused with `matches 4 nodes;
+narrow the pattern or pass --index`. Measured 5 Nov 2026. `type <pattern> <text...>`
+takes the rest of the line as the text, so an index has nowhere to go. Item 111 fixed
+this for `tapon` and `point`.
+
+**Why.** A field whose label is not unique cannot be typed into with `type`, and its
+read-back check is lost by falling back to `tap` and `text`.
+
+**Done.** `type --index N <pattern> <text...>` and `--index=N` work in the verb and the
+journey step. `--tree` goes before `--index`, and `--index` after the pattern is text.
+Run live on 5 Nov 2026 on an iPhone 16 Pro simulator in Settings: `type "^Search$" "wifi"`
+refused with 4 matches, and `type --index 0 "^Search$" "wifi"` put "wifi" in the search
+field, confirmed with `rows wifi`. `typed.py` found nothing focused and passed without
+checking. The journey step is covered by the test suite, not by a live run.
+
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

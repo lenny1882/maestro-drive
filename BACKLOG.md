@@ -13,9 +13,6 @@
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
 - **128.** Nothing tells a session that a newer Maestro is out when the skill is first called.
-- **132.** `bench.sh` hands ssh the whole `MAC_HOST` list.
-- **133.** `docs-refresh.sh` does not follow redirects, so one page comes back empty.
-- **134.** The ambiguity refusal says "pass --index", and `type` has no index.
 - **135.** Whether Maestro's CLI can now build and drive a phone itself has not been re-measured.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged.
@@ -713,40 +710,6 @@ the line carries `|| true` and the script always exits 0 and is cut off at 12 s.
 What is left is the one thing that needs an install: invoking the skill and seeing
 the notice appear. Over a Mac on another network or in local transport it says
 nothing, because there is no route to GitHub from inside the sandbox.
-
-## 132. `bench.sh` hands ssh the whole `MAC_HOST` list — **OPEN, raised 5 Nov 2026**
-
-**What.** `bin/bench.sh:27` runs `ssh "${SSH_OPTS[@]}" "$MAC_HOST" true` directly.
-With three aliases in `MAC_HOST` it prints `hostname contains invalid characters` and
-reports 0.00 s for each round trip. Measured 5 Nov 2026. The rest of the script goes
-through `_ssh` and is correct.
-
-**Why.** It prices the round trip at nothing, and that is what the script is for.
-
-**To do.** Call `_pick_host` first.
-
-## 133. `docs-refresh.sh` does not follow redirects, so one page comes back empty — **OPEN, raised 5 Nov 2026**
-
-**What.** `https://docs.maestro.dev/index.md` answers 307, the script's `curl` has no
-`-L`, and `skill/docs/pages/index.md` is 0 bytes after the 5 Nov 2026 refresh. It is
-the only page under 200 bytes.
-
-**Why.** The mirror counts 163 pages and has 162.
-
-**To do.** Add `-L`, and have the script say which pages came back empty.
-
-## 134. The ambiguity refusal says "pass --index", and `type` has no index — **OPEN, raised 5 Nov 2026**
-
-**What.** `driver.sh type "^Search$" "wifi"` in Settings refused with `matches 4 nodes;
-narrow the pattern or pass --index`. Measured 5 Nov 2026. `type <pattern> <text...>`
-takes the rest of the line as the text, so an index has nowhere to go. Item 111 fixed
-this for `tapon` and `point`.
-
-**Why.** A field whose label is not unique cannot be typed into with `type`, and its
-read-back check is lost by falling back to `tap` and `text`.
-
-**To do.** Accept `type --index N <pattern> <text...>` in both the verb and the
-journey step.
 
 ## 135. Whether Maestro's CLI can now build and drive a phone itself has not been re-measured — **OPEN, raised 5 Nov 2026**
 

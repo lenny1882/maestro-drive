@@ -4715,6 +4715,121 @@ case "$(drv tapon e --index)" in
 esac
 
 echo
+echo "type takes an index before the pattern (item 134)"
+touch_of(){ grep -o '"x":[^,]*,"y":[^,}]*' "$TMP/curl.log" | head -1; }
+typed_of(){ grep -o '"text":"[^"]*"' "$TMP/curl.log" | head -1; }
+pt=$(drv point e --index 10); want="\"x\":${pt% *},\"y\":${pt#* }"
+for form in "--index 10" "--index=10"; do
+  : > "$TMP/curl.log"
+  # shellcheck disable=SC2086
+  out=$(TYPE_VERIFY=0 drv type $form e hello there)
+  grep -q "touch.*$want" "$TMP/curl.log" && [ "$(typed_of)" = '"text":"hello there"' ] \
+    && ok "type $form taps match 10 and types all the text" \
+    || no "type $form taps match 10 and types all the text" "$out: $(cat "$TMP/curl.log" | tail -5)"
+done
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type --index 10 e --index 3)
+[ "$(typed_of)" = '"text":"--index 3"' ] \
+  && ok "--index after the pattern is text, and is typed" \
+  || no "--index after the pattern is text, and is typed" "$out: $(typed_of)"
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type e hello)
+case "$out" in
+  *"pass --index"*) grep -q inputText "$TMP/curl.log" \
+    && no "type on an ambiguous pattern with no index refuses" "it typed" \
+    || ok "type on an ambiguous pattern with no index refuses" ;;
+  *) no "type on an ambiguous pattern with no index refuses" "$out" ;;
+esac
+for bad in "--index" "--index 10" "--index 10 e" "--index=10 e" "e"; do
+  : > "$TMP/curl.log"
+  # shellcheck disable=SC2086
+  out=$(TYPE_VERIFY=0 drv type $bad)
+  case "$out" in
+    *"usage:"*"type [--index n]"*) grep -q touch "$TMP/curl.log" \
+      && no "type $bad gives usage and taps nothing" "it tapped" \
+      || ok "type $bad gives usage and taps nothing" ;;
+    *) no "type $bad gives usage and taps nothing" "$out" ;;
+  esac
+done
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv script --steps 'type --index 10 e hello there')
+grep -q "touch.*$want" "$TMP/curl.log" && [ "$(typed_of)" = '"text":"hello there"' ] \
+  && ok "the journey step takes --index" \
+  || no "the journey step takes --index" "$out: $(tail -5 "$TMP/curl.log")"
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv script --steps 'type --index 10 e')
+case "$out" in
+  *"type needs a pattern and some text"*) grep -q touch "$TMP/curl.log" \
+    && no "the journey step with no text refuses before tapping" "it tapped" \
+    || ok "the journey step with no text refuses before tapping" ;;
+  *) no "the journey step with no text refuses before tapping" "$out" ;;
+esac
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type --tree --index 10 e hello)
+[ "$(typed_of)" = '"text":"hello"' ] \
+  && ok "--tree goes before --index" \
+  || no "--tree goes before --index" "$out: $(typed_of)"
+
+echo
+echo "bench.sh gives ssh one alias (item 132)"
+B132="$TMP/b132"; mkdir -p "$B132/bin" "$B132/stub"
+cp "$REPO/bin/bench.sh" "$B132/bin/"
+cat > "$B132/bin/lib.sh" <<'LIBSH'
+MAC_HOST="mac-a mac-b mac-c"; SSH_OPTS=(-o X=y)
+_fs_shared(){ return 1; }
+_dev(){ echo stub; }
+_pick_host(){ MAC_HOST=mac-b; }
+_ssh(){ return 0; }
+LIBSH
+cat > "$B132/stub/ssh" <<'SSHSH'
+#!/usr/bin/env bash
+for a in "$@"; do printf '[%s]' "$a"; done >> "$SSH_LOG"; echo >> "$SSH_LOG"
+SSHSH
+chmod +x "$B132/stub/ssh"
+: > "$B132/ssh.log"
+PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" >/dev/null 2>&1
+[ "$(grep -c '\[mac-b\]\[true\]$' "$B132/ssh.log")" = 3 ] && ! grep -q 'mac-a' "$B132/ssh.log" \
+  && ok "each round trip goes to the one picked alias" \
+  || no "each round trip goes to the one picked alias" "$(cat "$B132/ssh.log")"
+
+echo
+echo "docs-refresh.sh follows redirects and names empty pages (item 133)"
+D133="$TMP/d133"; mkdir -p "$D133/bin" "$D133/ball/pages" "$D133/l"
+cp "$REPO/bin/docs-refresh.sh" "$D133/bin/"
+: > "$D133/ball/pages/index.md"
+echo content > "$D133/ball/pages/reference__run.md"
+echo https://docs.maestro.dev/index.md > "$D133/ball/urls.txt"
+echo PAGES=2 > "$D133/ball/VERSION"
+tar czf "$D133/docs.tgz" -C "$D133/ball" pages urls.txt VERSION
+cat > "$D133/bin/lib.sh" <<LIBSH
+RDIR=/tmp/none; LDIR=$D133/l
+_where(){ echo stub; }
+_ssh(){ printf '%s' "\$1" > "$D133/remote.sh"; }
+_pull(){ cp "$D133/docs.tgz" "\$2"; }
+LIBSH
+out=$(bash "$D133/bin/docs-refresh.sh" --into "$D133/dest" 2>&1)
+grep -o 'curl [^|]*' "$D133/remote.sh" | grep -v -- '-sSL' \
+  && no "every curl follows redirects" "see above" \
+  || { [ "$(grep -c 'curl ' "$D133/remote.sh")" -ge 2 ] \
+       && ok "every curl follows redirects" \
+       || no "every curl follows redirects" "$(cat "$D133/remote.sh")"; }
+case "$out" in
+  *"came back empty"*index.md*) ok "an empty page is named" ;;
+  *) no "an empty page is named" "$out" ;;
+esac
+case "$out" in
+  *reference__run.md*) no "a page with content is not named" "$out" ;;
+  *) ok "a page with content is not named" ;;
+esac
+rm "$D133/ball/pages/index.md"
+tar czf "$D133/docs.tgz" -C "$D133/ball" pages urls.txt VERSION
+out=$(bash "$D133/bin/docs-refresh.sh" --into "$D133/dest" 2>&1)
+case "$out" in
+  *"came back empty"*) no "no empty pages, no list" "$out" ;;
+  *) ok "no empty pages, no list" ;;
+esac
+
+echo
 echo "the driver cache follows the jar, and a failed start says why (item 131)"
 DU="$TMP/du"; mkdir -p "$DU/home/.maestro/lib" "$DU/bin" "$DU/work"
 cat > "$DU/bin/unzip" <<'STUB'

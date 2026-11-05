@@ -28,13 +28,13 @@ echo "downloading on $(_where) ..."
 _ssh "
 set -e
 rm -rf '$RDIR/mdocs'; mkdir -p '$RDIR/mdocs/pages'; cd '$RDIR/mdocs'
-curl -sS https://docs.maestro.dev/llms.txt -o llms.txt
+curl -sSL https://docs.maestro.dev/llms.txt -o llms.txt
 grep -oE 'https://docs\.maestro\.dev/[^)]+\.md' llms.txt | sort -u > urls.txt
 [ '$LIMIT' -gt 0 ] && head -'$LIMIT' urls.txt > u2 && mv u2 urls.txt
 while read -r u; do
   n=\${u#https://docs.maestro.dev/}; n=\${n//\//__}
   printf '%s\n%s\n' \"\$u\" \"\$n\"
-done < urls.txt | xargs -P 8 -n 2 sh -c 'curl -sS \"\$0\" -o \"pages/\$1\"'
+done < urls.txt | xargs -P 8 -n 2 sh -c 'curl -sSL \"\$0\" -o \"pages/\$1\"'
 v=\$(maestro --version 2>/dev/null | tail -1)
 printf 'MAESTRO_VERSION=%s\nMIRRORED=%s\nPAGES=%s\n' \"\$v\" \"\$(date +%F)\" \"\$(ls pages | wc -l | tr -d ' ')\" > VERSION
 tar czf docs.tgz pages urls.txt VERSION
@@ -52,3 +52,9 @@ mv "$DEST/pages.new/VERSION" "$DEST/VERSION"
 rmdir "$DEST/pages.new"
 echo "refreshed $DEST"
 cat "$DEST/VERSION"
+# PAGES counts files, so an empty page still counts as mirrored (item 133).
+_empty=$(find "$DEST/pages" -type f -empty | sed 's|.*/||' | sort)
+if [ -n "$_empty" ]; then
+  echo "pages that came back empty:"
+  printf '  %s\n' $_empty
+fi

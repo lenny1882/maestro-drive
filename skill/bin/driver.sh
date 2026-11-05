@@ -440,13 +440,33 @@ _tapon() {  # _tapon <pattern> [index] [--anyway]
 # read back rather than assumed (bin/typed.py). TYPE_VERIFY=0 turns it off for
 # the case this cannot judge: text that the app immediately transforms or
 # clears. It does not judge what the app then DID with the text — see item 14.
-_type() {  # _type <pattern> <text>
-  _tapon "$1" || return $?
-  _post inputText "{\"text\":$(printf '%s' "$2" |
+#
+# The index goes before the pattern because everything after the pattern is the
+# text to type (item 134).
+_type() {  # _type [--index n] <pattern> <text...>
+  local idx=() pat text
+  case "$1" in
+    --index)   idx=(--index "$2"); shift 2 ;;
+    --index=*) idx=(--index "${1#--index=}"); shift ;;
+  esac
+  pat=$1; shift; text="$*"
+  _tapon "$pat" "${idx[@]}" || return $?
+  _post inputText "{\"text\":$(printf '%s' "$text" |
     python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}" >/dev/null || return 1
   _settle || return 1
   [ "${TYPE_VERIFY:-1}" = 0 ] && return 0
-  _hier | python3 "$HERE/typed.py" "$2"
+  _hier | python3 "$HERE/typed.py" "$text"
+}
+
+# Whether the arguments are enough for _type: a pattern and some text, after any
+# index. Separate so the verb and the journey step can each refuse in their own
+# words before anything is tapped.
+_type_shape() {
+  case "${1:-}" in
+    --index)   shift; [ $# -gt 0 ] && shift ;;
+    --index=*) shift ;;
+  esac
+  [ $# -ge 2 ]
 }
 
 # The route is swipeV2, not swipe. POST /swipe is answered 200 whether or not it
@@ -940,8 +960,8 @@ _journey() {  # _journey <file> <depth>
       # Both take the rest of the line, so they mean here what they mean from
       # the command line. Quoting is still the clearer way to write it, but
       # forgetting it no longer silently shortens what gets typed.
-      type)       [ "${#a[@]}" -ge 3 ] || { echo "journey: $file:$n — type needs a pattern and some text" >&2; return 2; }
-                  _type "${a[1]}" "${a[*]:2}" || rc=$? ;;
+      type)       _type_shape "${a[@]:1}" || { echo "journey: $file:$n — type needs a pattern and some text" >&2; return 2; }
+                  _type "${a[@]:1}" || rc=$? ;;
       text)       [ "${#a[@]}" -ge 2 ] || { echo "journey: $file:$n — text needs something to type" >&2; return 2; }
                   _post inputText "{\"text\":$(printf '%s' "${a[*]:1}" |
                     python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}" >/dev/null &&
@@ -1114,12 +1134,11 @@ except Exception: print("")')
             shift; _resolve "$@" ;;
   tapon)    [ $# -ge 2 ] || { echo "usage: $0 tapon <pattern> [index|--index n] [--anyway]" >&2; exit 2; }
             shift; _tapon "$@" ;;
-  type)     pat=${2:?usage: $0 type <pattern> <text...>}; shift 2
-            [ $# -ge 1 ] || { echo "usage: $0 type <pattern> <text...>" >&2; exit 2; }
-            # "$*" rather than "$1": `text` has always joined its arguments and
-            # this quietly ignored everything after the first, which is the same
-            # silent shortening the journey verbs had.
-            _type "$pat" "$*" ;;
+  type)     shift
+            _type_shape "$@" || { echo "usage: $0 type [--index n] <pattern> <text...>" >&2; exit 2; }
+            # _type joins the text with "$*", as `text` does. Taking only the
+            # first word is the silent shortening the journey verbs once had.
+            _type "$@" ;;
   blank)    shift; _blank "$@" ;;
   dismiss)  shift; _dismiss "$@" ;;
   expect)   case "${3:-}" in
@@ -1155,7 +1174,7 @@ except Exception: print("")')
               echo "== $j"
               _journey "$j" 0 || exit $?
             done ;;
-  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text [<s>]|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
+  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type [--index n] <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text [<s>]|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
        every action verb takes --tree or --nodes directly after the verb, which
        prints the screen once the action has settled: $0 tapon --tree '^SAVE\$'
        the action verbs wait for the screen to go still by themselves — do not

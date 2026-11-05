@@ -22,6 +22,8 @@ if _fs_shared; then
   echo "  none. The device is on this machine and nothing crosses a network."
   _WHERE="on this machine"
 else
+  # MAC_HOST can name several aliases and ssh takes one (item 132).
+  _pick_host || exit 1
   echo "== SSH round trip, no work =="
   for i in 1 2 3; do
     s=$(date +%s.%N); ssh "${SSH_OPTS[@]}" "$MAC_HOST" true; e=$(date +%s.%N)
