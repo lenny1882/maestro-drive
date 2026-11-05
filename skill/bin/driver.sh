@@ -450,12 +450,17 @@ _type() {  # _type [--index n] <pattern> <text...>
     --index=*) idx=(--index "${1#--index=}"); shift ;;
   esac
   pat=$1; shift; text="$*"
-  _tapon "$pat" "${idx[@]}" || return $?
+  # The point is kept for the read-back, which is why this is not _tapon.
+  local pt x y
+  pt=$(_resolve "$pat" "${idx[@]}") || return 1
+  x=${pt% *}; y=${pt#* }
+  _post touch "{\"x\":$x,\"y\":$y}" >/dev/null || return 1
+  _settle || return 1
   _post inputText "{\"text\":$(printf '%s' "$text" |
     python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}" >/dev/null || return 1
   _settle || return 1
   [ "${TYPE_VERIFY:-1}" = 0 ] && return 0
-  _hier | python3 "$HERE/typed.py" "$text"
+  _hier | python3 "$HERE/typed.py" "$text" "$x" "$y"
 }
 
 # Whether the arguments are enough for _type: a pattern and some text, after any

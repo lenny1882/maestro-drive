@@ -676,6 +676,25 @@ JSON
 $T "1234" < "$TMP/typed-secure.json" >/dev/null 2>&1
 [ $? = 0 ] && ok "a focused secure field suspends the check" || no "a focused secure field suspends the check" "it cried wolf"
 
+# Nothing focused but the caller knows where it tapped (item 148), which is every
+# field measured on 2.12.1.
+TF(){ printf '{"axElement":{"elementType":2,"children":[%s]}}' "$1"; }
+F1='{"elementType":49,"value":"%s","frame":{"X":10,"Y":100,"Width":300,"Height":50}}'
+fld(){ printf "$F1" "$1"; }
+TF "$(fld LOC1)" | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: text in the tapped field passes" || no "by point: text in the tapped field passes" "failed"
+out=$(TF "$(fld 4001LOC1)" | $T LOC1 20 110 2>&1); rc=$?
+[ "$rc" = 1 ] && case "$out" in *'holds "4001LOC1"'*) true ;; *) false ;; esac && ok "by point: an appended value fails and says what is there" || no "by point: an appended value fails and says what is there" "rc=$rc $out"
+TF "$(fld "")" | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 1 ] && ok "by point: an empty field fails" || no "by point: an empty field fails" "passed"
+TF "$(fld LOC1)" | $T LOC1 390 800 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: a field that moved is still found by its text" || no "by point: a field that moved is still found by its text" "failed"
+TF "$(fld other)" | $T LOC1 390 800 >/dev/null 2>&1; [ $? = 1 ] && ok "by point: no field holding the text fails" || no "by point: no field holding the text fails" "passed"
+TF '{"elementType":48,"label":"LOC1"}' | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: no field on screen passes and says so" || no "by point: no field on screen passes and says so" "failed"
+TF '{"elementType":49,"value":"","frame":{"X":10,"Y":100,"Width":300,"Height":50}},{"elementType":48,"label":"LOC1"}' | $T LOC1 20 110 >/dev/null 2>&1
+[ $? = 1 ] && ok "by point: a menu row with the text does not pass" || no "by point: a menu row with the text does not pass" "passed"
+TF '{"elementType":50,"value":"••••","frame":{"X":10,"Y":100,"Width":300,"Height":50}}' | $T 1234 20 110 >/dev/null 2>&1
+[ $? = 0 ] && ok "by point: a secure field suspends the check" || no "by point: a secure field suspends the check" "failed"
+TF '{"elementType":49,"hasFocus":true,"value":"other","frame":{"X":10,"Y":100,"Width":300,"Height":50}},{"elementType":49,"value":"LOC1","frame":{"X":10,"Y":200,"Width":300,"Height":50}}' | $T LOC1 20 210 >/dev/null 2>&1
+[ $? = 1 ] && ok "a focused field still wins over the point" || no "a focused field still wins over the point" "passed"
+
 # Nothing focused: no field to read, so it says so and passes rather than a
 # tree-wide search that is not really a check.
 cat > "$TMP/typed-nofocus.json" <<'JSON'
@@ -980,7 +999,7 @@ echo "an action and the read after it are one round trip"
 # load. A stub curl and a stub lib.sh give it a whole fake device, which is what
 # lets the --tree flag and the settle-after-acting rule be checked at all.
 DBIN="$TMP/dbin"; mkdir -p "$DBIN"
-cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" \
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/fieldvalue.py" \
    "$REPO/bin/jtok.py" "$DBIN/"
 cat > "$DBIN/lib.sh" <<'LIBSH'
 # config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
@@ -4823,8 +4842,9 @@ MAC_HOST="mac-a mac-b mac-c"; SSH_OPTS=(-o X=y)
 _fs_shared(){ return 1; }
 _dev(){ echo stub; }
 _pick_host(){ MAC_HOST=mac-b; }
-_ssh(){ return 0; }
+_ssh(){ if [ -n "${BENCH_REMOTE:-}" ]; then bash -c "$1"; else return 0; fi; }
 LIBSH
+sed -n '/^_no_phone()/,/^}/p' "$REPO/bin/lib.sh" >> "$B132/bin/lib.sh"
 cat > "$B132/stub/ssh" <<'SSHSH'
 #!/usr/bin/env bash
 for a in "$@"; do printf '[%s]' "$a"; done >> "$SSH_LOG"; echo >> "$SSH_LOG"
@@ -4839,6 +4859,77 @@ esac
 [ "$(grep -c '\[mac-b\]\[true\]$' "$B132/ssh.log")" = 3 ] && ! grep -q 'mac-a' "$B132/ssh.log" \
   && ok "each round trip goes to the one picked alias" \
   || no "each round trip goes to the one picked alias" "$(cat "$B132/ssh.log")"
+
+cat > "$B132/stub/maestro" <<'STUB'
+#!/bin/sh
+case "$*" in *hierarchy*) echo "Device with id stub is not connected" >&2; exit 1 ;; esac
+exit 0
+STUB
+chmod +x "$B132/stub/maestro"
+out=$(BENCH_REMOTE=1 PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" 2>&1); rc=$?
+case "$out" in
+  *"run 1: FAILED: Device with id stub is not connected"*"are not timings"*)
+    case "$out" in
+      *"ended stub's driver"*) no "a failed hierarchy is reported as failed, not timed" "it still claims the driver ended" ;;
+      *) [ "$rc" = 1 ] && ok "a failed hierarchy is reported as failed, not timed" || no "a failed hierarchy is reported as failed, not timed" "rc=$rc" ;;
+    esac ;;
+  *) no "a failed hierarchy is reported as failed, not timed" "$out" ;;
+esac
+
+echo
+echo "the CLI scripts refuse a phone before Maestro does (item 150)"
+NP(){ bash -c 'sed -n "/^_no_phone()/,/^}/p" "$1" > "$2"; . "$2"; PLATFORM=$3 _no_phone "$4"' _ "$REPO/bin/lib.sh" "$B132/np.sh" "$1" "$2" 2>&1; }
+case "$(NP ios 00008020-000A396C3606002E)" in
+  *"is a phone"*"bin/device.sh up 00008020-000A396C3606002E"*) ok "an iPhone id is refused and pointed at device.sh" ;;
+  *) no "an iPhone id is refused and pointed at device.sh" "$(NP ios 00008020-000A396C3606002E)" ;;
+esac
+[ -z "$(NP ios C61983AE-1974-4ACD-8087-8FD849CF89B1)" ] && ok "a simulator id passes" || no "a simulator id passes" "refused"
+[ -z "$(NP android 00008020-000A396C3606002E)" ] && ok "an Android serial of that shape passes" || no "an Android serial of that shape passes" "refused"
+[ -z "$(NP ios emulator-5554)" ] && ok "an emulator id passes" || no "an emulator id passes" "refused"
+for f in flow hier bench; do
+  grep -q '^_no_phone "\$d" || exit 2$' "$REPO/bin/$f.sh" \
+    && ok "$f.sh checks before it calls Maestro" || no "$f.sh checks before it calls Maestro" "no call"
+done
+
+echo
+echo "preflight says when an upgrade was left unfinished (item 151)"
+UC="$TMP/uc"; mkdir -p "$UC/home/.maestro/lib" "$UC/home/.maestro/deps" "$UC/bin"
+: > "$UC/home/.maestro/lib/maestro-cli-2.12.1.jar"
+cat > "$UC/bin/unzip" <<'STUB'
+#!/bin/sh
+echo jar-binary
+STUB
+chmod +x "$UC/bin/unzip"
+ucr(){ PATH="$UC/bin:$PATH" HOME="$UC/home" sh "$REPO/remote/upgradecheck.sh" 2>&1; }
+echo jar-binary > "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"Maestro 2.12.1: capture binary and phone driver match"*) ok "a finished upgrade with no phone driver says it matches" ;;
+  *) no "a finished upgrade with no phone driver says it matches" "$(ucr)" ;;
+esac
+echo old-binary > "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"simulator-server is not the one in Maestro 2.12.1 (step 2)"*"unzip -p"*) ok "an old capture binary names step 2 and the command" ;;
+  *) no "an old capture binary names step 2 and the command" "$(ucr)" ;;
+esac
+rm "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"(step 2)"*) ok "a missing capture binary names step 2" ;;
+  *) no "a missing capture binary names step 2" "$(ucr)" ;;
+esac
+echo jar-binary > "$UC/home/.maestro/deps/simulator-server"
+mkdir -p "$UC/home/maestro-drive-driver/build-2.8.0"
+case "$(ucr)" in
+  *"no phone driver for Maestro 2.12.1 (step 3)"*) ok "a phone driver for an older version names step 3" ;;
+  *) no "a phone driver for an older version names step 3" "$(ucr)" ;;
+esac
+mkdir -p "$UC/home/.maestro/maestro-iphoneos-driver-build"
+echo version=2.12.1 > "$UC/home/.maestro/maestro-iphoneos-driver-build/version.properties"
+case "$(ucr)" in
+  *"(step 3)"*) no "the prebuilt driver at the right version is enough" "$(ucr)" ;;
+  *) ok "the prebuilt driver at the right version is enough" ;;
+esac
+grep -q "sh '\$RDIR/upgradecheck.sh'" "$REPO/bin/preflight.sh" \
+  && ok "preflight runs it" || no "preflight runs it" "no call"
 
 echo
 echo "docs-refresh.sh follows redirects and names empty pages (item 133)"
@@ -4920,6 +5011,28 @@ du_up >/dev/null
 ls -A "$DU/work" | grep -q '^\.extract' \
   && no "no half-built tree is left behind" "$(ls -A "$DU/work")" \
   || ok "no half-built tree is left behind"
+
+# A failed start keeps its log, because the next start deletes the plain one (item 143).
+cat > "$DU/bin/xcodebuild" <<'STUB'
+#!/bin/sh
+echo "xcodebuild: error: Mach error -308"
+STUB
+cat > "$DU/bin/curl" <<'STUB'
+#!/bin/sh
+case "$*" in *"%{http_code}"*) printf 000 ;; *) exit 7 ;; esac
+STUB
+out=$(du_up 2>&1); rc=$?
+kept=$(ls "$DU"/work/driver-U.failed-*.log 2>/dev/null | head -1)
+[ "$rc" != 0 ] && [ -n "$kept" ] && grep -q 'Mach error -308' "$kept" \
+  && case "$out" in *"log kept: $kept"*) true ;; *) false ;; esac \
+  && ok "a failed start keeps its log and says where" \
+  || no "a failed start keeps its log and says where" "rc=$rc kept=$kept: $out"
+for i in 1 2 3 4 5 6 7; do touch "$DU/work/driver-U.failed-2020010$i.log"; done
+touch -t 202001010000 "$DU"/work/driver-U.failed-2020010*.log
+du_up >/dev/null 2>&1
+[ "$(ls "$DU"/work/driver-U.failed-*.log | wc -l | tr -d ' ')" = 5 ] \
+  && ok "only the newest five failed logs stay" \
+  || no "only the newest five failed logs stay" "$(ls "$DU/work" | grep -c failed)"
 
 PU="$TMP/pu"; mkdir -p "$PU/help"
 printf 'echo "xcodebuild failed: Mach error -308" >&2\nexit 1\n' > "$PU/help/driverup.sh"

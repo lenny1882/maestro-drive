@@ -3511,6 +3511,43 @@ became unreachable`, and 7 calls failed each run. After `drivers.sh down`, 3 out
 with no failures. `SKILL.md` and `driving.md` now say to stop the driver first. The runner logs
 show no crash or restart, so why the driver goes was not established.
 
+## 148. `type`'s read-back checked nothing on 2.12.1 — **DONE**
+
+**What.** `typed.py` compared the node with `hasFocus`, and no node had it. Measured 5 Nov 2026 with the
+keyboard up, on the app's Flutter field on iOS 26.4 and Settings' search on iOS 18.6. So every
+`type` printed "passing without checking". Whether 2.12.1 caused this is unknown, because the 2.8.0
+driver is gone.
+
+**Done.** With no focused node, `typed.py` now reads the field at the tapped point. A field that moved
+when the keyboard came up is found by holding exactly the text. Run live: `type Search 777` passed
+in silence, `type 777 888` failed with `the field at the tapped point holds "777888"`, and Settings'
+search, which moves when tapped, passed. A focused node still takes priority.
+
+## 149. `bench.sh` timed failed runs as if they were results — **DONE**
+
+**What.** With no simulator booted, it reported `maestro hierarchy` at about 1.6 s, because the output
+was discarded and the time printed either way.
+
+**Done.** A failed run prints `FAILED:` and Maestro's message, and the script exits 1 and says those
+runs are not timings. It also writes to `mktemp`, not a fixed `/tmp/b.err`. Tested with a stub.
+
+## 150. `flow.sh`, `hier.sh` and `bench.sh` said "not connected" about a connected phone — **DONE**
+
+**What.** The CLI lists no physical iPhones on 2.12.1 (item 135), and these three passed a phone's id to it.
+
+**Done.** `_no_phone` in `lib.sh` refuses first, exit 2, and names `device.sh` and
+`physical-device.md` section 3. Run live on the XS Max. Simulator ids and Android serials pass.
+
+## 151. Nothing said when a Maestro upgrade was left unfinished — **DONE**
+
+**What.** The install changes the CLI and leaves the capture binary and the phone driver behind, and the
+wall failure that started this branch came from an old capture binary.
+
+**Done.** `remote/upgradecheck.sh` runs at the top of `preflight.sh`, except on Android. It compares
+`~/.maestro/deps/simulator-server` with the jar's copy, and looks for a phone driver for the installed
+version when any phone driver exists, naming the step in "Upgrading Maestro". Live on the Mac it reported a
+match. The missed-step messages are tested with stubs only. It checks version, not signing.
+
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

@@ -852,7 +852,7 @@ fix it yourself.
 | `bin/resolve.py` | label pattern -> true point (used by `driver.sh`) |
 | `bin/jtok.py` | split a journey line into arguments, then expand `${VAR}` in each |
 | `bin/typed.py` | did the text `type` sent actually land on screen? |
-| `bin/fieldvalue.py` | what does the field at a point hold? `clear` reads it back with this |
+| `bin/fieldvalue.py` | what does the field at a point hold? `clear` and `type` read it back with this |
 | `bin/tree.py` | render a view hierarchy as an indented tree (used by `driver.sh`) |
 | `bin/watch.py` | sample a list until it changes, and say what changed (used by `driver.sh watch`) |
 | `bin/img.sh` | crop, rotate and shrink a PNG, on whatever tool the machine has |

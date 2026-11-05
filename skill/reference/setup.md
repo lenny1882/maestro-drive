@@ -487,7 +487,7 @@ any session that is. `bin/drivers.sh rig status` shows who holds a device. Steps
    says its list needs re-checking, re-check it.
 
 The simulator driver looks after itself: `driverup.sh` extracts the runner again
-when the jar changes.
+when the jar changes. `bin/preflight.sh` says if step 2 or 3 was missed.
 
 ## What breaks, and what it actually means
 

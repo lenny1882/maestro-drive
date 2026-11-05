@@ -73,6 +73,7 @@ $(cat)"
 fi
 
 d=$(_dev) || exit 1
+_no_phone "$d" || exit 2
 
 POST=""
 [ "$QUIET" -eq 0 ] && POST="

@@ -13,6 +13,7 @@
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 d=$(_dev) || exit 1
+_no_phone "$d" || exit 2
 
 # The round trip is the thing this script was built to price, so locally it
 # says there is none rather than printing three numbers near zero. Those numbers
@@ -36,14 +37,26 @@ fi
 
 echo "== $_WHERE =="
 _ssh "
+E=\$(mktemp)
 echo '-- JVM only (maestro --version) x2 --'
-for i in 1 2; do /usr/bin/time -p maestro --version >/dev/null 2>>/tmp/b.err; grep real /tmp/b.err | tail -1; : > /tmp/b.err; done
+for i in 1 2; do /usr/bin/time -p maestro --version >/dev/null 2>>\$E; grep real \$E | tail -1; : > \$E; done
 echo '-- hierarchy x4: run 1 cold, 2-4 warm --'
 for i in 1 2 3 4; do
-  /usr/bin/time -p maestro --device $d hierarchy >/dev/null 2>>/tmp/b.err
-  printf '  run %s: ' \$i; grep real /tmp/b.err | tail -1; : > /tmp/b.err
+  if /usr/bin/time -p maestro --device $d hierarchy >/dev/null 2>>\$E; then
+    printf '  run %s: ' \$i; grep real \$E | tail -1
+  else
+    printf '  run %s: FAILED: ' \$i; grep -vE '^(real|user|sys) |^Command exited' \$E | grep . | tail -1 | cut -c1-120
+    failed=1
+  fi
+  : > \$E
 done
-rm -f /tmp/b.err"
+rm -f \$E
+exit \${failed:-0}"
+rc=$?
+if [ "$rc" != 0 ]; then
+  echo "== maestro hierarchy failed, so those runs are not timings ==" >&2
+  exit 1
+fi
 
 echo "== driver =="
 echo "  maestro hierarchy has ended $d's driver. Bring it back: bin/drivers.sh up $d"

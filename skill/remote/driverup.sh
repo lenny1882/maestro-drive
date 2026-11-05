@@ -54,6 +54,14 @@ fi
 
 LOG=$WORK/driver-$UDID.log
 rm -f "$LOG"
+# The next start deletes the log above, so a retry that works would take the
+# failure's only evidence with it (item 143). A failed start keeps a copy, and the
+# newest five per device stay.
+_keep_log() {
+  _kept=$WORK/driver-$UDID.failed-$(date +%Y%m%d-%H%M%S).log
+  cp "$LOG" "$_kept" 2>/dev/null && echo "log kept: $_kept" >&2
+  ls -t "$WORK"/driver-"$UDID".failed-*.log 2>/dev/null | tail -n +6 | while read -r _old; do rm -f "$_old"; done
+}
 TEST_RUNNER_PORT=$PORT nohup xcodebuild test-without-building \
   -xctestrun "$PRODUCTS/maestro-driver-ios-config.xctestrun" \
   -destination "id=$UDID" \
@@ -66,9 +74,10 @@ for _ in $(seq 1 60); do
   if [ "$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/status" 2>/dev/null)" = "200" ]; then
     echo "up on $PORT"; exit 0
   fi
-  grep -qE "Testing failed|error:" "$LOG" 2>/dev/null && { echo "xcodebuild failed:" >&2; tail -5 "$LOG" >&2; exit 1; }
+  grep -qE "Testing failed|error:" "$LOG" 2>/dev/null && { echo "xcodebuild failed:" >&2; tail -5 "$LOG" >&2; _keep_log; exit 1; }
   sleep 1
 done
 echo "driver did not answer on $PORT within 60s; last log lines:" >&2
 tail -5 "$LOG" >&2
+_keep_log
 exit 1

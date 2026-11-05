@@ -30,12 +30,20 @@ Two things this deliberately does NOT do:
   another field is still caught, because that field then has focus and holds the
   wrong value; only a tap onto empty space goes unjudged.
 
+Neither a Flutter field nor a native search field had focus set when measured on
+5 Nov 2026, on Maestro 2.12.1, with the keyboard up. So when no node has focus and
+the caller says where it tapped, the field at that point is read instead (item 148).
+A field that moved when the keyboard came up is no longer at that point, so with no
+field there, any field holding exactly the text passes.
+
 What this still does NOT check is what the app then DID with the text. The
 dropdown failure behind item 14 puts `LOC1` in the field correctly and commits
 `4001` anyway; only an `expect` on the committed value catches that.
 """
 import json
 import sys
+
+from fieldvalue import fields, holds
 
 SECURE_FIELD = 50
 # The field's own content, not the placeholder (which is the hint, not what was
@@ -64,9 +72,30 @@ def focused(node):
     return None
 
 
+def by_point(root, wanted, raw, x, y):
+    """The check when nothing has focus: the field at the tapped point, or any field."""
+    all_fields = list(fields(root))
+    if not all_fields:
+        print("typed: no text field on screen to read the typed value from — passing "
+              "without checking (item 148)", file=sys.stderr)
+        return 0
+    at_point = [f for f in all_fields if holds(f.get("frame") or {}, x, y)]
+    candidates = at_point or all_fields
+    if any(f.get("elementType") == SECURE_FIELD for f in candidates):
+        return 0
+    values = [norm(f.get("value") or "") for f in candidates]
+    if wanted in values:
+        return 0
+    where = "the field at the tapped point holds" if at_point else "no field holds it; they hold"
+    print('typed: "%s" did not land as typed: %s %s. A missed tap types into whatever '
+          "had focus, and typing into a field that already held a value appends to it."
+          % (raw, where, ", ".join('"%s"' % (v or "(empty)") for v in values)), file=sys.stderr)
+    return 1
+
+
 def main():
-    if len(sys.argv) != 2:
-        print("usage: typed.py <text>   (hierarchy on stdin)", file=sys.stderr)
+    if len(sys.argv) not in (2, 4):
+        print("usage: typed.py <text> [<x> <y>]   (hierarchy on stdin)", file=sys.stderr)
         return 2
     wanted = norm(sys.argv[1])
     if not wanted:
@@ -79,6 +108,8 @@ def main():
     root = root.get("axElement", root)
 
     node = focused(root)
+    if node is None and len(sys.argv) == 4:
+        return by_point(root, wanted, sys.argv[1], float(sys.argv[2]), float(sys.argv[3]))
     if node is None:
         print("typed: nothing has focus, so there is no field to read the typed "
               "value from — passing without checking (item 31)", file=sys.stderr)

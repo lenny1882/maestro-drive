@@ -21,7 +21,7 @@ Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried aga
 upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
 skill tests and 161 package tests, and `oneiota-products-rn` flows 01 to 03 pass on 2.12.1.
 
-Next item number: 148.
+Next item number: 152.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -734,7 +734,8 @@ the same simulator, 5 Nov 2026. A retry worked.
 
 **Why.** It reads as a broken install, and the cause was not established.
 
-**To do.** Catch it again with the xcodebuild log kept.
+**To do.** Read the log the next time it happens. `driverup.sh` now keeps a failed start's log as
+`driver-<udid>.failed-<time>.log` in its work directory, the newest five per device, and prints the path.
 
 ## 144. Something removed the wall's log and script from `/tmp/maestro-mac` — **OPEN, raised 5 Nov 2026**
 
