@@ -248,7 +248,9 @@ one adb stream per socket, so nothing binds on the host and no `adb forward`
 exists. Two emulators therefore never collide on a port, and the ports map has
 nothing to allocate. Without `--driver-host-port`, `maestro test` picks a free
 port per run. A second run on the same emulator takes the driver from the
-first, which fails with `DeviceServerDiedException`.
+first, which fails with `DeviceServerDiedException`. On 2.12.1 the first run exits 1
+with no exception in its output. The rest of this held on 2.12.1 on 5 Nov 2026: no
+Maestro APKs left after a run, and `driver-scan` listing the run in flight, though six seconds in it printed `?` for the port.
 
 So `driver-up` exits 2: a driver started ahead of a flow would be replaced by
 the flow's own, and nothing in this package speaks its gRPC protocol.

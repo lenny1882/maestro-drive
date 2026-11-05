@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# FALLBACK ONLY. Prefer `bin/driver.sh nodes`, which is ~0.4s against ~10.7s
+# FALLBACK ONLY. Prefer `bin/driver.sh nodes`, which is ~0.4s against ~5.7s
 # here and can be pointed at any device with DEV=<udid>.
 # Unlike the MCP server this does honour --device, so it is the way to read a
 # second simulator when no driver is up for it yet.

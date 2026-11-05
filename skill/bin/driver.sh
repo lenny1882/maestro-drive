@@ -13,7 +13,7 @@
 #   /touch          0.46s   a tap at raw screen coordinates, in points
 #   /inputText      1.13s   type into whatever has focus
 #
-# Compare that with 7.7s for `maestro hierarchy` over SSH, or 2.2s for a
+# Compare that with 5.2-5.9s for `maestro hierarchy` over SSH, or 4.3s for a
 # two-action flow through the MCP server. The frames here are what Maestro
 # itself reads before converting them into the bounds that inspect_screen
 # reports, so this is also the way to tell a driver problem from a Maestro

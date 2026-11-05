@@ -12,7 +12,8 @@ allowed-tools:
 
 If a line starting `maestro:` or `maestro-drive:` appears above, tell the user what
 it says. Never upgrade unasked: installing Maestro replaces the driver jar under
-any session that is driving.
+any session that is driving. The steps are in `reference/setup.md`, under
+"Upgrading Maestro".
 
 # Maestro on a remote Mac
 

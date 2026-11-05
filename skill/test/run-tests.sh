@@ -4787,7 +4787,11 @@ for a in "$@"; do printf '[%s]' "$a"; done >> "$SSH_LOG"; echo >> "$SSH_LOG"
 SSHSH
 chmod +x "$B132/stub/ssh"
 : > "$B132/ssh.log"
-PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" >/dev/null 2>&1
+out=$(PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" 2>&1)
+case "$out" in
+  *"ended stub's driver"*"drivers.sh up stub"*) ok "bench.sh says it ended the driver and how to bring it back" ;;
+  *) no "bench.sh says it ended the driver and how to bring it back" "$out" ;;
+esac
 [ "$(grep -c '\[mac-b\]\[true\]$' "$B132/ssh.log")" = 3 ] && ! grep -q 'mac-a' "$B132/ssh.log" \
   && ok "each round trip goes to the one picked alias" \
   || no "each round trip goes to the one picked alias" "$(cat "$B132/ssh.log")"

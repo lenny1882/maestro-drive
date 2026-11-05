@@ -93,10 +93,11 @@ gives each body) and then exercised against the live driver:
 | `isScreenStatic` | GET | yes — `{"isScreenStatic":true}` |
 | `keyboard` | `{"appIds":[...]}` | yes — `{"isKeyboardVisible":true}` |
 | `runningApp` | `{"appIds":[...]}` | yes — returns whichever of the given ids is in front, else `com.apple.springboard`; it cannot name an app not in the list (item 104) |
-| `installedApps`, `setPermissions` | — | not exercised |
+| `setPermissions` | `{"permissions":{"notifications":"allow"}}` | 200 on simulator and phone. A bad body is 400; an unknown value is accepted. The driver reads only the `notifications` key, and taps the alert during a hierarchy read while springboard is in front. Its effect on a live alert was not exercised |
+| `installedApps` | — | named by the client, **404 on this driver**, simulator and phone |
 | `keyboardInfo` | — | named by the client, **404 on this driver** |
 
-The routes above were run again on Maestro 2.12.1's runner on 5 Nov 2026 and behaved as described, except `installedApps` and `setPermissions`, which were not.
+The routes above were run again on Maestro 2.12.1's runner on 5 Nov 2026 and behaved as described.
 
 All of it is in `bin/driver.sh`: `tap`, `text`, `key`, `button`, `erase`,
 `swipe`, `orient`, `launch`, `kill`, `static`, `keyboard`, `app`.

@@ -3256,6 +3256,11 @@ and `src-2.8.0` have been removed from the Mac. The failure
 message now says to look at the phone. Whether the 2.12.1 CLI can build its own device
 driver is item 135.
 
+**Re-measured 5 Nov 2026.** `oneiota.e.hugoboss.runner.uat` on AE01727F, still logged in: the CHAT,
+TASKS, MY REQUEST and SETTINGS tabs all opened and read correctly, and text typed into its
+search field read back. Nothing was submitted, and LOG OUT was left alone. `~/.maestro/driver/ios`
+is unchanged since 31 Jul, 189 files with no `MaestroDriverLib`, and no 2.12.1 run touched it.
+
 ## 127. The wall's tile hides the capture failure's cause, and its log can vanish under it — **DONE**
 
 **What.** Two things stopped the wall explaining its own failure on 5 Nov 2026.
@@ -3395,6 +3400,59 @@ field, confirmed with `rows wifi`. `typed.py` found nothing focused and passed w
 checking. The journey step `type --index 0 "^Search$" "wifi"` was run live the same day:
 `rows wifi` found 0 nodes before it and the search field after it, and `typed.py` again
 passed without checking.
+
+## 135. Whether Maestro's CLI can now build and drive a phone itself has not been re-measured — **DONE**
+
+**What.** `physical-device.md` section 3 says the CLI cannot build its own device driver,
+measured on 2.8.0. It was not tried on 2.12.1: `maestro hierarchy --apple-team-id` on a
+phone can run `-allowProvisioningUpdates`, which writes permanent records to the team's
+Apple account. `device.sh` and `driver.sh` do not depend on the answer.
+
+**Why.** If the CLI can now do it, the hand-signed path may be unnecessary. Maestro
+flows on a phone are untested on 2.12.1 for the same reason.
+
+**Done.** It cannot, and it no longer tries. Measured 5 Nov 2026 with the user's
+agreement to the Apple account side effect, which never arose. `listIOSDevices` in
+2.12.1's source has `listIOSConnectedDevices()` commented out, so `--device <phone>`
+is refused as not connected before any build, on a wired phone with a connected
+tunnel. A flow through `--driver-host-port` at a live phone driver ran against a booted
+simulator instead. `physical-device.md` section 3 records it. `device.sh` and `driver.sh`
+are unaffected, and `installedApps` is 404 and `setPermissions` 200 on the phone driver.
+
+## 136. Nothing gave the whole Maestro upgrade in one place — **DONE**
+
+**What.** The update notice says a new version is out. The install and the `simulator-server` unpack
+were in `wall.sh`, and the phone driver rebuild and signing in `physical-device.md`.
+
+**Done.** `reference/setup.md` has "Upgrading Maestro", and `SKILL.md`'s notice line points at it.
+
+## 137. Nothing warned that stopping `maestro mcp` can disconnect a session's tools — **DONE**
+
+**What.** Measured during the 2.12.1 upgrade. The warning was only in a handoff file.
+
+**Done.** Step 4 of "Upgrading Maestro" says to stop by pid and reconnect with `/mcp`.
+
+## 140. The hierarchy timing still read 7.7 s after the upgrade — **DONE**
+
+**What.** `bench.sh`, `driver.sh`, `hier.sh`, `flow.sh`, `reference/driving.md` and
+`reference/maestro-notes.md` carried the older CLI's numbers.
+
+**Done.** All now carry 2.12.1's: 5.2–5.9 s for `maestro hierarchy`.
+
+## 141. `bench.sh` ended the driver and did not say so — **DONE**
+
+**What.** On 5 Nov 2026 a `rows` call straight after `bench.sh` found no driver.
+
+**Done.** The header and the output both say it, and name `drivers.sh up`. Tested with a stub.
+
+## 142. The MCP against CLI table in `driving.md` was from an older Maestro — **DONE**
+
+**What.** Only the `bench.sh` figures had been re-measured on 2.12.1.
+
+**Done.** Re-derived on 5 Nov 2026 with a private MCP client: three timing runs, the first of
+which failed part-way (item 147). The two-action flow over MCP went from ~2.2 s to about 4.3 s,
+and the cost of a fresh `flow.sh` fell from 17.6 s to 10.8 s, so screen reads are now about 20x
+cheaper over MCP rather than 40x.
 
 ## Measured and rejected
 

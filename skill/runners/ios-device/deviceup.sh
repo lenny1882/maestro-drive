@@ -14,8 +14,8 @@
 #
 # The driver is the one driver/build.sh built and driver/sign.sh signed. Failing
 # that, the PREBUILT driver-iphoneos, re-signed by hand (physical-device.md §3),
-# because Maestro's CLI could not build its own device driver when measured on
-# 2.8.0. If neither is there, this says so rather than trying to build one.
+# because Maestro's CLI could not build its own device driver on 2.8.0, and on
+# 2.12.1 does not see a phone at all. If neither is there, this says so rather than trying to build one.
 set -uo pipefail
 UDID=${1:?usage: deviceup.sh <udid> <port> [workdir]}
 PORT=${2:?port}

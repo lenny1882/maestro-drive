@@ -2,12 +2,14 @@
 #
 # SUPERSEDED — kept because the numbers are worth being able to re-derive.
 # The question it was built to answer (is there a warm-up benefit to recover?)
-# was answered: no. A fresh `maestro hierarchy` costs ~7.7s every
-# time — 8.06s cold, then 7.56/7.81/7.61s — because each CLI invocation
+# was answered: no. On Maestro 2.12.1 a fresh `maestro hierarchy` costs about 5.2s
+# every time — 5.91s cold, then 5.22/5.22/5.20s — because each CLI invocation
 # re-establishes its session with the driver. Only a resident client avoids it,
 # which is what the MCP server is. See reference/driving.md for the comparison table.
 #
-# Re-run this after a Maestro upgrade, or on a different Mac.
+# Re-run this after a Maestro upgrade, or on a different Mac. It costs the device
+# its driver: Maestro ends the runner when `maestro hierarchy` finishes, so the
+# next driver.sh call finds none until bin/drivers.sh up has run again.
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 d=$(_dev) || exit 1
@@ -42,3 +44,6 @@ for i in 1 2 3 4; do
   printf '  run %s: ' \$i; grep real /tmp/b.err | tail -1; : > /tmp/b.err
 done
 rm -f /tmp/b.err"
+
+echo "== driver =="
+echo "  maestro hierarchy has ended $d's driver. Bring it back: bin/drivers.sh up $d"

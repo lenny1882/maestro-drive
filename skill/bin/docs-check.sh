@@ -41,9 +41,10 @@ docs: KNOWN-WRONG claims in this mirror (Maestro 2.12.1) — do NOT trust these:
   - "Executing tests on physical iOS devices is not supported yet"
     (get-started__supported-platform__ios__uikit.md) is FALSE for this skill —
     bin/device.sh drives a physical iPhone (physical-device.md, item 45).
-  - --apple-team-id is documented only under `record`, but a device also needs it
-    on `hierarchy` and `test`. It is a hidden option on all three, so `--help` does
-    not list it either.
+  - --apple-team-id is documented only under `record`, and is a hidden option on
+    `hierarchy` and `test` as well, so `--help` does not list it. On 2.12.1 it no
+    longer gets a phone through the CLI, which refuses one as not connected
+    (physical-device.md section 3).
 MSG
 else
   # A refresh turns the list above off, and it used to do that without a word

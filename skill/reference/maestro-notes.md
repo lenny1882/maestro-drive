@@ -240,7 +240,7 @@ follow a link out into Safari and come back.
 ### CLI options that matter for the fallback path
 
 `maestro test --no-reinstall-driver` skips the driver reinstall, which is a
-large part of the 7.7 s per-invocation cost measured in `reference/driving.md`.
+large part of the 5.2–5.9 s per-invocation cost measured in `reference/driving.md`.
 `--test-output-dir` gathers `manifest.json`, `commands.json`, `logs/`,
 screenshots and recordings in one directory. Also `--debug-output`,
 `--flatten-debug-output`, `--format HTML-DETAILED`, `-e` for env vars.

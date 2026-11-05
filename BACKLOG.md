@@ -13,11 +13,19 @@
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
 - **128.** Nothing tells a session that a newer Maestro is out when the skill is first called.
-- **135.** Whether Maestro's CLI can now build and drive a phone itself has not been re-measured.
+- **138.** Sessions on this machine never hear that Maestro is behind.
+- **139.** Android has no working capture on this machine, on 2.10.0 or 2.12.1.
+- **143.** `Mach error -308` ended one driver start in seven.
+- **144.** Something removed the wall's log and script from `/tmp/maestro-mac`.
+- **145.** `clear` does nothing and exits 0 when "Select All" matches two nodes.
+- **146.** One MCP session answers for the first device whatever id it is given.
+- **147.** An MCP `run` lost the driver with `Device became unreachable during screenshot`.
 
-Items 116–125 are on `item-87-react-native-android`, not yet merged.
+Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried against the
+upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
+skill tests and 161 package tests, and `oneiota-products-rn` flows 01 to 03 pass on 2.12.1.
 
-Next item number: 136.
+Next item number: 148.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -711,14 +719,78 @@ What is left is the one thing that needs an install: invoking the skill and seei
 the notice appear. Over a Mac on another network or in local transport it says
 nothing, because there is no route to GitHub from inside the sandbox.
 
-## 135. Whether Maestro's CLI can now build and drive a phone itself has not been re-measured — **OPEN, raised 5 Nov 2026**
+## 138. Sessions on this machine never hear that Maestro is behind — **OPEN, raised 5 Nov 2026**
 
-**What.** `physical-device.md` section 3 says the CLI cannot build its own device driver,
-measured on 2.8.0. It was not tried on 2.12.1: `maestro hierarchy --apple-team-id` on a
-phone can run `-allowProvisioningUpdates`, which writes permanent records to the team's
-Apple account. `device.sh` and `driver.sh` do not depend on the answer.
+**What.** `update-notice.sh` asks over `_ssh`, and in local transport it says nothing,
+because there is no route to GitHub from inside the sandbox. This machine's Maestro is
+2.10.0 and the Mac's is 2.12.1.
 
-**Why.** If the CLI can now do it, the hand-signed path may be unnecessary. Maestro
-flows on a phone are untested on 2.12.1 for the same reason.
+**Why.** Android work here runs on an old CLI with nothing to say so.
 
-**To do.** With the user's agreement to the Apple account side effect, try it.
+**To do.** Decide how a local-transport session finds the latest version, or say in
+the notice that it could not check.
+
+## 139. Android has no working capture on this machine, on 2.10.0 or 2.12.1 — **OPEN, raised 5 Nov 2026**
+
+**What.** Measured 5 Nov 2026 on Pixel_6_Pro_API_34, API 34. The flows, `hierarchy` (7.5–9.0 s),
+the `platform.sh` verbs, and three of `oneiota-products-rn`'s flows on its release build
+all work on 2.12.1. `capture-cmd` does not: 2.10.0 left `~/.maestro/deps/simulator-server`
+at 0 bytes, 2.12.1's CLI does not replace it, and the Linux binary in 2.12.1's jar needs
+GLIBC 2.32 to 2.34 where this machine has 2.31 (Ubuntu 20.04).
+
+**Why.** The wall cannot show an Android emulator here.
+
+**To do.** Measure the binary on a newer OS, or find another capture for this one.
+
+## 143. `Mach error -308` ended one driver start in seven — **OPEN, raised 5 Nov 2026**
+
+**What.** 1 failure in 7 driver starts on 2.12.1, after repeated boots and shutdowns of
+the same simulator, 5 Nov 2026. A retry worked.
+
+**Why.** It reads as a broken install, and the cause was not established.
+
+**To do.** Catch it again with the xcodebuild log kept.
+
+## 144. Something removed the wall's log and script from `/tmp/maestro-mac` — **OPEN, raised 5 Nov 2026**
+
+**What.** On 5 Nov 2026 a running wall (pid 13345) held `wall.log` open after the file and
+`wall.py` had gone from `/tmp/maestro-mac`, which was rebuilt from 11:56. What removed them
+was not established. `wall.sh` now reports a deleted log.
+
+**Why.** Whatever did it can do it to a live wall again.
+
+**To do.** Find what rebuilds that directory.
+
+## 145. `clear` does nothing and exits 0 when "Select All" matches two nodes — **OPEN, raised 5 Nov 2026**
+
+**What.** On an iPhone 17 Pro simulator on iOS 26.4, in `oneiota.e.hugoboss.runner.uat`'s
+search field, `clear "777"` left the text there and exited 0. The long-press raises the menu,
+`rows "Select All|Paste|Copy|Cut"` finds two `Select All` nodes, `_resolve "^Select All$"`
+refuses the ambiguity, and `_clear` reads that as "no menu". Measured 5 Nov 2026. `erase 10`
+emptied the field.
+
+**Why.** A journey carries on believing the field is empty.
+
+**To do.** Resolve with an index, and fail when the text is still there afterwards.
+
+## 146. One MCP session answers for the first device whatever id it is given — **OPEN, raised 5 Nov 2026**
+
+**What.** With two simulators booted on 2.12.1, `inspect_screen` with the second device's
+id returned the first device's screen, with no error, in either order. With a driver live on
+22087, a first call for another id read 22087's device. Measured 5 Nov 2026. `driving.md`
+and `flow.sh` now say so.
+
+**Why.** A session reads the wrong device and has nothing to tell it so.
+
+**To do.** Have `SKILL.md` warn on it, and report it upstream if the user wants that.
+
+## 147. An MCP `run` lost the driver with `Device became unreachable during screenshot` — **OPEN, raised 5 Nov 2026**
+
+**What.** The first of three timing runs on 5 Nov 2026 failed at its seventh `run` call, and every
+call after it failed in about 1 s. That run began with a `drivers.sh up` driver in place; the
+other two began without one and passed. The sample is too small to say that is the cause.
+Item 117 on `item-87-react-native-android` records a driver dying on a screenshot timeout.
+
+**Why.** It ends a session's flows until something restarts the driver.
+
+**To do.** Repeat with and without a `drivers.sh up` driver, and read the runner log.
