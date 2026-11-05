@@ -3392,7 +3392,9 @@ journey step. `--tree` goes before `--index`, and `--index` after the pattern is
 Run live on 5 Nov 2026 on an iPhone 16 Pro simulator in Settings: `type "^Search$" "wifi"`
 refused with 4 matches, and `type --index 0 "^Search$" "wifi"` put "wifi" in the search
 field, confirmed with `rows wifi`. `typed.py` found nothing focused and passed without
-checking. The journey step is covered by the test suite, not by a live run.
+checking. The journey step `type --index 0 "^Search$" "wifi"` was run live the same day:
+`rows wifi` found 0 nodes before it and the search field after it, and `typed.py` again
+passed without checking.
 
 ## Measured and rejected
 
