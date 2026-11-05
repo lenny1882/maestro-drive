@@ -16,12 +16,23 @@
 - **139.** Android has no working capture on this machine, on 2.10.0 or 2.12.1.
 - **143.** `Mach error -308` ended one driver start in seven.
 - **144.** Something removed the wall's log and script from `/tmp/maestro-mac`.
+- **152.** `bench.sh` times the wrong device while another device's driver is on 22087.
+- **153.** The notice's toolkit line has not been tested against an older install.
+- **154.** This machine's Maestro is 2.10.0, and the upgrade waits for the release.
+- **155.** The package tests fail intermittently on the tarball install.
+- **156.** `framework.sh` on the item 87 branch says it has never been run.
+- **157.** `setPermissions` has not been seen acting on a live alert.
+- **158.** `drivers.sh rig up` has not been run on Android.
+- **159.** `locked` on Android has never seen a locked device.
+- **160.** No iOS simulator has been driven on the machine running the skill.
+- **161.** `uninstall` on `runners/ios-device` has never been measured.
+- **162.** Phase C of `wizard.sh` has not applied a new static address.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried against the
 upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
 skill tests and 161 package tests, and `oneiota-products-rn` flows 01 to 03 pass on 2.12.1.
 
-Next item number: 152.
+Next item number: 163.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -713,7 +724,8 @@ Code's docs say a failed injected command aborts the whole skill invocation, so
 the line carries `|| true` and the script always exits 0 and is cut off at 12 s.
 What is left is the one thing that needs an install: invoking the skill and seeing
 the notice appear. Over a Mac on another network it says nothing. In local transport it
-says GitHub could not be reached (item 138).
+says GitHub could not be reached (item 138). After the release, items 153 and 154 are the
+checks to run with it.
 
 ## 139. Android has no working capture on this machine, on 2.10.0 or 2.12.1 — **OPEN, raised 5 Nov 2026**
 
@@ -746,3 +758,116 @@ was not established. `wall.sh` now reports a deleted log.
 **Why.** Whatever did it can do it to a live wall again.
 
 **To do.** Find what rebuilds that directory.
+
+## 152. `bench.sh` times the wrong device while another device's driver is on 22087 — **OPEN, raised 5 Nov 2026**
+
+**What.** With the iPhone 17 Pro's driver on 22087, `maestro --device <iPhone 16 Pro> hierarchy` returned the
+iPhone 17 Pro's screen, and `bench.sh` on the iPhone 16 Pro read 2.96–3.26 s. With nothing on 22087 it read
+5.22–5.71 s from the right device. Its own driver made no difference. Measured 5 Nov 2026. `SKILL.md` warns about
+the CLI answering for a different device, but `bench.sh` prints the number with no error.
+
+**Why.** It reports a timing that looks 40% better and is of the wrong device.
+
+**To do.** Refuse to run while a different device holds 22087.
+
+## 153. The notice's toolkit line has not been tested against an older install — **OPEN, raised 5 Nov 2026**
+
+**What.** Once the install is current, the `maestro-drive:` line has nothing to report, so a normal
+check after a release never exercises it. Items 128 and 114 close on seeing this.
+
+**Why.** It is half of what the notice is for, and a passing check would not show it.
+
+**To do.** After the release, test that line against an older version.
+
+## 154. This machine's Maestro is 2.10.0, and the upgrade waits for the release — **OPEN, raised 5 Nov 2026**
+
+**What.** The user's decision on 5 Nov 2026: upgrade `/mnt/sda/User/Programs/maestro` after the release, once the
+notice has been seen to flag it. Run from the working copy that day, the notice printed:
+
+| Project's transport | Output |
+| --- | --- |
+| bridge | `maestro: 2.10.0 installed, 2.12.1 available.` |
+| local | `maestro: 2.10.0 installed. GitHub could not be reached, so whether a newer one is out is unknown.` |
+| ssh to the Mac (this repo's conf) | nothing, because the Mac is on 2.12.1 |
+
+Android flows and `hierarchy` passed on 2.12.1 that day, and capture stays broken either way (item 139).
+
+**Why.** Upgrading first would remove the only case that shows the flag on a real skill load.
+
+**To do.** After the release, load the skill in a project on the bridge transport and see the flag. Then upgrade,
+and update the 2.10.0 references in `runners/android/platform.sh` and `runners/README.md`.
+
+## 155. The package tests fail intermittently on the tarball install — **OPEN, raised 5 Nov 2026**
+
+**What.** `a clean install matches` and `__pycache__ and reference/staging are not strays` failed in two
+runs on 5 Nov 2026, and passed in the runs around them. The captured log has `tar: skill/.claude/...:
+Cannot mknod`, so the test's tarball seems to pick up the sandbox's placeholder files under `skill/`. Starting a
+run from a shell in `skill/` did not reproduce it, so the cause is not confirmed. The release itself uses
+`git archive`.
+
+**Why.** A failure nobody can explain gets rerun until it passes.
+
+**To do.** Catch it again and see what is under `skill/` at the time. If that is the cause, build the
+test's tarball from tracked files, as the release does.
+
+## 156. `framework.sh` on the item 87 branch says it has never been run — **OPEN, raised 5 Nov 2026**
+
+**What.** `skill/runners/react-native/framework.sh` on `item-87-react-native-android` opens with `NOTHING IN THIS
+FILE HAS BEEN RUN`. On 5 Nov 2026 its `claim`, `version`, `variants`, `describe` and `alive` verbs ran against
+`oneiota-products-rn`, in a trial merge of this branch.
+
+**Why.** The header tells a reader there is no evidence when there is some.
+
+**To do.** Correct the header on that branch, saying which verbs have run.
+
+## 157. `setPermissions` has not been seen acting on a live alert — **OPEN, raised 5 Nov 2026**
+
+**What.** On 2.12.1 the route answers 200 on simulator and phone, and the driver reads only the `notifications`
+key, tapping the alert during a hierarchy read while springboard is in front (`driver-api.md`). No app that raises
+a notifications prompt on demand was found.
+
+**Why.** A 200 only shows the value was stored.
+
+**To do.** Run it against an app showing a notifications prompt.
+
+## 158. `drivers.sh rig up` has not been run on Android — **OPEN, raised 5 Nov 2026**
+
+**What.** `reference/setup.md` says so. Item 121 on `item-87-react-native-android` records that it announces a
+driver it will not start.
+
+**Why.** `rig up` is how the skill says to bring devices up.
+
+**To do.** Run it on an emulator, after item 121 is merged or against that branch.
+
+## 159. `locked` on Android has never seen a locked device — **OPEN, raised 5 Nov 2026**
+
+**What.** `runners/android/platform.sh` says one half is unmeasured: the AVD has no secure lock, so `mIsShowing`
+never went true. The false path is measured asleep and awake.
+
+**Why.** The true path is read off the key's meaning, not from a device.
+
+**To do.** Set a lock on an AVD and run it.
+
+## 160. No iOS simulator has been driven on the machine running the skill — **OPEN, raised 5 Nov 2026**
+
+**What.** `reference/setup.md` and `README.md` both say local transport is untested for iOS simulators.
+
+**Why.** The local transport is documented as covering them.
+
+**To do.** Drive one on a Mac with `TRANSPORT=local`.
+
+## 161. `uninstall` on `runners/ios-device` has never been measured — **OPEN, raised 5 Nov 2026**
+
+**What.** Added in item 94 from `devicectl`, and `driver.sh clearstate` calls it.
+
+**Why.** `clearstate` on a phone rests on a verb nobody has run.
+
+**To do.** Run it on the phone with an app that can be reinstalled.
+
+## 162. Phase C of `wizard.sh` has not applied a new static address — **OPEN, raised 5 Nov 2026**
+
+**What.** Item 85 records that it was exercised only confirming an address already held.
+
+**Why.** Applying one is the part that changes the network.
+
+**To do.** Run it on a setup where the address really changes.
