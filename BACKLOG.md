@@ -13,13 +13,9 @@
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
 - **128.** Nothing tells a session that a newer Maestro is out when the skill is first called.
-- **138.** Sessions on this machine never hear that Maestro is behind.
 - **139.** Android has no working capture on this machine, on 2.10.0 or 2.12.1.
 - **143.** `Mach error -308` ended one driver start in seven.
 - **144.** Something removed the wall's log and script from `/tmp/maestro-mac`.
-- **145.** `clear` does nothing and exits 0 when "Select All" matches two nodes.
-- **146.** One MCP session answers for the first device whatever id it is given.
-- **147.** An MCP `run` lost the driver with `Device became unreachable during screenshot`.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried against the
 upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
@@ -716,19 +712,8 @@ second call, and correct against Maestro 2.12.1 and the toolkit's v2.1.1 tag. Cl
 Code's docs say a failed injected command aborts the whole skill invocation, so
 the line carries `|| true` and the script always exits 0 and is cut off at 12 s.
 What is left is the one thing that needs an install: invoking the skill and seeing
-the notice appear. Over a Mac on another network or in local transport it says
-nothing, because there is no route to GitHub from inside the sandbox.
-
-## 138. Sessions on this machine never hear that Maestro is behind — **OPEN, raised 5 Nov 2026**
-
-**What.** `update-notice.sh` asks over `_ssh`, and in local transport it says nothing,
-because there is no route to GitHub from inside the sandbox. This machine's Maestro is
-2.10.0 and the Mac's is 2.12.1.
-
-**Why.** Android work here runs on an old CLI with nothing to say so.
-
-**To do.** Decide how a local-transport session finds the latest version, or say in
-the notice that it could not check.
+the notice appear. Over a Mac on another network it says nothing. In local transport it
+says GitHub could not be reached (item 138).
 
 ## 139. Android has no working capture on this machine, on 2.10.0 or 2.12.1 — **OPEN, raised 5 Nov 2026**
 
@@ -760,37 +745,3 @@ was not established. `wall.sh` now reports a deleted log.
 **Why.** Whatever did it can do it to a live wall again.
 
 **To do.** Find what rebuilds that directory.
-
-## 145. `clear` does nothing and exits 0 when "Select All" matches two nodes — **OPEN, raised 5 Nov 2026**
-
-**What.** On an iPhone 17 Pro simulator on iOS 26.4, in `oneiota.e.hugoboss.runner.uat`'s
-search field, `clear "777"` left the text there and exited 0. The long-press raises the menu,
-`rows "Select All|Paste|Copy|Cut"` finds two `Select All` nodes, `_resolve "^Select All$"`
-refuses the ambiguity, and `_clear` reads that as "no menu". Measured 5 Nov 2026. `erase 10`
-emptied the field.
-
-**Why.** A journey carries on believing the field is empty.
-
-**To do.** Resolve with an index, and fail when the text is still there afterwards.
-
-## 146. One MCP session answers for the first device whatever id it is given — **OPEN, raised 5 Nov 2026**
-
-**What.** With two simulators booted on 2.12.1, `inspect_screen` with the second device's
-id returned the first device's screen, with no error, in either order. With a driver live on
-22087, a first call for another id read 22087's device. Measured 5 Nov 2026. `driving.md`
-and `flow.sh` now say so.
-
-**Why.** A session reads the wrong device and has nothing to tell it so.
-
-**To do.** Have `SKILL.md` warn on it, and report it upstream if the user wants that.
-
-## 147. An MCP `run` lost the driver with `Device became unreachable during screenshot` — **OPEN, raised 5 Nov 2026**
-
-**What.** The first of three timing runs on 5 Nov 2026 failed at its seventh `run` call, and every
-call after it failed in about 1 s. That run began with a `drivers.sh up` driver in place; the
-other two began without one and passed. The sample is too small to say that is the cause.
-Item 117 on `item-87-react-native-android` records a driver dying on a screenshot timeout.
-
-**Why.** It ends a session's flows until something restarts the driver.
-
-**To do.** Repeat with and without a `drivers.sh up` driver, and read the runner log.

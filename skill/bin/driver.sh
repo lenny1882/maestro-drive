@@ -628,13 +628,21 @@ _clear() {  # _clear <pattern> — select-all-then-delete via long-press
   x=${pt% *}; y=${pt#* }
   _post touch "{\"x\":$x,\"y\":$y,\"duration\":1.0}" >/dev/null || return 1
   _settle || true
-  # The long-press raises the iOS edit menu; tap "Select All" from it.
-  # If "Select All" is not on screen (field is empty, or the menu did not
-  # appear), skip — there is nothing to clear.
-  if _resolve "^Select All$" >/dev/null 2>&1; then
-    _tapon "^Select All$" || return 1
+  # The long-press raises the iOS edit menu; tap "Select All" from it. The menu
+  # item is two nodes at nearly the same place, a button and its text, so it needs
+  # an index: without one the refusal read as "no menu" and nothing was cleared
+  # (item 145). No menu at all usually means an empty field.
+  if _resolve "^Select All$" 0 >/dev/null 2>&1; then
+    _tapon "^Select All$" 0 || return 1
     _post eraseText "{\"charactersToErase\":1,$_appids}" >/dev/null || return 1
     _settle || true
+  fi
+  # Either way the field is read back, so a clear that did nothing says so.
+  local left
+  left=$(_hier | python3 "$HERE/fieldvalue.py" "$x" "$y") || return 1
+  if [ -n "$left" ]; then
+    echo "clear: /$1/ still holds '$left'" >&2
+    return 1
   fi
 }
 

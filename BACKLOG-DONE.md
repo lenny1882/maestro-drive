@@ -3432,6 +3432,20 @@ were in `wall.sh`, and the phone driver rebuild and signing in `physical-device.
 
 **Done.** Step 4 of "Upgrading Maestro" says to stop by pid and reconnect with `/mcp`.
 
+## 138. Sessions on this machine never hear that Maestro is behind — **DONE**
+
+**What.** `update-notice.sh` asks over `_ssh`, and in local transport it says nothing,
+because there is no route to GitHub from inside the sandbox. This machine's Maestro is
+2.10.0 and the Mac's is 2.12.1.
+
+**Why.** Android work here runs on an old CLI with nothing to say so.
+
+**Done.** GitHub is refused from this machine's sandbox (403 from the proxy), so a local session cannot
+find the latest version. When Maestro is installed and no version came back, the notice now
+says `maestro: 2.10.0 installed. GitHub could not be reached, so whether a newer one is out is
+unknown.` Run on this machine with a local conf on 5 Nov 2026. A Mac that cannot be reached
+still says nothing.
+
 ## 140. The hierarchy timing still read 7.7 s after the upgrade — **DONE**
 
 **What.** `bench.sh`, `driver.sh`, `hier.sh`, `flow.sh`, `reference/driving.md` and
@@ -3453,6 +3467,49 @@ were in `wall.sh`, and the phone driver rebuild and signing in `physical-device.
 which failed part-way (item 147). The two-action flow over MCP went from ~2.2 s to about 4.3 s,
 and the cost of a fresh `flow.sh` fell from 17.6 s to 10.8 s, so screen reads are now about 20x
 cheaper over MCP rather than 40x.
+
+## 145. `clear` does nothing and exits 0 when "Select All" matches two nodes — **DONE**
+
+**What.** On an iPhone 17 Pro simulator on iOS 26.4, in `oneiota.e.hugoboss.runner.uat`'s
+search field, `clear "777"` left the text there and exited 0. The long-press raises the menu,
+`rows "Select All|Paste|Copy|Cut"` finds two `Select All` nodes, `_resolve "^Select All$"`
+refuses the ambiguity, and `_clear` reads that as "no menu". Measured 5 Nov 2026. `erase 10`
+emptied the field.
+
+**Why.** A journey carries on believing the field is empty.
+
+**Done.** `_clear` passes index 0 to "Select All", then reads the field at the point through
+`bin/fieldvalue.py` and fails with `clear: /<pattern>/ still holds '<text>'`. Run live on
+5 Nov 2026: Settings' search on iOS 18.6 and the app's Flutter field on iOS 26.4 both
+emptied, and an empty field passed. The two-node menu was on both, so `clear` had stopped working
+on both, not only on iOS 26.4.
+
+## 146. One MCP session answers for the first device whatever id it is given — **DONE**
+
+**What.** With two simulators booted on 2.12.1, `inspect_screen` with the second device's
+id returned the first device's screen, with no error, in either order. With a driver live on
+22087, a first call for another id read 22087's device. Measured 5 Nov 2026. `driving.md`
+and `flow.sh` now say so.
+
+**Why.** A session reads the wrong device and has nothing to tell it so.
+
+**Done.** No edit was needed: `SKILL.md` already warns on this, and 2.12.1's source still has
+`DEFAULT_XCTEST_PORT = 22087`, so its account holds. Nothing has been reported upstream.
+
+## 147. An MCP `run` lost the driver with `Device became unreachable during screenshot` — **DONE**
+
+**What.** The first of three timing runs on 5 Nov 2026 failed at its seventh `run` call, and every
+call after it failed in about 1 s. That run began with a `drivers.sh up` driver in place; the
+other two began without one and passed. The sample is too small to say that is the cause.
+Item 117 on `item-87-react-native-android` records a driver dying on a screenshot timeout.
+
+**Why.** It ends a session's flows until something restarts the driver.
+
+**Done.** Reproduced on 5 Nov 2026 on an iPhone 16 Pro simulator, with the same 16 calls each run. With
+a `drivers.sh up` driver on the device, 3 runs out of 3 failed at the tenth call with `Device
+became unreachable`, and 7 calls failed each run. After `drivers.sh down`, 3 out of 3 passed
+with no failures. `SKILL.md` and `driving.md` now say to stop the driver first. The runner logs
+show no crash or restart, so why the driver goes was not established.
 
 ## Measured and rejected
 

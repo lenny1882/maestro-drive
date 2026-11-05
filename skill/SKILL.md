@@ -282,6 +282,11 @@ xcodebuild each and restarts a peer's driver under them. It now names the
 devices another session has labelled on the wall before it does. Name yours:
 `drivers.sh up <udid>`.
 
+**Stop a device's driver before using the MCP server on it:** `drivers.sh down
+<udid>`. With a `drivers.sh up` driver on the device, an MCP session lost its own
+driver about 20 s in, with `Device became unreachable`, three runs out of three;
+without one, none of three did (item 147).
+
 **Naming a device on the MCP server or the CLI destroys that device's driver,
 and then answers about a different device.** Measured: with the iPad on
 22087 and the iPhone on 22088, `maestro --device <iphone> hierarchy` tore down
@@ -847,6 +852,7 @@ fix it yourself.
 | `bin/resolve.py` | label pattern -> true point (used by `driver.sh`) |
 | `bin/jtok.py` | split a journey line into arguments, then expand `${VAR}` in each |
 | `bin/typed.py` | did the text `type` sent actually land on screen? |
+| `bin/fieldvalue.py` | what does the field at a point hold? `clear` reads it back with this |
 | `bin/tree.py` | render a view hierarchy as an indented tree (used by `driver.sh`) |
 | `bin/watch.py` | sample a list until it changes, and say what changed (used by `driver.sh watch`) |
 | `bin/img.sh` | crop, rotate and shrink a PNG, on whatever tool the machine has |

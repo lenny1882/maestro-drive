@@ -4676,7 +4676,7 @@ esac
 CURLSH
 chmod +x "$TMP/stub130/curl"
 D130="$TMP/d130"; mkdir -p "$D130"
-cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/jtok.py" "$D130/"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/fieldvalue.py" "$REPO/bin/jtok.py" "$D130/"
 cat > "$D130/lib.sh" <<'LIBSH'
 _fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
 _ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
@@ -4713,6 +4713,50 @@ case "$(drv tapon e --index)" in
   *"--index needs a number"*) ok "--index with nothing after it says so" ;;
   *) no "--index with nothing after it says so" "$(drv tapon e --index)" ;;
 esac
+
+echo
+echo "clear finds a two-node Select All and reads the field back (item 145)"
+C145="$TMP/c145"; mkdir -p "$C145/stub"
+field(){ printf '{"elementType":49,"label":"%s","value":"%s","frame":{"X":10,"Y":100,"Width":300,"Height":50},"children":[]}' "$1" "$2"; }
+menu='{"elementType":9,"label":"Select All","frame":{"X":10,"Y":40,"Width":96,"Height":44},"enabled":true,"children":[]},{"elementType":48,"label":"Select All","frame":{"X":20,"Y":50,"Width":64,"Height":18},"enabled":true,"children":[]}'
+tree(){ printf '{"axElement":{"elementType":0,"label":"","frame":{"X":0,"Y":0,"Width":402,"Height":874},"children":[%s]},"depth":1}' "$1"; }
+tree "$(field "" 777),$menu" > "$C145/full.json"
+tree "$(field Search "")" > "$C145/empty.json"
+tree "$(field "" 777)" > "$C145/nomenu.json"
+cat > "$C145/stub/curl" <<'CURLSH'
+#!/usr/bin/env bash
+prev=; for a in "$@"; do
+  case "$a" in http*) url=$a ;; esac
+  [ "$prev" = -d ] && body=$a; prev=$a
+done
+echo "$url ${body:-}" >> "$CURL_LOG"
+case "$url" in
+  */status)          printf '200' ;;
+  */isScreenStatic)  printf '{"isScreenStatic":true}' ;;
+  */deviceInfo)      printf '{"widthPoints":402,"heightPoints":874}' ;;
+  */viewHierarchy)   if grep -q eraseText "$CURL_LOG"; then cat "$FIXTURE_AFTER"; else cat "$FIXTURE"; fi ;;
+  *)                 printf '{}' ;;
+esac
+CURLSH
+chmod +x "$C145/stub/curl"
+clr(){ : > "$TMP/curl.log"; PATH="$C145/stub:$PATH" CURL_LOG="$TMP/curl.log" FIXTURE="$1" FIXTURE_AFTER="$2" bash "$D130/driver.sh" clear 777 2>&1; }
+out=$(clr "$C145/full.json" "$C145/empty.json"); rc=$?
+[ "$rc" = 0 ] && grep -q eraseText "$TMP/curl.log" \
+  && ok "two Select All nodes: it selects, erases and passes" \
+  || no "two Select All nodes: it selects, erases and passes" "rc=$rc $out"
+out=$(clr "$C145/full.json" "$C145/full.json"); rc=$?
+[ "$rc" != 0 ] && case "$out" in *"still holds '777'"*) true ;; *) false ;; esac \
+  && ok "text still there after the erase fails and says what it holds" \
+  || no "text still there after the erase fails and says what it holds" "rc=$rc $out"
+out=$(clr "$C145/nomenu.json" "$C145/nomenu.json"); rc=$?
+[ "$rc" != 0 ] && ! grep -q eraseText "$TMP/curl.log" \
+  && ok "no menu over a field holding text fails, where it used to pass" \
+  || no "no menu over a field holding text fails, where it used to pass" "rc=$rc $out"
+FV(){ python3 "$REPO/bin/fieldvalue.py" "$@"; }
+[ -z "$(tree "$(field Search "")" | FV 20 110)" ] && ok "fieldvalue: an empty field's label is not its value" || no "fieldvalue: an empty field's label is not its value" "$(tree "$(field Search "")" | FV 20 110)"
+[ -z "$(tree "$(field "" 777)" | FV 390 860)" ] && ok "fieldvalue: no field at the point prints nothing" || no "fieldvalue: no field at the point prints nothing" ""
+ph='{"elementType":45,"label":"Search","value":"Search","placeholderValue":"Search","frame":{"X":10,"Y":100,"Width":300,"Height":50},"children":[]}'
+[ -z "$(tree "$ph" | FV 20 110)" ] && ok "fieldvalue: a value equal to the placeholder counts as empty" || no "fieldvalue: a value equal to the placeholder counts as empty" "$(tree "$ph" | FV 20 110)"
 
 echo
 echo "type takes an index before the pattern (item 134)"
@@ -4997,6 +5041,15 @@ esac
 out=$(UN_ANSWER='installed 2.12.1
 latest mobile-dev-inc/maestro cli-2.10.0' un s5)
 [ -z "$out" ] && ok "a local build ahead of the release says nothing" || no "a local build ahead of the release says nothing" "$out"
+out=$(UN_ANSWER='installed 2.10.0
+latest mobile-dev-inc/maestro 
+latest lenny1882/maestro-drive ' un s5b); rc=$?
+[ "$rc" = 0 ] && [ "$out" = 'maestro: 2.10.0 installed. GitHub could not be reached, so whether a newer one is out is unknown.' ] \
+  && ok "no route to GitHub says so, rather than reading as up to date" \
+  || no "no route to GitHub says so, rather than reading as up to date" "rc=$rc: $out"
+out=$(UN_ANSWER='latest mobile-dev-inc/maestro 
+latest lenny1882/maestro-drive ' un s5c)
+[ -z "$out" ] && ok "no Maestro installed and no route says nothing" || no "no Maestro installed and no route says nothing" "$out"
 out=$(UN_DOWN=1 un s6); rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "a Mac that cannot be reached says nothing and exits 0" \
   || no "a Mac that cannot be reached says nothing and exits 0" "rc=$rc: $out"

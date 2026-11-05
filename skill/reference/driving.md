@@ -122,6 +122,11 @@ the session has reached a device, `inspect_screen` with the other's `device_id`
 answers from the first, without an error. With a driver live on port 22087, a
 session's first call read that driver's device whatever id it was given.
 
+Stop the device's `drivers.sh` driver first. With one up, the same MCP session
+failed at its tenth call with `Device became unreachable`, three runs out of three,
+and every call after that failed too. With `drivers.sh down` first, all 16 calls
+passed, three runs out of three.
+
 The CLI path (`bin/flow.sh`, `bin/hier.sh`) still works, and unlike the MCP
 server it honours `--device`. Everything below applies to all three paths.
 
@@ -448,9 +453,9 @@ clear "^(Search|[0-9]{8,})$"
 text "${BARCODE}"
 ```
 
-`clear` long-presses the element, taps "Select All" from the iOS edit menu,
-and deletes the selection — the only reliable way to empty a field whose caret
-position is unknown. `erase [n]` deletes backwards from the caret and leaves
+`clear` long-presses the element, taps "Select All" from the iOS edit menu, and
+deletes the selection — the only reliable way to empty a field whose caret
+position is unknown. It then reads the field back and fails if text is still there. `erase [n]` deletes backwards from the caret and leaves
 anything ahead of it; `erase --all` sends 9999 backspaces, which helps only
 when the caret is already at the end. Prefer `clear` for replacing a field's
 contents.

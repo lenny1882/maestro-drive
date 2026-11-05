@@ -65,6 +65,10 @@ have=$(printf '%s\n' "$answer" | sed -n 's/^installed //p')
 want=$(printf '%s\n' "$answer" | sed -n 's|^latest mobile-dev-inc/maestro cli-||p')
 if [ -n "$have" ] && [ -n "$want" ] && newer "$have" "$want"; then
   echo "notice|maestro: $have installed, $want available."
+elif [ -n "$have" ] && [ -z "$want" ]; then
+  # A device on this machine has no route to GitHub from inside the sandbox, and
+  # silence there reads as up to date (item 138).
+  echo "notice|maestro: $have installed. GitHub could not be reached, so whether a newer one is out is unknown."
 fi
 
 # The install's record lives with update-check.sh, which compares and words it.
