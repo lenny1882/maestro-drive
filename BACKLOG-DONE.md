@@ -3161,6 +3161,197 @@ and a boot that never completes fails naming the serial.
 
 ---
 
+## 111. The ambiguity refusal says "pass --index", and `tapon` refuses `--index` — **DONE**
+
+**What.** `resolve: /^Continue$/ matches 2 nodes; narrow the pattern or pass
+--index`. `tapon "^Continue$" --index 0` and `--index 1` both die in
+`resolve.py`'s argparse with `argument --index: expected one argument`; the
+positional `tapon "^Continue$" 0` works. Measured 21 Oct 2026. Item 29 fixed
+`--anyway` in the same position but not `--index`.
+
+**Done.** `_resolve` takes `--index N` and `--index=N` as well as the positional
+form, for `tapon` and `point`. Passing `--index` with no number says so. Run live
+on 5 Nov 2026: `tapon "^General$" --index 0` in Settings opened General. `type`
+still has no way to pick an index, which is item 134.
+
+## 126. Maestro 2.12.1 streams on Xcode 27 without the symlink, and the toolkit still prescribes the symlink — **DONE**
+
+**What.** `wall.sh`, `wall.py`, `SKILL.md` and `driver-api.md` give one fix for
+a wall with no pictures on Xcode 27: a sudo symlink that an App Store update
+removes. Maestro 2.12.1 (released 2 Nov 2026) makes it unnecessary. Measured on
+5 Nov 2026 on Xcode 27.1 (27A9275), with no `PrivateFrameworks` directory:
+
+| Capture binary | `verify` | Capture on a booted simulator |
+| --- | --- | --- |
+| 2.8.0, installed | `[skip] ios: SimulatorKit not present` | `Failed to initialize iOS simulator bridge` |
+| 2.8.0 with `DEVELOPER_DIR` at a shadow tree holding the link | same | same; search path still `/Applications/Xcode.app` |
+| 2.8.0 with `DYLD_FRAMEWORK_PATH` at `SharedFrameworks` | same | same |
+| 2.8.0, private copy, path bytes patched, re-signed ad hoc | `[ok]` | AE01727F: 2.5 MB, 10 frames in 5 s |
+| 2.12.1, unmodified | `[ok]` | AE01727F: 19.6 MB, 74 frames; 93ABBB77: 6.9 MB, 21 frames, same 5 s each, run together |
+
+`strings` on the 2.12.1 binary finds both `Contents/SharedFrameworks/SimulatorKit.framework`
+and `Contents/Developer/Library/PrivateFrameworks/SimulatorKit.framework`. The
+2.8.0 binary has only the second, and it is relative to the Xcode root, not an
+absolute path as the toolkit's text says. The driver processes (95152, 95240,
+95353, 95405) kept their pids through every capture and `/deviceInfo` on 9101,
+9102, 22087 and 22088 still returned 200 at the end.
+
+Replacing only `~/.maestro/deps/simulator-server` is not durable on 2.8.0.
+`Dependencies.installSimulatorServer` calls `Unpacker.unpackTree`, which has a
+SHA-1 `sameContents` check and a `REPLACE_EXISTING` copy. The disassembly shows
+those calls; which `maestro` commands reach `installSimulatorServer` was not
+traced. Item 65 records 2.10.0's binary as byte-identical to 2.8.0's, so the
+fix landed in 2.10.1–2.12.1; which one was not measured.
+
+**Why.** Every Xcode update blanks the wall until someone with sudo runs the
+symlink again. Xcode.app's date is 27 Oct 2026 15:25, and the wall was started
+at 14:14 that day. That the update removed the link is inferred from those dates.
+
+**Tested on 5 Nov 2026.** The Mac was upgraded to 2.12.1 and tested on Xcode 27.2
+(27B52), iPhone 17 Pro, iOS 26.4, with no symlink:
+
+- `verify` prints `[ok]`.
+- `wall.sh start` gives a live tile, and the stream sent frames through 9990.
+- The 2.12.1 runner came up through `drivers.sh up`. `touch`, `inputText`,
+  `eraseText`, `pressKey`, `pressButton`, `setOrientation`, `keyboard`, `runningApp`,
+  `swipeV2`, `launchApp`, `terminateApp`, `viewHierarchy`, `screenshot`, `deviceInfo`
+  and `isScreenStatic` all worked, and `keyboardInfo` is still 404, as
+  `reference/driver-api.md` records.
+- Journeys with `tapon`, `expect`, `tap` and `text` passed. A `maestro test` flow
+  with `launchApp`, `tapOn`, `inputText` and `assertVisible` passed, and took the
+  driver with it as `flow.sh` documents.
+- The app under test (`oneiota.e.hugoboss.runner.uat`, Flutter 3.41.9) launched and
+  its tree and screenshot read correctly. It was left logged in and not driven
+  further, because logging back in needs a PIN this project's conf does not hold.
+- The item 100 re-test: see that item.
+- `bench.sh`: `maestro --version` 1.5 s, `maestro hierarchy` 5.75 s on all four runs.
+  `driver.sh`'s header and `bench.sh` record about 7.7 s on the older CLI.
+
+The symlink text is corrected in `wall.sh`, `wall.py`, `SKILL.md` and `driver-api.md`.
+The other 2.8.0 mentions in `skill/` are left: they record what was measured on that
+version, or quote the mirror of the time. `physical-device.md` section 3 says 2.8.0
+cannot build its own device driver, and that was not re-measured.
+
+The `maestro mcp` server on 2.12.1, reconnected with `/mcp`: `list_devices`,
+`inspect_screen`, `take_screenshot` and a `run` flow in Settings all worked. Its
+viewer answered on 10000, and `~/.maestro/deps/simulator-server` kept 2.12.1's hash.
+
+A physical iPhone XS Max, iOS 18.7.9, by cable, with 2.12.1 installed: `device.sh up`
+twice failed with `Timed out while enabling automation mode` while the phone was
+waiting for input on its own screen. Once that was answered it came up in 11 s, and
+`info`, `tree`, `shot`, `launch`, `kill` and a `tapon`/`expect` journey in Settings
+all worked. That driver is the one built from Maestro 2.8.0's source on 24 Sep 2026
+(`~/maestro-drive-driver/build-2.8.0`), which `driver.sh` talks to directly, so it
+shows the upgrade did not break the phone path. It does not test 2.12.1's runner.
+`runners/ios-device/driver/build.sh 2.12.1` built unsigned in a temporary directory
+in 31 s: `bind-address.patch` still applies and Xcode 27.2 accepts it.
+
+Then `build.sh 2.12.1` and `sign.sh` into `~/maestro-drive-driver`, signed through
+Terminal, as `physical-device.md` describes, with the same identity and profile. `device.sh
+up` took that build; the same checks passed, with `swipe` as well. The prebuilt driver
+from the 2.12.1 jar was re-signed into `~/.maestro/maestro-iphoneos-driver-build` with
+`version=2.12.1`, and `deviceup.sh` came up on it with the source build set aside. So
+nothing on the phone path uses 2.8.0 any more. `~/maestro-drive-driver/build-2.8.0` and
+`src-2.8.0` are still on the Mac, unused, and need the user to remove them. The failure
+message now says to look at the phone. Whether the 2.12.1 CLI can build its own device
+driver is item 135.
+
+## 127. The wall's tile hides the capture failure's cause, and its log can vanish under it — **DONE**
+
+**What.** Two things stopped the wall explaining its own failure on 5 Nov 2026.
+
+- The capture binary prints `Error: SimulatorKit could not be loaded (Xcode
+  search path: /Applications/Xcode.app)`, then `Error: Failed to initialize
+  SimulatorControl`, then `Error: Failed to initialize iOS simulator bridge`.
+  `Stream.start` overwrites `self.error` on each line, so the tile and
+  `/api/devices` show only the last, which names nothing.
+- The wall (pid 13345, started 27 Oct) holds `/private/tmp/maestro-mac/wall.log`
+  open, but the file is no longer in `/tmp/maestro-mac`, which was rebuilt on
+  5 Nov from 11:56. `wall.py` is gone from it too. So `wall.sh log` has nothing
+  to read while the wall runs on. What removed them was not established.
+
+**Why.** The page said "simulator bridge" and the log was unreadable, so the
+link to SimulatorKit could only be proved by running the binary by hand.
+
+**Done.** The tile and `/api/devices` now carry the whole chain, cause first:
+`SimulatorKit could not be loaded (...); Failed to initialize SimulatorControl;
+Failed to initialize iOS simulator bridge`. `wall.sh log` and `status` say when a
+running wall's log has been deleted, and to restart it. What removed the log on
+5 Nov 2026 was not established. Tested with a stub capture binary and stub
+`pgrep`; a live wall started and logged normally on 2.12.1.
+
+## 129. Refreshing the docs mirror switched off `docs-check.sh`'s warnings about two wrong claims that are still there — **DONE**
+
+**What.** `docs-check.sh` warns about known-wrong claims only when
+`docs/VERSION` says `KNOWN_WRONG_FOR="2.8.0"`. The mirror was refreshed to
+Maestro 2.12.1 on 5 Nov 2026, so the warning no longer prints. Both claims are
+still in the new pages:
+
+- `get-started__supported-platform__ios__uikit.md:75` still says "Executing
+  tests on physical iOS devices is not supported yet".
+- `--apple-team-id` still appears in only one page,
+  `maestro-cli__maestro-cli-commands-and-options.md:138`. Whether it is still
+  documented only under `record`, and still hidden on `hierarchy` and `test`,
+  was not checked against the 2.12.1 CLI.
+
+**Why.** Item 55 added the warning because the physical-device claim ended
+investigations that would otherwise have succeeded.
+
+**Done.** `KNOWN_WRONG_FOR` is 2.12.1. Both claims still hold in the refreshed
+pages. `--apple-team-id` is `hidden=true` on `TestCommand`, `PrintHierarchyCommand`
+and `RecordCommand` in the 2.12.1 jar, so `--help` lists it on none of them, and the
+warning now says so. `bin/device.sh` then drove an iPhone XS Max on 2.12.1's driver
+(item 126), so the physical-iOS claim is still false for this skill. When a refresh moves past
+`KNOWN_WRONG_FOR`, `docs-check.sh` now says the list needs re-checking, so a refresh
+cannot switch it off silently again.
+
+## 130. `driver.sh text "x"` prints the screen and types nothing — **DONE**
+
+**What.** `bin/driver.sh:1028` has `tree|nodes|text) _tree "$1" ;;` and
+`bin/driver.sh:1061` has the typing `text)` case. The first match wins, so the
+typing case never runs. Measured on 5 Nov 2026: `driver.sh text "wifi"` exited 0,
+printed the tree, and the screenshot showed an empty search field with the
+keyboard up. A raw `POST /inputText` with the same payload typed `wifi` on both
+the 2.8.0 and 2.12.1 runners, and the journey step `text wifi` passed
+(`bin/driver.sh:937`). The file's own usage text and `SKILL.md:727` list `text`
+as a typing verb. The installed copy has the same line at 958.
+
+**Why.** It reports success for input that never happened, so a session goes on
+to read a screen it believes it has typed into.
+
+**Done.** `text` with an argument types; bare, it prints the screen as text, which
+`tree.py` already provides and `--text` after a verb uses. Run live on 5 Nov 2026:
+`driver.sh text "wifi"` in Settings search, then `expect "No Results for"` passed.
+
+## 131. A Maestro upgrade leaves the old runner in the driver cache, and a failed driver start reports a missing file — **DONE**
+
+**What.** Two things in the driver start path.
+
+- `driverup.sh` extracts the runner from `maestro-ios-driver.jar` only when
+  `$WORK/driver-iPhoneSimulator` has no `.xctestrun`. After the 2.12.1 upgrade the
+  cache still held the 2.8.0 runner: `Runner.app` dated 16 Jul 2026, against
+  29 Sep 2026 when extracted from the new jar. The `.xctestrun` has the same hash
+  in both, so comparing that file would not detect it. The cache has to be
+  invalidated from the jar. It was moved aside by hand for this test.
+- `driver-up` in `runners/ios/platform.sh` runs `driverup.sh` with `2>/dev/null`,
+  then falls back to a second path on any failure. On 5 Nov 2026 one start failed
+  with `Mach error -308 - (ipc/mig) server died` in `drv/driver-<udid>.log`, and
+  the simulator ended up shut down. What the caller saw was
+  `sh: /tmp/maestro-mac/runners/ios/../../remote/driverup.sh: No such file or
+  directory`. That was 1 failure in 7 starts on 2.12.1, after repeated boots and
+  shutdowns of the same simulator; a retry worked. The cause of the -308 was not
+  established.
+
+**Why.** After an upgrade a session can test the new CLI against the old runner
+without knowing. A driver that failed to start reads as a broken install.
+
+**Done.** `driverup.sh` records the jar's `cksum` beside the extracted runner and
+extracts again when it differs, into a side directory that is moved in, and checks
+for a live driver first. The `driver-up` fallback now runs only when the helper is
+missing, and stderr is no longer discarded, so `xcodebuild failed:` reaches the
+caller. Run live on 5 Nov 2026: an unstamped cache was re-extracted and the stamp
+matched the jar. The cause of the single `Mach error -308` was not established.
+
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

@@ -105,9 +105,9 @@ locked)
   ;;
 
 driver-up)
-  # deviceup.sh beside this file: the PREBUILT driver-iphoneos products,
-  # re-signed by hand once, because Maestro 2.8.0 cannot build its own device
-  # driver. Plus the two device-only extras — a usbmux forwarder, because the
+  # deviceup.sh beside this file: the driver built from source and signed, or
+  # failing that the PREBUILT driver-iphoneos products, re-signed by hand. Plus
+  # the two device-only extras — a usbmux forwarder, because the
   # driver's HTTP server binds the phone's loopback and not the Mac's, and a
   # devicectl tunnel wake immediately before, because the tunnel idles out in
   # seconds.

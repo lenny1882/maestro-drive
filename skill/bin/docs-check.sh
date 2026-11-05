@@ -29,16 +29,28 @@ VERSION_FILE="$HERE/../docs/VERSION"
 # refresh to a new mirror drops corrections that may no longer apply; the CLI's
 # own `maestro <cmd> --help` on the Mac is the authority. Printed whenever this
 # runs (including --quiet), because being surfaced is the whole point.
-KNOWN_WRONG_FOR="2.8.0"
+#
+# Checked against 2.12.1 on 5 Nov 2026 (item 129). Both claims are still in the
+# refreshed pages. `hidden=true` on --apple-team-id in TestCommand,
+# PrintHierarchyCommand and RecordCommand was read from the jar. device.sh drove
+# an iPhone XS Max on a driver built from 2.12.1's source.
+KNOWN_WRONG_FOR="2.12.1"
 if [ "${MAESTRO_VERSION:-}" = "$KNOWN_WRONG_FOR" ]; then
   cat >&2 <<'MSG'
-docs: KNOWN-WRONG claims in this mirror (Maestro 2.8.0) — do NOT trust these:
+docs: KNOWN-WRONG claims in this mirror (Maestro 2.12.1) — do NOT trust these:
   - "Executing tests on physical iOS devices is not supported yet"
     (get-started__supported-platform__ios__uikit.md) is FALSE for this skill —
     bin/device.sh drives a physical iPhone (physical-device.md, item 45).
   - --apple-team-id is documented only under `record`, but a device also needs it
-    on `hierarchy` and `test`, where it is a hidden option. `maestro <cmd> --help`
-    on the Mac is the authority, not this mirror.
+    on `hierarchy` and `test`. It is a hidden option on all three, so `--help` does
+    not list it either.
+MSG
+else
+  # A refresh turns the list above off, and it used to do that without a word
+  # while the claims stayed in the new pages (item 129).
+  cat >&2 <<MSG
+docs: the known-wrong list was last checked against Maestro $KNOWN_WRONG_FOR, this mirror is ${MAESTRO_VERSION:-unknown}.
+  Re-check its two claims, then update KNOWN_WRONG_FOR in bin/docs-check.sh.
 MSG
 fi
 

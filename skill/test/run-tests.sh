@@ -604,7 +604,7 @@ mkdir -p "$TMP/dckit/bin" "$TMP/dckit/docs"
 cp "$REPO/bin/docs-check.sh" "$TMP/dckit/bin/"
 printf '_ssh(){ echo 2.8.0; }\nMAC_HOST=x; MAC_FQDN=x; APP_ID=x; SSH_OPTS=(-o X=y)\n' > "$TMP/dckit/bin/lib.sh"
 
-printf 'MAESTRO_VERSION=2.8.0\nMIRRORED=2026-08-11\nPAGES=154\n' > "$TMP/dckit/docs/VERSION"
+printf 'MAESTRO_VERSION=2.12.1\nMIRRORED=2026-11-05\nPAGES=163\n' > "$TMP/dckit/docs/VERSION"
 out=$(bash "$TMP/dckit/bin/docs-check.sh" --quiet 2>&1)
 case "$out" in
   *"KNOWN-WRONG"*"physical iOS"*"device.sh"*) ok "the pinned mirror's physical-iOS denial is surfaced as known-wrong" ;;
@@ -616,6 +616,11 @@ out=$(bash "$TMP/dckit/bin/docs-check.sh" --quiet 2>&1)
 case "$out" in
   *"KNOWN-WRONG"*) no "the known-wrong list is gated on the pinned version" "printed for the wrong version" ;;
   *) ok "the known-wrong list is gated on the pinned version" ;;
+esac
+# A refresh turned that list off without a word (item 129), so the gate says so.
+case "$out" in
+  *"last checked against Maestro 2.12.1, this mirror is 9.9.9"*) ok "a mirror past the known-wrong list says the list needs re-checking" ;;
+  *) no "a mirror past the known-wrong list says the list needs re-checking" "got: $out" ;;
 esac
 
 echo
@@ -1803,6 +1808,8 @@ w=$(why "[FlyingFox] server error: SocketError. Bind(49): Can't assign requested
 case "$w" in *"was rebuilt with a new address"*) ok "a gone tunnel address is named" ;; *) no "a gone tunnel address is named" "got: $w" ;; esac
 w=$(why 'ScreenSizeHelper.swift:99: Fatal error: Not implemented yet\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"FACE-UP crash"*) ok "the face-up crash is named at bring-up" ;; *) no "the face-up crash is named at bring-up" "got: $w" ;; esac
+w=$(why 'Failed to initialize for UI testing: Timed out while enabling automation mode.\n** TEST EXECUTE FAILED **\n')
+case "$w" in *"waiting for"*"input"*) ok "a phone that would not enter automation mode says to look at it" ;; *) no "a phone that would not enter automation mode says to look at it" "got: $w" ;; esac
 w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"XCTest session dying (item 46)"*) ok "anything else is item 46's session death" ;; *) no "anything else is item 46's session death" "got: $w" ;; esac
 
@@ -4647,6 +4654,251 @@ perm_set "$PA/home/.claude/settings.json" 'not json {'
     'mkdir -p "$LDIR"; . '"$REPO"'/bin/config.sh' ) >/dev/null 2>&1 \
   && ok "allows: a malformed settings.json does not stop the skill loading" \
   || no "allows: a malformed settings.json does not stop the skill loading" "config.sh returned non-zero"
+
+echo
+echo "driver.sh text types, and --index works as the refusal says (items 130, 111)"
+# Its own stub: tests above this point rewrite the shared one.
+mkdir -p "$TMP/stub130"
+cat > "$TMP/stub130/curl" <<'CURLSH'
+#!/usr/bin/env bash
+prev=; for a in "$@"; do
+  case "$a" in http*) url=$a ;; esac
+  [ "$prev" = -d ] && body=$a; prev=$a
+done
+echo "$url ${body:-}" >> "$CURL_LOG"
+case "$url" in
+  */status)          printf '200' ;;
+  */isScreenStatic)  printf '{"isScreenStatic":true}' ;;
+  */deviceInfo)      printf '{"widthPoints":402,"heightPoints":874}' ;;
+  */viewHierarchy)   cat "$FIXTURE" ;;
+  *)                 printf '{}' ;;
+esac
+CURLSH
+chmod +x "$TMP/stub130/curl"
+D130="$TMP/d130"; mkdir -p "$D130"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/jtok.py" "$D130/"
+cat > "$D130/lib.sh" <<'LIBSH'
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
+MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
+DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
+_driver_base(){ printf 'http://%s:%s' "$MAC_FQDN" "$DPORT"; }
+RHELP=/tmp/none; RMODS=/tmp/none/runners; DEVICE_MAP=/tmp/none/devmap; PLATFORM_SH=/x/platform.sh
+_driver_bind(){ return 0; }
+_ssh(){ return 0; }
+_push(){ return 0; }
+_dev(){ echo stub; }
+LIBSH
+drv(){ PATH="$TMP/stub130:$PATH" CURL_LOG="$TMP/curl.log" \
+       FIXTURE="$FIX/iphone-portrait-keyboard-up.json" bash "$D130/driver.sh" "$@" 2>&1; }
+: > "$TMP/curl.log"
+out=$(drv text hello there)
+grep -q 'inputText.*hello there' "$TMP/curl.log" \
+  && ok "text with an argument types it" \
+  || no "text with an argument types it" "$(cat "$TMP/curl.log" | head -5): $out"
+: > "$TMP/curl.log"
+out=$(drv text)
+grep -q inputText "$TMP/curl.log" \
+  && no "text with no argument reads and types nothing" "it posted inputText" \
+  || { case "$out" in
+         *SCAN*) ok "text with no argument reads and types nothing" ;;
+         *) no "text with no argument reads and types nothing" "$out" ;;
+       esac; }
+a=$(drv point e 10); b=$(drv point e --index 10); c=$(drv point e --index=10)
+case "$a" in [0-9]*" "[0-9]*) : ;; *) a= ;; esac
+[ -n "$a" ] && [ "$a" = "$b" ] && [ "$a" = "$c" ] \
+  && ok "--index N and --index=N pick what the positional index picks" \
+  || no "--index N and --index=N pick what the positional index picks" "'$a' '$b' '$c'"
+case "$(drv tapon e --index)" in
+  *"--index needs a number"*) ok "--index with nothing after it says so" ;;
+  *) no "--index with nothing after it says so" "$(drv tapon e --index)" ;;
+esac
+
+echo
+echo "the driver cache follows the jar, and a failed start says why (item 131)"
+DU="$TMP/du"; mkdir -p "$DU/home/.maestro/lib" "$DU/bin" "$DU/work"
+cat > "$DU/bin/unzip" <<'STUB'
+#!/bin/sh
+# The real layout, with the jar's own content in the runner so a test can see
+# which jar a tree came from.
+case "$*" in
+  *driver-iPhoneSimulator*)
+    jar=$3; echo x >> "$UNZIP_LOG"
+    mkdir -p driver-iPhoneSimulator/Debug-iphonesimulator
+    cp "$jar" driver-iPhoneSimulator/Debug-iphonesimulator/runner
+    echo run > driver-iPhoneSimulator/maestro-driver-ios-config.xctestrun ;;
+esac
+STUB
+cat > "$DU/bin/curl" <<'STUB'
+#!/bin/sh
+case "$*" in *"%{http_code}"*) printf 200 ;; *) exit 7 ;; esac
+STUB
+printf '#!/bin/sh\nexit 0\n' > "$DU/bin/xcodebuild"
+# The helper needs the Mac's sh, which takes pipefail; dash, which is sh here, does not.
+printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "$DU/bin/sh"
+chmod +x "$DU/bin/"*
+du_up(){ PATH="$DU/bin:$PATH" HOME="$DU/home" UNZIP_LOG="$DU/unzips" bash "$REPO/remote/driverup.sh" U 7000 "$DU/work" 2>&1; }
+du_runner="$DU/work/driver-iPhoneSimulator/Debug-iphonesimulator/runner"
+echo old > "$DU/home/.maestro/lib/maestro-ios-driver.jar"
+du_up >/dev/null; du_up >/dev/null
+[ "$(wc -l < "$DU/unzips" | tr -d ' ')" = 1 ] && [ "$(cat "$du_runner")" = old ] \
+  && ok "an unchanged jar is extracted once" \
+  || no "an unchanged jar is extracted once" "unzips: $(cat "$DU/unzips" | wc -l), runner: $(cat "$du_runner" 2>&1)"
+echo new > "$DU/home/.maestro/lib/maestro-ios-driver.jar"
+du_up >/dev/null
+[ "$(cat "$du_runner")" = new ] \
+  && ok "an upgraded jar replaces the cached runner" \
+  || no "an upgraded jar replaces the cached runner" "runner: $(cat "$du_runner" 2>&1)"
+rm -f "$DU/work/driver-iPhoneSimulator/.jar-cksum"; echo stale > "$du_runner"
+du_up >/dev/null
+[ "$(cat "$du_runner")" = new ] \
+  && ok "a cache from before this check counts as stale" \
+  || no "a cache from before this check counts as stale" "runner: $(cat "$du_runner" 2>&1)"
+ls -A "$DU/work" | grep -q '^\.extract' \
+  && no "no half-built tree is left behind" "$(ls -A "$DU/work")" \
+  || ok "no half-built tree is left behind"
+
+PU="$TMP/pu"; mkdir -p "$PU/help"
+printf 'echo "xcodebuild failed: Mach error -308" >&2\nexit 1\n' > "$PU/help/driverup.sh"
+out=$(RHELP="$PU/help" RDIR="$PU" sh "$REPO/runners/ios/platform.sh" driver-up U 7000 "$PU" 2>&1); rc=$?
+case "$out" in
+  *"Mach error -308"*"No such file"*|*"No such file"*) no "a failed start reports its own error" "$out" ;;
+  *"Mach error -308"*) [ "$rc" != 0 ] && ok "a failed start reports its own error and fails" \
+                       || no "a failed start reports its own error and fails" "rc=$rc" ;;
+  *) no "a failed start reports its own error" "$out" ;;
+esac
+out=$(PATH="$DU/bin:$PATH" HOME="$PU" RHELP="$PU/nothing" RDIR="$PU" bash "$REPO/runners/ios/platform.sh" driver-up U 7000 "$PU" 2>&1)
+case "$out" in
+  *"no maestro-ios-driver.jar"*) ok "with no helper on the Mac it still falls back to the checkout's" ;;
+  *) no "with no helper on the Mac it still falls back to the checkout's" "$out" ;;
+esac
+
+echo
+echo "the wall names the cause, and says when its log has gone (items 127, 126)"
+WE="$TMP/we"; mkdir -p "$WE"
+cat > "$WE/capture" <<'STUB'
+#!/bin/sh
+echo "2026-11-05 12:08:48 simulator-server[1:2] JPEG encoder initialized"
+echo "2026-11-05 12:08:48 simulator-server[1:3] Error: SimulatorKit could not be loaded (Xcode search path: /Applications/Xcode.app)"
+echo "2026-11-05 12:08:48 simulator-server[1:3] Error: Failed to initialize SimulatorControl"
+echo "Error: Failed to initialize iOS simulator bridge"
+STUB
+chmod +x "$WE/capture"
+out=$(WE="$WE" REPO="$REPO" PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY' 2>&1
+import os, sys
+sys.path.insert(0, os.environ["REPO"] + "/remote")
+import wall
+wall.capture_cmd = lambda u: os.environ["WE"] + "/capture"
+s = wall.Stream("u", "n")
+print(s.start(), s.error)
+PY
+)
+case "$out" in
+  *"False SimulatorKit could not be loaded"*"Failed to initialize iOS simulator bridge"*)
+    ok "the tile leads with the first error in the chain, not the last" ;;
+  *) no "the tile leads with the first error in the chain, not the last" "$out" ;;
+esac
+
+WK="$TMP/wk"; mkdir -p "$WK/bin" "$WK/rdir" "$WK/stub"
+cp "$REPO/bin/wall.sh" "$WK/bin/"
+cat > "$WK/bin/lib.sh" <<'LIBSH'
+RDIR=$WK_RDIR; RHELP=$WK_RDIR; RMODS=$WK_RDIR; WALLPORT=9990; WALL_URL=http://stub.invalid/
+_ports_here(){ return 1; }
+_ssh(){ case "$1" in *"simulator-server verify"*) printf '%s\n' "${WK_VERIFY:-[ok] ios: fine}" ;; *) sh -c "$1" ;; esac; }
+_where(){ echo stub; }
+LIBSH
+printf '#!/bin/sh\nexit "${WK_PGREP:-0}"\n' > "$WK/stub/pgrep"
+printf '#!/bin/sh\nprintf 000\n' > "$WK/stub/curl"
+chmod +x "$WK/stub/"*
+wk(){ PATH="$WK/stub:$PATH" WK_RDIR="$WK/rdir" bash "$WK/bin/wall.sh" "$@" 2>&1; }
+case "$(wk log)" in
+  *"log was deleted while it ran"*) ok "wall.sh log says the running wall's log has gone" ;;
+  *) no "wall.sh log says the running wall's log has gone" "$(wk log)" ;;
+esac
+case "$(wk status)" in
+  *"wall: running"*"log was deleted"*) ok "wall.sh status says so too" ;;
+  *) no "wall.sh status says so too" "$(wk status)" ;;
+esac
+case "$(WK_PGREP=1 wk log)" in
+  *"no log yet"*) ok "no wall and no log is still just no log" ;;
+  *) no "no wall and no log is still just no log" "$(WK_PGREP=1 wk log)" ;;
+esac
+echo "a line" > "$WK/rdir/wall.log"
+case "$(wk log)" in
+  *"a line"*) ok "a log on disk is shown" ;;
+  *) no "a log on disk is shown" "$(wk log)" ;;
+esac
+out=$(WK_VERIFY='[skip] ios: SimulatorKit not present' wk status)
+case "$out" in
+  *"MAESTRO_VERSION=2.12.1"*"simulator-server > ~/.maestro/deps/simulator-server"*"sudo ln -s"*)
+    ok "the wall gives the upgrade first, and the symlink only as what is left" ;;
+  *) no "the wall gives the upgrade first, and the symlink only as what is left" "$out" ;;
+esac
+
+echo
+echo "the update notice runs once a session and can never stop the skill (items 128, 114)"
+UN="$TMP/un"; mkdir -p "$UN/bin" "$UN/home/.local/share/maestro-drive" "$UN/tmp"
+cp "$REPO/bin/update-notice.sh" "$UN/bin/"
+cat > "$UN/home/.local/share/maestro-drive/update-check.sh" <<'STUB'
+[ "$1" = notice-for ] && [ "$2" = v9.9.9 ] && echo "maestro-drive: v1 installed, v9.9.9 available."
+exit 0
+STUB
+cat > "$UN/bin/lib.sh" <<'LIBSH'
+[ -n "${UN_LIB_FAILS:-}" ] && exit 1
+echo "config.sh saying something of its own"
+_ssh(){ echo x >> "$UN_CALLS"; [ -n "${UN_HANG:-}" ] && sleep 20; [ -n "${UN_DOWN:-}" ] && return 255
+        printf '%s\n' "$UN_ANSWER"; }
+LIBSH
+un(){ HOME="$UN/home" TMPDIR="$UN/tmp" UN_CALLS="$UN/calls" CLAUDE_CODE_SESSION_ID= bash "$UN/bin/update-notice.sh" "$@"; }
+UN_NEWER='installed 2.8.0
+latest mobile-dev-inc/maestro cli-2.12.1
+latest lenny1882/maestro-drive v9.9.9'
+out=$(UN_ANSWER=$UN_NEWER un s1); rc=$?
+[ "$rc" = 0 ] && [ "$out" = 'maestro: 2.8.0 installed, 2.12.1 available.
+maestro-drive: v1 installed, v9.9.9 available.' ] \
+  && ok "an older Maestro and an older toolkit each get a line, and nothing else prints" \
+  || no "an older Maestro and an older toolkit each get a line, and nothing else prints" "rc=$rc: $out"
+: > "$UN/calls"
+out=$(UN_ANSWER=$UN_NEWER un s1)
+[ -z "$out" ] && [ ! -s "$UN/calls" ] \
+  && ok "a later load in the same session says nothing and asks nothing" \
+  || no "a later load in the same session says nothing and asks nothing" "$out; calls: $(wc -l < "$UN/calls")"
+out=$(UN_ANSWER=$UN_NEWER un s2)
+[ -n "$out" ] && ok "a new session asks again" || no "a new session asks again" "said nothing"
+out=$(UN_ANSWER='installed 2.12.1
+latest mobile-dev-inc/maestro cli-2.12.1
+latest lenny1882/maestro-drive v1' un s3)
+[ -z "$out" ] && ok "up to date says nothing" || no "up to date says nothing" "$out"
+out=$(UN_ANSWER='installed 2.9.0
+latest mobile-dev-inc/maestro cli-2.10.0' un s4)
+case "$out" in
+  *"2.9.0 installed, 2.10.0 available"*) ok "2.10.0 counts as newer than 2.9.0" ;;
+  *) no "2.10.0 counts as newer than 2.9.0" "$out" ;;
+esac
+out=$(UN_ANSWER='installed 2.12.1
+latest mobile-dev-inc/maestro cli-2.10.0' un s5)
+[ -z "$out" ] && ok "a local build ahead of the release says nothing" || no "a local build ahead of the release says nothing" "$out"
+out=$(UN_DOWN=1 un s6); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a Mac that cannot be reached says nothing and exits 0" \
+  || no "a Mac that cannot be reached says nothing and exits 0" "rc=$rc: $out"
+out=$(UN_LIB_FAILS=1 un s7); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a project with no conf says nothing and exits 0" \
+  || no "a project with no conf says nothing and exits 0" "rc=$rc: $out"
+t0=$SECONDS; out=$(UN_HANG=1 UPDATE_NOTICE_LIMIT=1 un s8); rc=$?
+[ "$rc" = 0 ] && [ "$((SECONDS - t0))" -lt 10 ] && ok "a hung connection is cut off and exits 0" \
+  || no "a hung connection is cut off and exits 0" "rc=$rc after $((SECONDS - t0))s"
+: > "$UN/calls"
+out=$(UN_ANSWER=$UN_NEWER un ""); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && [ ! -s "$UN/calls" ] \
+  && ok "no session id asks nothing rather than asking on every load" \
+  || no "no session id asks nothing rather than asking on every load" "rc=$rc: $out"
+# A failed command in SKILL.md aborts the skill, so the guard is part of the line.
+grep -qE '^!`bash "\$\{CLAUDE_SKILL_DIR\}/bin/update-notice\.sh" "\$\{CLAUDE_SESSION_ID\}" \|\| true`$' "$REPO/SKILL.md" \
+  && ok "SKILL.md runs it from the start of a line, guarded with || true" \
+  || no "SKILL.md runs it from the start of a line, guarded with || true" "line not found"
+sed -n '/^---$/,/^---$/p' "$REPO/SKILL.md" | grep -qE '^ *- Bash$' \
+  && ok "SKILL.md's allowed-tools pre-approves it" \
+  || no "SKILL.md's allowed-tools pre-approves it" "no Bash in allowed-tools"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

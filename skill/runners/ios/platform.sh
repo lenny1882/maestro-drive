@@ -164,10 +164,15 @@ driver-up)
   # remote/driverup.sh, unchanged: the same build products out of
   # maestro-ios-driver.jar and the same xcodebuild invocation Maestro uses, with
   # TEST_RUNNER_PORT choosing the port instead of taking 22087.
+  #
+  # The fallback is for a helper that is not there, and only that. This used to
+  # send stderr to /dev/null and fall back on any failure, so a simulator that
+  # would not start was reported as "remote/driverup.sh: No such file" and the
+  # xcodebuild error never reached anybody (item 131).
   _here=$(cd "$(dirname "$0")" && pwd)
-  sh "${RHELP:-${RDIR:-/tmp/maestro-mac}}/driverup.sh" "${1:?driver-up <id> <port>}" "${2:?port}" \
-     "${3:-${RDIR:-/tmp/maestro-mac}/drv}" 2>/dev/null ||
-  sh "$_here/../../remote/driverup.sh" "$1" "$2" "${3:-/tmp/maestro-mac/drv}"
+  _du=${RHELP:-${RDIR:-/tmp/maestro-mac}}/driverup.sh
+  [ -r "$_du" ] || _du=$_here/../../remote/driverup.sh
+  sh "$_du" "${1:?driver-up <id> <port>}" "${2:?port}" "${3:-${RDIR:-/tmp/maestro-mac}/drv}"
   ;;
 
 driver-down)

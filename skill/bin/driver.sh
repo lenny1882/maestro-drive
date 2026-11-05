@@ -342,15 +342,23 @@ _gt() { python3 -c "print(1 if float('$1') > float('$2') else 0)"; }
 
 _resolve() {  # _resolve <pattern> [index] [--anyway|--enabled|--disabled] -- prints "x y"
   _ensure_screen || return 1
-  local idx=() extra=()
-  for _a in "${@:2}"; do
-    [ -z "$_a" ] && continue
-    case "$_a" in
-      --anyway|--enabled|--disabled) extra+=("$_a") ;;
-      *) [ ${#idx[@]} -eq 0 ] && idx=(--index "$_a") ;;
+  local idx=() extra=() pat=$1
+  shift
+  # resolve.py's refusal says "pass --index", so that form has to work here as
+  # well as the bare positional one (item 111). It used to reach the catch-all,
+  # which took the word --index itself as the index.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      "") ;;
+      --anyway|--enabled|--disabled) extra+=("$1") ;;
+      --index) [ $# -ge 2 ] || { echo "--index needs a number" >&2; return 2; }
+               idx=(--index "$2"); shift ;;
+      --index=*) idx=(--index "${1#--index=}") ;;
+      *) [ ${#idx[@]} -eq 0 ] && idx=(--index "$1") ;;
     esac
+    shift
   done
-  _hier | python3 "$HERE/resolve.py" "$1" \
+  _hier | python3 "$HERE/resolve.py" "$pat" \
     --width "$SCREEN_W" --height "$SCREEN_H" --point "${idx[@]}" "${extra[@]}"
 }
 
@@ -1025,7 +1033,7 @@ case "${1:-start}" in
           fi ;;
   info)   _start && curl -s -m 5 "$BASE/deviceInfo"; echo ;;
   hierarchy) _hier ;;
-  tree|nodes|text) _tree "$1" ;;
+  tree|nodes) _tree "$1" ;;
   shot) shift; _shot "$@" ;;
   static)   _start && curl -s -m 10 "$BASE/isScreenStatic"; echo ;;
   keyboard) _post keyboard "{$_appids}"; echo ;;
@@ -1058,7 +1066,13 @@ except Exception: print("")')
             # a duration turns the tap into a long press, so only send one when asked
             if [ -n "${4:-}" ]; then _post touch "{\"x\":$2,\"y\":$3,\"duration\":$4}"
             else _post touch "{\"x\":$2,\"y\":$3}"; fi; echo ;;
-  text)     shift; _post inputText "{\"text\":$(printf '%s' "$*" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}"; echo ;;
+  # With an argument it types. Bare, it prints the screen as text, which is what
+  # --text after a verb does (item 130). A `tree|nodes|text` case above this one
+  # used to catch both, so `text "x"` printed the tree and exited 0 having typed
+  # nothing. CMD changes for the read so the settle below does not wait after it.
+  text)     if [ $# -lt 2 ]; then CMD=read; _tree text
+            else shift; _post inputText "{\"text\":$(printf '%s' "$*" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}"; echo
+            fi ;;
   key)      _post pressKey "{\"key\":\"${2:?key name, e.g. delete / return}\"}"; echo ;;
   button)   _post pressButton "{\"button\":\"${2:?button name, e.g. home}\"}"; echo ;;
   erase)    if [ "${2:-}" = "--all" ]; then
@@ -1096,8 +1110,9 @@ except Exception: print("")')
               *)      _watch_start "$@" ;;
             esac ;;
   probe)    _probe ;;
-  point)    _resolve "${2:?usage: $0 point <pattern> [index]}" "${3:-}" ;;
-  tapon)    [ $# -ge 2 ] || { echo "usage: $0 tapon <pattern> [index] [--anyway]" >&2; exit 2; }
+  point)    [ $# -ge 2 ] || { echo "usage: $0 point <pattern> [index|--index n]" >&2; exit 2; }
+            shift; _resolve "$@" ;;
+  tapon)    [ $# -ge 2 ] || { echo "usage: $0 tapon <pattern> [index|--index n] [--anyway]" >&2; exit 2; }
             shift; _tapon "$@" ;;
   type)     pat=${2:?usage: $0 type <pattern> <text...>}; shift 2
             [ $# -ge 1 ] || { echo "usage: $0 type <pattern> <text...>" >&2; exit 2; }
@@ -1140,7 +1155,7 @@ except Exception: print("")')
               echo "== $j"
               _journey "$j" 0 || exit $?
             done ;;
-  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text <s>|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
+  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text [<s>]|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
        every action verb takes --tree or --nodes directly after the verb, which
        prints the screen once the action has settled: $0 tapon --tree '^SAVE\$'
        the action verbs wait for the screen to go still by themselves — do not

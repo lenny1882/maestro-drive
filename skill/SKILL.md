@@ -8,6 +8,12 @@ allowed-tools:
   - AskUserQuestion
 ---
 
+!`bash "${CLAUDE_SKILL_DIR}/bin/update-notice.sh" "${CLAUDE_SESSION_ID}" || true`
+
+If a line starting `maestro:` or `maestro-drive:` appears above, tell the user what
+it says. Never upgrade unasked: installing Maestro replaces the driver jar under
+any session that is driving.
+
 # Maestro on a remote Mac
 
 **Which machine has the device is a setting, not an assumption.** `TRANSPORT`
@@ -86,8 +92,8 @@ which the browser then fetches from its own machine. It also attaches a device
 only when exactly one simulator is booted. `viewer.sh` is still there for the
 viewer's command rows, and says so itself.
 
-If the wall reports that SimulatorKit is missing, Xcode 27 moved it —
-`bin/wall.sh status` prints the two commands that put the path back.
+If the wall reports that SimulatorKit is missing, Xcode 27 moved it and Maestro
+older than 2.12.1 does not look there. `bin/wall.sh status` prints the upgrade.
 
 **Name what you are driving.** A tile otherwise says only which handset it is,
 and three handsets driven by three projects look identical:
@@ -822,7 +828,7 @@ fix it yourself.
 | `reference/connection.md` | SSH, the sandbox proxy, relays, what survives a call |
 | `reference/app-notes-template.md` | the template a project's own notes are made from, and the rules for what goes in |
 | `reference/apps/example-app.md` | a worked example of filled-in app notes, with invented names |
-| `docs/pages/` | a 154-page mirror of the Maestro documentation (2.8.0). Grep it; there is no route to the internet from here |
+| `docs/pages/` | a 163-page mirror of the Maestro documentation (2.12.1). Grep it; there is no route to the internet from here |
 
 ## Scripts
 
@@ -832,6 +838,7 @@ fix it yourself.
 | `bin/notes.sh` | create, locate, append to or archive the project's app notes |
 | `bin/journey.sh` | edit a journey with a replace that fails loudly when it does not match |
 | `bin/secrets.sh` | has a credential from the conf escaped into a committed file? |
+| `bin/update-notice.sh` | runs when this skill loads: once per session, says if Maestro or this toolkit has a newer release |
 | `bin/docs-check.sh` | is the bundled docs mirror still the installed version? |
 | `bin/docs-refresh.sh` | re-download the mirror (runs on the Mac) |
 | `bin/drivers.sh` | a driver per simulator, each on its own port — list, up, down, ports, rig |

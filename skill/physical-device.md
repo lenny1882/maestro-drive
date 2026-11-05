@@ -157,7 +157,11 @@ leave it alone or wrap it in a reattach loop.
 `log stream --device-name` does not exist on this macOS — device syslog is not
 available that way.
 
-## 3. Maestro 2.8.0 cannot build its own device driver
+## 3. Maestro's CLI cannot build its own device driver
+
+Measured on 2.8.0, and not re-measured since: BACKLOG item 135. On 5 Nov 2026 both
+drivers below were rebuilt and signed for Maestro 2.12.1, and each drove an iPhone
+XS Max on iOS 18.7.9. A Maestro upgrade means doing this again.
 
 **Superseded by building from source** (BACKLOG items 99 and 50).
 Maestro's git tag has the `MaestroDriverLib` target the jar leaves out, so
@@ -293,7 +297,8 @@ for APP in maestro-driver-ios.app maestro-driver-iosUITests-Runner.app; do
   codesign --force --timestamp=none --generate-entitlement-der \
            --entitlements /tmp/ent.plist --sign "$IDENT" "$APP"
 done
-echo "version=2.8.0" > "$ROOT/version.properties"
+# the installed Maestro's version, e.g. 2.12.1
+echo "version=<maestro version>" > "$ROOT/version.properties"
 ```
 
 Sign nested items — frameworks, dylibs, the `.xctest` — before the `.app`.
@@ -523,7 +528,7 @@ identity fields that are null unless logged into Maestro Cloud. No flow content,
 no app binary, no hierarchy: uploading those is `maestro cloud`, a different
 command. Off with `MAESTRO_CLI_NO_ANALYTICS=1`, or `"enabled": false` in
 `~/.maestro/analytics.json`. Building the driver downloads nothing — the Xcode
-project ships inside `maestro-cli-2.8.0.jar` under `driver/ios`.
+project ships inside `maestro-cli-<version>.jar` under `driver/ios`.
 
 **Apple.** `-allowProvisioningUpdates` is what creates signing assets when no
 local profile matches: an App ID record for each driver bundle id and an

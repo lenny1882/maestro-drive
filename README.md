@@ -321,7 +321,7 @@ made there are lost on the next install.
 | `skill/reference/` | reference pages the skill reads; `driver-api.md` records the driver's HTTP API |
 | `skill/docs/pages/` | an offline copy of the Maestro documentation |
 | `install.sh`, `manifest.sh` | the installer; `manifest.sh` says what is installed and registered |
-| `lib/update-check.sh` | the release check, installed to `~/.local/share/maestro-drive/` |
+| `lib/update-check.sh` | the install record and the version comparison `skill/bin/update-notice.sh` uses, installed to `~/.local/share/maestro-drive/` |
 | `test/` | the packaging test suite |
 | `BACKLOG.md`, `BACKLOG-DONE.md` | open work items, and finished ones |
 

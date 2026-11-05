@@ -24,17 +24,12 @@ own capture binary, spawned directly. It prints
 on stdout once it is up, and **exits the moment its stdin closes** — that is its
 shutdown signal, so the pipe is held open for as long as the device is wanted.
 
-It needs Apple's private SimulatorKit, which it loads from a path compiled into
-the binary: /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks.
-Xcode 27 moved SimulatorKit to Contents/SharedFrameworks and dropped that
-directory, so on Xcode 27 the path has to be put back by hand:
-
-    sudo mkdir -p /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks
-    sudo ln -s /Applications/Xcode.app/Contents/SharedFrameworks/SimulatorKit.framework \\
-               /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks/
-
-`simulator-server verify` says which way round it is. Xcode is an App Store
-install, so an Xcode update removes the symlink again.
+It needs Apple's private SimulatorKit, which it finds relative to the Xcode root.
+Xcode 27 moved it from Contents/Developer/Library/PrivateFrameworks to
+Contents/SharedFrameworks. Maestro 2.12.1's binary looks in both; 2.10.0's and
+older look only in the old place and every stream fails, so upgrade Maestro.
+`simulator-server verify` says which way round it is, and bin/wall.sh status says
+what to do about it (item 126).
 
 This never touches an XCUITest driver. Capture and driving are separate paths —
 measured: starting every stream here left the drivers on 22087 and 22089 with
@@ -205,6 +200,18 @@ def booted_devices():
         return []
 
 
+def capture_error(text):
+    """The message on one line of capture output, or None.
+
+    The binary prints a chain, cause first, so the last line alone names nothing:
+    "SimulatorKit could not be loaded (...)", "Failed to initialize
+    SimulatorControl", "Failed to initialize iOS simulator bridge" (item 127).
+    """
+    if "Error:" not in text:
+        return None
+    return text.split("Error:", 1)[1].strip() or None
+
+
 def capture_cmd(udid):
     """The command line that streams one device, from the platform runner."""
     out = subprocess.run(
@@ -254,6 +261,7 @@ class Stream:
             stderr=subprocess.STDOUT,
         )
         url = None
+        errors = []
         deadline = time.time() + 45
         while time.time() < deadline:
             line = self.proc.stdout.readline()
@@ -263,11 +271,12 @@ class Stream:
             if text.startswith("stream_ready "):
                 url = text.split(" ", 1)[1].strip()
                 break
-            if "Error:" in text:
-                self.error = text.split("Error:", 1)[1].strip()
+            message = capture_error(text)
+            if message and message not in errors:
+                errors.append(message)
         if not url:
-            if not self.error:
-                self.error = "simulator-server exited before announcing stream_ready"
+            self.error = "; ".join(errors) or \
+                "simulator-server exited before announcing stream_ready"
             log(self.udid, "no stream:", self.error)
             self.kill()
             return False

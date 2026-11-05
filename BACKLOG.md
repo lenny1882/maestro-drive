@@ -8,21 +8,19 @@
 - **107.** The `MaterialApp.router` dropdown report has not been sent upstream — re-test against Flutter 3.49 first.
 - **109.** `wall.sh label <name> <udid>` labels the wrong device and reports success.
 - **110.** `script --steps '…' file.journey` swallows the file name into the last step.
-- **111.** The ambiguity refusal says "pass --index", and `tapon` refuses `--index`.
 - **112.** Nothing stops a second session launching onto a device another session has labelled.
 - **113.** The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven.
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
-- **126.** Maestro 2.12.1 streams on Xcode 27 without the symlink, and the toolkit still prescribes the symlink.
-- **127.** The wall's tile hides the capture failure's cause, and its log can vanish under it.
 - **128.** Nothing tells a session that a newer Maestro is out when the skill is first called.
-- **129.** Refreshing the docs mirror switched off `docs-check.sh`'s warnings about two wrong claims that are still there.
-- **130.** `driver.sh text "x"` prints the screen and types nothing.
-- **131.** A Maestro upgrade leaves the old runner in the driver cache, and a failed driver start reports a missing file.
+- **132.** `bench.sh` hands ssh the whole `MAC_HOST` list.
+- **133.** `docs-refresh.sh` does not follow redirects, so one page comes back empty.
+- **134.** The ambiguity refusal says "pass --index", and `type` has no index.
+- **135.** Whether Maestro's CLI can now build and drive a phone itself has not been re-measured.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged.
 
-Next item number: 132.
+Next item number: 136.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -100,6 +98,15 @@ Questions to answer before building:
 
 **Gated on.** Flutter 3.49 stable, or a launch argument that skips them, for
 the setup screens only.
+
+**Re-tested on Maestro 2.12.1, 5 Nov 2026.** Nothing changes: the fault is Flutter's.
+`flutter-router-dropdown-repro/` built with Flutter 3.41.9, iPhone 17 Pro, iOS 26.4.
+The caption reads `68,388 265x20` on launch and with the menu open, and `22,129 88x6`
+once it closes, in both the driver's tree and `maestro hierarchy`. A flow's `tapOn:
+"1901 - First Store"` after the close reports COMPLETED and does nothing, and the
+following `assertVisible: "1902 - Second Store"` fails. `driver.sh tapon` on the same
+label reopens the menu, through `resolve.py`'s correction. The real app was not used,
+because its setup screens are behind a logout and a PIN.
 
 ## 97. The MCP server dies when the Mac is on another network — **OPEN**
 
@@ -583,17 +590,6 @@ cancel, a deliver) did not run, and nothing said so.
 **To do.** Either run trailing journey names after the inline steps, or refuse
 when `--steps` is followed by anything.
 
-## 111. The ambiguity refusal says "pass --index", and `tapon` refuses `--index` — **OPEN**
-
-**What.** `resolve: /^Continue$/ matches 2 nodes; narrow the pattern or pass
---index`. `tapon "^Continue$" --index 0` and `--index 1` both die in
-`resolve.py`'s argparse with `argument --index: expected one argument`; the
-positional `tapon "^Continue$" 0` works. Measured 21 Oct 2026. Item 29 fixed
-`--anyway` in the same position but not `--index`.
-
-**To do.** Accept `--index N` in `_resolve`'s flag sorting, or make the refusal
-say `tapon <pattern> <index>`.
-
 ## 112. Nothing stops a second session launching onto a device another session has labelled — **OPEN**
 
 **What.** 21 Oct 2026, one iPhone 16 Pro (C61983AE): this session had labelled
@@ -655,6 +651,13 @@ in the background, and have the skill say once per session when the state file
 records a newer release. Or, if the check is not wanted, delete the script and
 its two call sites in `install.sh`.
 
+**Built 5 Nov 2026, with item 128.** `update-notice.sh` runs `update-check.sh
+notice-for <tag>` instead of the `SessionStart` hook above, so a session that never
+calls the skill runs nothing. `notice-for` has no network and no writes, because the
+Bash sandbox blocks `~/.local/state` and GitHub. `check`, `notice`, `badge`, `hook-json`
+and `clear` had no caller left and are removed, with the state files only they used.
+Closes with 128.
+
 ## 115. `remote-STALE-pre-skill/` is still tracked — **OPEN**
 
 **What.** Five files at the repo root, `remote-STALE-pre-skill/`, are the
@@ -666,78 +669,6 @@ scripts as they stood before the skill was packaged. Their own README says
 part of the project. Git history keeps the files without it.
 
 **To do.** `git rm -r remote-STALE-pre-skill/`.
-
-## 126. Maestro 2.12.1 streams on Xcode 27 without the symlink, and the toolkit still prescribes the symlink — **OPEN, raised 5 Nov 2026**
-
-**What.** `wall.sh`, `wall.py`, `SKILL.md` and `driver-api.md` give one fix for
-a wall with no pictures on Xcode 27: a sudo symlink that an App Store update
-removes. Maestro 2.12.1 (released 2 Nov 2026) makes it unnecessary. Measured on
-5 Nov 2026 on Xcode 27.1 (27A9275), with no `PrivateFrameworks` directory:
-
-| Capture binary | `verify` | Capture on a booted simulator |
-| --- | --- | --- |
-| 2.8.0, installed | `[skip] ios: SimulatorKit not present` | `Failed to initialize iOS simulator bridge` |
-| 2.8.0 with `DEVELOPER_DIR` at a shadow tree holding the link | same | same; search path still `/Applications/Xcode.app` |
-| 2.8.0 with `DYLD_FRAMEWORK_PATH` at `SharedFrameworks` | same | same |
-| 2.8.0, private copy, path bytes patched, re-signed ad hoc | `[ok]` | AE01727F: 2.5 MB, 10 frames in 5 s |
-| 2.12.1, unmodified | `[ok]` | AE01727F: 19.6 MB, 74 frames; 93ABBB77: 6.9 MB, 21 frames, same 5 s each, run together |
-
-`strings` on the 2.12.1 binary finds both `Contents/SharedFrameworks/SimulatorKit.framework`
-and `Contents/Developer/Library/PrivateFrameworks/SimulatorKit.framework`. The
-2.8.0 binary has only the second, and it is relative to the Xcode root, not an
-absolute path as the toolkit's text says. The driver processes (95152, 95240,
-95353, 95405) kept their pids through every capture and `/deviceInfo` on 9101,
-9102, 22087 and 22088 still returned 200 at the end.
-
-Replacing only `~/.maestro/deps/simulator-server` is not durable on 2.8.0.
-`Dependencies.installSimulatorServer` calls `Unpacker.unpackTree`, which has a
-SHA-1 `sameContents` check and a `REPLACE_EXISTING` copy. The disassembly shows
-those calls; which `maestro` commands reach `installSimulatorServer` was not
-traced. Item 65 records 2.10.0's binary as byte-identical to 2.8.0's, so the
-fix landed in 2.10.1–2.12.1; which one was not measured.
-
-**Why.** Every Xcode update blanks the wall until someone with sudo runs the
-symlink again. Xcode.app's date is 27 Oct 2026 15:25, and the wall was started
-at 14:14 that day. That the update removed the link is inferred from those dates.
-
-**Tested on 5 Nov 2026.** The Mac was upgraded to 2.12.1 and tested on Xcode 27.2
-(27B52), iPhone 17 Pro, iOS 26.4, in Settings, with no symlink:
-
-- `verify` prints `[ok]`.
-- `wall.sh start` gives a live tile, and the stream sent frames through 9990.
-- The 2.12.1 runner came up through `drivers.sh up` and answered `info`, `tree`,
-  `shot`, `launch`, `kill`, `tap` and `swipe`.
-- A journey with `tapon`, `expect`, `tap` and `text` passed.
-- A `maestro test` flow with `launchApp`, `tapOn`, `inputText` and `assertVisible`
-  passed, and took the driver with it as `flow.sh` documents.
-
-Not run: the `maestro mcp` server, `bench.sh`, a physical device, and any app
-under test. `docs/VERSION` now says 2.12.1, after the refresh in item 129.
-
-**To do.** Run those four. Re-check `reference/driver-api.md`. Then state the
-minimum Maestro version in `_check_simulatorkit`, `wall.py`, `SKILL.md` and
-`driver-api.md`, and keep the symlink only as the fix for older Maestro.
-
-## 127. The wall's tile hides the capture failure's cause, and its log can vanish under it — **OPEN, raised 5 Nov 2026**
-
-**What.** Two things stopped the wall explaining its own failure on 5 Nov 2026.
-
-- The capture binary prints `Error: SimulatorKit could not be loaded (Xcode
-  search path: /Applications/Xcode.app)`, then `Error: Failed to initialize
-  SimulatorControl`, then `Error: Failed to initialize iOS simulator bridge`.
-  `Stream.start` overwrites `self.error` on each line, so the tile and
-  `/api/devices` show only the last, which names nothing.
-- The wall (pid 13345, started 27 Oct) holds `/private/tmp/maestro-mac/wall.log`
-  open, but the file is no longer in `/tmp/maestro-mac`, which was rebuilt on
-  5 Nov from 11:56. `wall.py` is gone from it too. So `wall.sh log` has nothing
-  to read while the wall runs on. What removed them was not established.
-
-**Why.** The page said "simulator bridge" and the log was unreadable, so the
-link to SimulatorKit could only be proved by running the binary by hand.
-
-**To do.** Keep the first `Error:` line, or all of them, in `self.error`. Have
-`wall.sh status` and `log` say when the running wall's log file is no longer on
-disk, and restart advice with it.
 
 ## 128. Nothing tells a session that a newer Maestro is out when the skill is first called — **OPEN, raised 5 Nov 2026**
 
@@ -774,66 +705,57 @@ Not chosen: `preflight.sh`, which only fires in sessions that run it, and a
 that the command runs under the Bash sandbox and that the session ID comes
 through.
 
-## 129. Refreshing the docs mirror switched off `docs-check.sh`'s warnings about two wrong claims that are still there — **OPEN, raised 5 Nov 2026**
+**Built 5 Nov 2026, not yet seen loading.** `bin/update-notice.sh` and its line in
+`SKILL.md`. The script was run by hand against the real Mac: 1.2 s, quiet on the
+second call, and correct against Maestro 2.12.1 and the toolkit's v2.1.1 tag. Claude
+Code's docs say a failed injected command aborts the whole skill invocation, so
+the line carries `|| true` and the script always exits 0 and is cut off at 12 s.
+What is left is the one thing that needs an install: invoking the skill and seeing
+the notice appear. Over a Mac on another network or in local transport it says
+nothing, because there is no route to GitHub from inside the sandbox.
 
-**What.** `docs-check.sh` warns about known-wrong claims only when
-`docs/VERSION` says `KNOWN_WRONG_FOR="2.8.0"`. The mirror was refreshed to
-Maestro 2.12.1 on 5 Nov 2026, so the warning no longer prints. Both claims are
-still in the new pages:
+## 132. `bench.sh` hands ssh the whole `MAC_HOST` list — **OPEN, raised 5 Nov 2026**
 
-- `get-started__supported-platform__ios__uikit.md:75` still says "Executing
-  tests on physical iOS devices is not supported yet".
-- `--apple-team-id` still appears in only one page,
-  `maestro-cli__maestro-cli-commands-and-options.md:138`. Whether it is still
-  documented only under `record`, and still hidden on `hierarchy` and `test`,
-  was not checked against the 2.12.1 CLI.
+**What.** `bin/bench.sh:27` runs `ssh "${SSH_OPTS[@]}" "$MAC_HOST" true` directly.
+With three aliases in `MAC_HOST` it prints `hostname contains invalid characters` and
+reports 0.00 s for each round trip. Measured 5 Nov 2026. The rest of the script goes
+through `_ssh` and is correct.
 
-**Why.** Item 55 added the warning because the physical-device claim ended
-investigations that would otherwise have succeeded.
+**Why.** It prices the round trip at nothing, and that is what the script is for.
 
-**To do.** Check both claims against 2.12.1, using `maestro <cmd> --help` and
-`bin/device.sh` on a physical iPhone. Then set `KNOWN_WRONG_FOR` to 2.12.1 for
-whichever still hold.
+**To do.** Call `_pick_host` first.
 
-## 130. `driver.sh text "x"` prints the screen and types nothing — **OPEN, raised 5 Nov 2026**
+## 133. `docs-refresh.sh` does not follow redirects, so one page comes back empty — **OPEN, raised 5 Nov 2026**
 
-**What.** `bin/driver.sh:1028` has `tree|nodes|text) _tree "$1" ;;` and
-`bin/driver.sh:1061` has the typing `text)` case. The first match wins, so the
-typing case never runs. Measured on 5 Nov 2026: `driver.sh text "wifi"` exited 0,
-printed the tree, and the screenshot showed an empty search field with the
-keyboard up. A raw `POST /inputText` with the same payload typed `wifi` on both
-the 2.8.0 and 2.12.1 runners, and the journey step `text wifi` passed
-(`bin/driver.sh:937`). The file's own usage text and `SKILL.md:727` list `text`
-as a typing verb. The installed copy has the same line at 958.
+**What.** `https://docs.maestro.dev/index.md` answers 307, the script's `curl` has no
+`-L`, and `skill/docs/pages/index.md` is 0 bytes after the 5 Nov 2026 refresh. It is
+the only page under 200 bytes.
 
-**Why.** It reports success for input that never happened, so a session goes on
-to read a screen it believes it has typed into.
+**Why.** The mirror counts 163 pages and has 162.
 
-**To do.** Decide which meaning `text` keeps. `--text` after a verb reads the
-screen back, and that may be why the read case exists; check before removing it.
-Have the verb type when given an argument and add a test that it does.
+**To do.** Add `-L`, and have the script say which pages came back empty.
 
-## 131. A Maestro upgrade leaves the old runner in the driver cache, and a failed driver start reports a missing file — **OPEN, raised 5 Nov 2026**
+## 134. The ambiguity refusal says "pass --index", and `type` has no index — **OPEN, raised 5 Nov 2026**
 
-**What.** Two things in the driver start path.
+**What.** `driver.sh type "^Search$" "wifi"` in Settings refused with `matches 4 nodes;
+narrow the pattern or pass --index`. Measured 5 Nov 2026. `type <pattern> <text...>`
+takes the rest of the line as the text, so an index has nowhere to go. Item 111 fixed
+this for `tapon` and `point`.
 
-- `driverup.sh` extracts the runner from `maestro-ios-driver.jar` only when
-  `$WORK/driver-iPhoneSimulator` has no `.xctestrun`. After the 2.12.1 upgrade the
-  cache still held the 2.8.0 runner: `Runner.app` dated 16 Jul 2026, against
-  29 Sep 2026 when extracted from the new jar. The `.xctestrun` has the same hash
-  in both, so comparing that file would not detect it. The cache has to be
-  invalidated from the jar. It was moved aside by hand for this test.
-- `driver-up` in `runners/ios/platform.sh` runs `driverup.sh` with `2>/dev/null`,
-  then falls back to a second path on any failure. On 5 Nov 2026 one start failed
-  with `Mach error -308 - (ipc/mig) server died` in `drv/driver-<udid>.log`, and
-  the simulator ended up shut down. What the caller saw was
-  `sh: /tmp/maestro-mac/runners/ios/../../remote/driverup.sh: No such file or
-  directory`. That was 1 failure in 7 starts on 2.12.1, after repeated boots and
-  shutdowns of the same simulator; a retry worked. The cause of the -308 was not
-  established.
+**Why.** A field whose label is not unique cannot be typed into with `type`, and its
+read-back check is lost by falling back to `tap` and `text`.
 
-**Why.** After an upgrade a session can test the new CLI against the old runner
-without knowing. A driver that failed to start reads as a broken install.
+**To do.** Accept `type --index N <pattern> <text...>` in both the verb and the
+journey step.
 
-**To do.** Key the cache on the jar's hash. Fall back only when the first path is
-missing, and print the failing start's log lines.
+## 135. Whether Maestro's CLI can now build and drive a phone itself has not been re-measured — **OPEN, raised 5 Nov 2026**
+
+**What.** `physical-device.md` section 3 says the CLI cannot build its own device driver,
+measured on 2.8.0. It was not tried on 2.12.1: `maestro hierarchy --apple-team-id` on a
+phone can run `-allowProvisioningUpdates`, which writes permanent records to the team's
+Apple account. `device.sh` and `driver.sh` do not depend on the answer.
+
+**Why.** If the CLI can now do it, the hand-signed path may be unnecessary. Maestro
+flows on a phone are untested on 2.12.1 for the same reason.
+
+**To do.** With the user's agreement to the Apple account side effect, try it.

@@ -12,9 +12,10 @@
 # the phone's loopback not the Mac's; and a devicectl tunnel wake immediately
 # before, because the tunnel idles out in seconds (physical-device.md §4, §5).
 #
-# The driver products are the PREBUILT driver-iphoneos, re-signed by hand once
-# (physical-device.md §3) because Maestro 2.8.0 cannot build its own device
-# driver. If they are missing, this says so rather than trying to build them.
+# The driver is the one driver/build.sh built and driver/sign.sh signed. Failing
+# that, the PREBUILT driver-iphoneos, re-signed by hand (physical-device.md §3),
+# because Maestro's CLI could not build its own device driver when measured on
+# 2.8.0. If neither is there, this says so rather than trying to build one.
 set -uo pipefail
 UDID=${1:?usage: deviceup.sh <udid> <port> [workdir]}
 PORT=${2:?port}
@@ -158,6 +159,11 @@ _why() {  # _why <log>
   elif grep -q "ScreenSizeHelper" "$1" 2>/dev/null; then
     echo "the FACE-UP crash (item 50): the prebuilt driver dies on a touch while the" >&2
     echo "phone lies flat. Stand it up, or build the driver from source (driver/build.sh)." >&2
+  elif grep -q "Timed out while enabling automation mode" "$1" 2>/dev/null; then
+    echo "the phone did not let XCUITest start. Look at its screen: it may be waiting for" >&2
+    echo "input, and then this fails every time until that is answered. Measured twice," >&2
+    echo "then 11 s to come up once it was. Also check Settings > Developer > Enable UI" >&2
+    echo "Automation. Retrying without looking at the phone does not help." >&2
   else
     echo "'TEST EXECUTE FAILED' / 'connection was invalidated' with the phone unlocked and" >&2
     echo "devicectl showing it 'connected' is the on-device XCTest session dying (item 46)," >&2
