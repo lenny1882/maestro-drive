@@ -3251,8 +3251,8 @@ Terminal, as `physical-device.md` describes, with the same identity and profile.
 up` took that build; the same checks passed, with `swipe` as well. The prebuilt driver
 from the 2.12.1 jar was re-signed into `~/.maestro/maestro-iphoneos-driver-build` with
 `version=2.12.1`, and `deviceup.sh` came up on it with the source build set aside. So
-nothing on the phone path uses 2.8.0 any more. `~/maestro-drive-driver/build-2.8.0` and
-`src-2.8.0` are still on the Mac, unused, and need the user to remove them. The failure
+nothing on the phone path uses 2.8.0 any more, and `~/maestro-drive-driver/build-2.8.0`
+and `src-2.8.0` have been removed from the Mac. The failure
 message now says to look at the phone. Whether the 2.12.1 CLI can build its own device
 driver is item 135.
 
