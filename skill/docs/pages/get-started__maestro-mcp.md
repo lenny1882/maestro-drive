@@ -2,6 +2,8 @@
 
 # Maestro MCP Server
 
+Use Maestro's MCP server to let your coding agent write, run, and debug mobile and web UI tests.
+
 Maestro implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro), enabling direct integration coding agents like Claude Code, Claude Desktop, Cursor, GitHub Copilot, Codex, Codex Desktop, Gemini, Windsurf, and JetBrains AI Assistant ([full list](https://modelcontextprotocol.io/clients)). For more information on MCP see [#what-is-mcp](#what-is-mcp "mention").
 
 {% embed url="<https://files.gitbook.com/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FmkNE7cEla6mI7Ikp0aH5%2Fmaestro-mcp.mp4?alt=media&token=b63eb192-ce07-4614-878c-69cf447eae2e>" %}
@@ -281,7 +283,7 @@ MCP documentation for other IDEs:
 
 Restart your coding agent, then let your agent handle checking its own work against a live mobile emulator or simulator. And when you're ready, generate repeatable end to end tests to ensure your feature doesn't break going forward.
 
-<figure><img src="/files/NlAW7h4hjdhijbS3XjG1" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2F3AN0tIt8j8G4xt8iWRzF%2Fimage.png?alt=media&amp;token=8cc72c90-a7ca-4cc8-877a-88f91ccc498f" alt=""><figcaption></figcaption></figure>
 {% endstep %}
 {% endstepper %}
 
@@ -391,17 +393,17 @@ Restart your coding agent.
 
 ## MCP tools
 
-| Tool                   | Description                                                                                                                                                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_devices`         | List all available local devices (Android emulators, iOS simulators, and Chromium for web) that can be targeted for automation.                                                                                             |
-| `inspect_screen`       | Get the current screen's view hierarchy as compact JSON. Call this before targeting elements, and re-call after any UI change.                                                                                              |
-| `take_screenshot`      | Take a screenshot of the current device screen. Useful when a visual helps disambiguate elements.                                                                                                                           |
-| `run`                  | Execute Maestro flows. Accepts exactly one of `{ yaml }` (inline YAML, preferred for exploration), `{ files }` (specific `.yaml` files), or `{ dir, include_tags, exclude_tags }`. Syntax is validated as part of the call. |
-| `cheat_sheet`          | Return the Maestro cheat sheet covering common commands, flow syntax, and best practices. The agent should call this before authoring unfamiliar commands.                                                                  |
-| `list_cloud_devices`   | List valid `{ device_model, device_os }` pairs available on Maestro Cloud. Call before `run_on_cloud`. OS versions must be passed verbatim (e.g. `iOS-17-5`, `android-34`).                                                 |
-| `run_on_cloud`         | Submit a flow (or folder of flows) to Maestro Cloud. Returns `upload_id`, `project_id`, and a dashboard URL immediately.                                                                                                    |
-| `get_cloud_run_status` | Poll the status and per-flow results of a Cloud run. Poll every 60s until the status is terminal (`SUCCESS`, `ERROR`, `CANCELED`, `WARNING`).                                                                               |
-| `open_maestro_viewer`  | Returns the running Viewer URL.                                                                                                                                                                                             |
+| Tool                   | Description                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_devices`         | List all available local devices (Android emulators, iOS simulators, and Chromium for web) that can be targeted for automation.                                                                                                                                                                                                                                                    |
+| `inspect_screen`       | Get the current screen's view hierarchy as compact JSON. Call this before targeting elements, and re-call after any UI change.                                                                                                                                                                                                                                                     |
+| `take_screenshot`      | Take a screenshot of the current device screen. Useful when a visual helps disambiguate elements.                                                                                                                                                                                                                                                                                  |
+| `run`                  | Execute Maestro flows. Accepts exactly one of `{ yaml }` (inline YAML, preferred for exploration), `{ files }` (specific `.yaml` files), or `{ dir, include_tags, exclude_tags }`. Syntax is validated as part of the call.                                                                                                                                                        |
+| `cheat_sheet`          | Return the Maestro cheat sheet covering common commands, flow syntax, and best practices. The agent should call this before authoring unfamiliar commands.                                                                                                                                                                                                                         |
+| `list_cloud_devices`   | List valid `{ device_model, device_os }` pairs available on Maestro Cloud. Call before `run_on_cloud`. OS versions must be passed verbatim (e.g. `iOS-17-5`, `android-34`).                                                                                                                                                                                                        |
+| `run_on_cloud`         | Submit a flow (or folder of flows) to Maestro Cloud. Accepts an optional `priority` (`low`, `normal` or `high`) for the upload's [https://app.gitbook.com/s/ky7LkNoLfvcORtXOzzBs/advanced-features/queue-priority](https://app.gitbook.com/s/ky7LkNoLfvcORtXOzzBs/advanced-features/queue-priority "mention"). Returns `upload_id`, `project_id`, and a dashboard URL immediately. |
+| `get_cloud_run_status` | Poll the status and per-flow results of a Cloud run. Poll every 60s until the status is terminal (`SUCCESS`, `ERROR`, `CANCELED`, `WARNING`).                                                                                                                                                                                                                                      |
+| `open_maestro_viewer`  | Returns the running Viewer URL.                                                                                                                                                                                                                                                                                                                                                    |
 
 {% hint style="info" %}
 The `list_cloud_devices`, `run_on_cloud`, and `get_cloud_run_status` tools require Maestro Cloud authentication. Run `maestro login` (recommended) or set `MAESTRO_CLOUD_API_KEY` for non-interactive environments.
@@ -424,16 +426,16 @@ The Maestro MCP server ships inside the Maestro CLI and exposes Maestro's author
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/get-started/maestro-mcp.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/get-started/maestro-mcp.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

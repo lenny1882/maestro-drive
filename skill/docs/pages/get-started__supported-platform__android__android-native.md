@@ -2,7 +2,9 @@
 
 # Android Native
 
-<figure><img src="/files/y0tgG9VVQjMkqSwcdIhN" alt=""><figcaption></figcaption></figure>
+Black-box testing for Android Views and Jetpack Compose via the Accessibility layer. Target elements by text, Resource ID, Content Description, or testTag.
+
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FfSMqKmjPVgES4X8KSvRQ%2Fimage.png?alt=media&amp;token=e6c7eb29-cb29-41cc-b92f-9eee1f8856db" alt=""><figcaption></figcaption></figure>
 
 Maestro provides a black-box testing approach for native Android applications. By interacting with the app through the Android Accessibility layer rather than internal code instrumentation, you can test production-ready binaries without modifying your source code.
 
@@ -70,16 +72,16 @@ To learn how to create tests, refer to the [Flows](https://docs.maestro.dev/maes
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/get-started/supported-platform/android/android-native.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/get-started/supported-platform/android/android-native.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

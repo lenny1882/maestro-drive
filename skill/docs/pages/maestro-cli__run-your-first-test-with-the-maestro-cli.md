@@ -2,6 +2,8 @@
 
 # Run your first test with the Maestro CLI
 
+Write and execute your first Maestro Flow using the CLI. Automate the Contacts app on an Android emulator with YAML commands and recording.
+
 In this tutorial, you will write and execute your first Maestro Flow using the CLI. You will create a test that automates the process of adding a new contact to an Android device using the native Contacts app.
 
 ### Prerequisites
@@ -23,7 +25,7 @@ Maestro requires an active device or emulator to interact with the application U
 3. Launch a virtual device (e.g., Pixel 8 or similar).
 4. Wait for the device to appear in your home screen.
 
-<figure><img src="/files/jzLBBSDznaeTvYSxKQDJ" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://2845489553-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fkq23kwiAeAnHkGJYMGDk%2Fuploads%2FWvf14Kc9BR4gusj7JmKn%2Frun-maestro-cli-1.gif?alt=media&amp;token=34d3b6ba-9554-47fc-8f21-399e5f680249" alt=""><figcaption></figcaption></figure>
 {% endstep %}
 
 {% step %}
@@ -109,7 +111,7 @@ export MAESTRO_DRIVER_STARTUP_TIMEOUT=180000
 
 Maestro will connect to the emulator and execute the steps sequentially. You will see a live progress report in your terminal.
 
-<figure><img src="/files/VHQP2sO4vbmFe6aUtmgV" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://2845489553-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fkq23kwiAeAnHkGJYMGDk%2Fuploads%2Fd1AHt2ThJ0tW0DRzF56h%2Fimage.png?alt=media&amp;token=67b0e95c-5622-47ec-bc4b-8b51f2386915" alt=""><figcaption></figcaption></figure>
 
 {% hint style="info" %}
 
@@ -128,7 +130,7 @@ Maestro will connect to the emulator and execute the steps sequentially. You wil
 
 Once the test completes, check your folder for the `recording.mp4` file. It should display the automated process exactly as seen in the example below:
 
-<figure><img src="/files/g5psPJnspxsL9jR31jZi" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://2845489553-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fkq23kwiAeAnHkGJYMGDk%2Fuploads%2Fru5GgG0jQbpYEi8bqVZh%2Fdemo-contacts-cli-maestro.gif?alt=media&amp;token=1c7bd894-1e3e-4b65-9cd5-a4435f5a90e5" alt=""><figcaption></figcaption></figure>
 
 ### Next steps
 
@@ -146,16 +148,16 @@ Now that you have executed your first Flow, you are ready to explore the deeper 
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-cli/run-your-first-test-with-the-maestro-cli.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-cli/run-your-first-test-with-the-maestro-cli.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

@@ -2,16 +2,18 @@
 
 # Workspace configuration
 
+Reference for all config.yaml properties: appId, flows, env, and platform settings.
+
 This page provides a technical reference for all properties you can set in the `config.yaml` file. The configuration is structured into Global, Execution, Platform-specific, and Cloud sections.
 
 ### Global workspace settings
 
 These settings define the identity of your application and how Maestro discovers your Flow files.
 
-| Key                                                                                  | Description                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`flows`](/maestro-flows/readme.md)                                                  | Glob patterns defining which files to include in a test suite. Defaults to `*` (only YAML files in the root folder). Use `**` for recursive discovery. |
-| [`testOutputDir`](/maestro-flows/workspace-management/test-reports-and-artifacts.md) | Custom directory where screenshots, logs, and metadata are saved. Defaults to `~/.maestro/tests/`.                                                     |
+| Key                                                                                  | Description                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`flows`](https://docs.maestro.dev/maestro-flows/)                                   | Glob patterns defining which files to include in a test suite. Defaults to `*` (only YAML files in the root folder). Use `**` for recursive discovery. Prefix a pattern with `!` to exclude matching files; at least one positive pattern is required. |
+| [`testOutputDir`](/maestro-flows/workspace-management/test-reports-and-artifacts.md) | Custom directory where screenshots, logs, and metadata are saved. Defaults to `~/.maestro/tests/`.                                                                                                                                                     |
 
 #### Execution and filtering
 
@@ -29,10 +31,10 @@ Use these keys to control the order and selection of tests during a suite run.
 
 Platform-specific settings allow you to optimize the environment for Android or iOS.
 
-| **Key (iOS specifics)**      | **Description**                                                                                                                                                                                                                                                                                                           |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `disableAnimations`          | **(Cloud only)** Enables Reduce Motion on the iOS Simulator to prevent flakiness caused by system-level animations.                                                                                                                                                                                                       |
-| `snapshotKeyHonorModalViews` | <p>You can use this key when running tests locally or on the cloud.</p><p></p><p>If <code>false</code>, Maestro includes elements from the background hierarchy even when a modal is present. Useful for certain custom UI frameworks. This helps capture elements that have absolute positioning into the hierarchy.</p> |
+| **Key (iOS specifics)**      | **Description**                                                                                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `disableAnimations`          | **(Cloud only)** Enables Reduce Motion on the iOS Simulator to prevent flakiness caused by system-level animations.                                                                                                                                                                                                |
+| `snapshotKeyHonorModalViews` | <p>You can use this key when running tests locally or on the cloud.</p><p>If <code>false</code>, Maestro includes elements from the background hierarchy even when a modal is present. Useful for certain custom UI frameworks. This helps capture elements that have absolute positioning into the hierarchy.</p> |
 
 | **Key (Android specifics)** | **Description**                                                                                             |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -59,6 +61,7 @@ The following example shows a typical Maestro workspace configuration file. This
 flows:
   - 'subFolder/*'
   - 'anotherSubfolder/**'
+  - '!anotherSubfolder/helper.yaml' # Exclude files with a '!' prefix
 includeTags:
   - tagNameToInclude
 excludeTags:
@@ -96,16 +99,16 @@ platform:
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/reference/workspace-configuration.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/reference/workspace-configuration.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

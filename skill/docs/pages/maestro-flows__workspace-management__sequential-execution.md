@@ -2,6 +2,8 @@
 
 # Sequential execution
 
+Run flows in a specific order using executionOrder for dependent test scenarios.
+
 By default, Maestro executes Flows in a non-deterministic order. This is intentional because testing Flows in isolation ensures they are robust and not dependent on side effects from previous tests.
 
 However, there are scenarios, particularly in Goal-Driven Apps, where you need to validate a strict sequence of events (e.g., creating an account, then verifying a profile, then placing an order). In these cases, you can use the `executionOrder` configuration.
@@ -77,16 +79,16 @@ Now that you have defined how and when your tests run, learn how to view the res
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-flows/workspace-management/sequential-execution.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-flows/workspace-management/sequential-execution.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

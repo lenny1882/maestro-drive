@@ -13,8 +13,16 @@
 - **113.** The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven.
 - **114.** `lib/update-check.sh` is installed and nothing runs it.
 - **115.** `remote-STALE-pre-skill/` is still tracked.
+- **126.** Maestro 2.12.1 streams on Xcode 27 without the symlink, and the toolkit still prescribes the symlink.
+- **127.** The wall's tile hides the capture failure's cause, and its log can vanish under it.
+- **128.** Nothing tells a session that a newer Maestro is out when the skill is first called.
+- **129.** Refreshing the docs mirror switched off `docs-check.sh`'s warnings about two wrong claims that are still there.
+- **130.** `driver.sh text "x"` prints the screen and types nothing.
+- **131.** A Maestro upgrade leaves the old runner in the driver cache, and a failed driver start reports a missing file.
 
-Next item number: 116.
+Items 116–125 are on `item-87-react-native-android`, not yet merged.
+
+Next item number: 132.
 
 Finished items are in `BACKLOG-DONE.md`.
 
@@ -658,3 +666,174 @@ scripts as they stood before the skill was packaged. Their own README says
 part of the project. Git history keeps the files without it.
 
 **To do.** `git rm -r remote-STALE-pre-skill/`.
+
+## 126. Maestro 2.12.1 streams on Xcode 27 without the symlink, and the toolkit still prescribes the symlink — **OPEN, raised 5 Nov 2026**
+
+**What.** `wall.sh`, `wall.py`, `SKILL.md` and `driver-api.md` give one fix for
+a wall with no pictures on Xcode 27: a sudo symlink that an App Store update
+removes. Maestro 2.12.1 (released 2 Nov 2026) makes it unnecessary. Measured on
+5 Nov 2026 on Xcode 27.1 (27A9275), with no `PrivateFrameworks` directory:
+
+| Capture binary | `verify` | Capture on a booted simulator |
+| --- | --- | --- |
+| 2.8.0, installed | `[skip] ios: SimulatorKit not present` | `Failed to initialize iOS simulator bridge` |
+| 2.8.0 with `DEVELOPER_DIR` at a shadow tree holding the link | same | same; search path still `/Applications/Xcode.app` |
+| 2.8.0 with `DYLD_FRAMEWORK_PATH` at `SharedFrameworks` | same | same |
+| 2.8.0, private copy, path bytes patched, re-signed ad hoc | `[ok]` | AE01727F: 2.5 MB, 10 frames in 5 s |
+| 2.12.1, unmodified | `[ok]` | AE01727F: 19.6 MB, 74 frames; 93ABBB77: 6.9 MB, 21 frames, same 5 s each, run together |
+
+`strings` on the 2.12.1 binary finds both `Contents/SharedFrameworks/SimulatorKit.framework`
+and `Contents/Developer/Library/PrivateFrameworks/SimulatorKit.framework`. The
+2.8.0 binary has only the second, and it is relative to the Xcode root, not an
+absolute path as the toolkit's text says. The driver processes (95152, 95240,
+95353, 95405) kept their pids through every capture and `/deviceInfo` on 9101,
+9102, 22087 and 22088 still returned 200 at the end.
+
+Replacing only `~/.maestro/deps/simulator-server` is not durable on 2.8.0.
+`Dependencies.installSimulatorServer` calls `Unpacker.unpackTree`, which has a
+SHA-1 `sameContents` check and a `REPLACE_EXISTING` copy. The disassembly shows
+those calls; which `maestro` commands reach `installSimulatorServer` was not
+traced. Item 65 records 2.10.0's binary as byte-identical to 2.8.0's, so the
+fix landed in 2.10.1–2.12.1; which one was not measured.
+
+**Why.** Every Xcode update blanks the wall until someone with sudo runs the
+symlink again. Xcode.app's date is 27 Oct 2026 15:25, and the wall was started
+at 14:14 that day. That the update removed the link is inferred from those dates.
+
+**Tested on 5 Nov 2026.** The Mac was upgraded to 2.12.1 and tested on Xcode 27.2
+(27B52), iPhone 17 Pro, iOS 26.4, in Settings, with no symlink:
+
+- `verify` prints `[ok]`.
+- `wall.sh start` gives a live tile, and the stream sent frames through 9990.
+- The 2.12.1 runner came up through `drivers.sh up` and answered `info`, `tree`,
+  `shot`, `launch`, `kill`, `tap` and `swipe`.
+- A journey with `tapon`, `expect`, `tap` and `text` passed.
+- A `maestro test` flow with `launchApp`, `tapOn`, `inputText` and `assertVisible`
+  passed, and took the driver with it as `flow.sh` documents.
+
+Not run: the `maestro mcp` server, `bench.sh`, a physical device, and any app
+under test. `docs/VERSION` now says 2.12.1, after the refresh in item 129.
+
+**To do.** Run those four. Re-check `reference/driver-api.md`. Then state the
+minimum Maestro version in `_check_simulatorkit`, `wall.py`, `SKILL.md` and
+`driver-api.md`, and keep the symlink only as the fix for older Maestro.
+
+## 127. The wall's tile hides the capture failure's cause, and its log can vanish under it — **OPEN, raised 5 Nov 2026**
+
+**What.** Two things stopped the wall explaining its own failure on 5 Nov 2026.
+
+- The capture binary prints `Error: SimulatorKit could not be loaded (Xcode
+  search path: /Applications/Xcode.app)`, then `Error: Failed to initialize
+  SimulatorControl`, then `Error: Failed to initialize iOS simulator bridge`.
+  `Stream.start` overwrites `self.error` on each line, so the tile and
+  `/api/devices` show only the last, which names nothing.
+- The wall (pid 13345, started 27 Oct) holds `/private/tmp/maestro-mac/wall.log`
+  open, but the file is no longer in `/tmp/maestro-mac`, which was rebuilt on
+  5 Nov from 11:56. `wall.py` is gone from it too. So `wall.sh log` has nothing
+  to read while the wall runs on. What removed them was not established.
+
+**Why.** The page said "simulator bridge" and the log was unreadable, so the
+link to SimulatorKit could only be proved by running the binary by hand.
+
+**To do.** Keep the first `Error:` line, or all of them, in `self.error`. Have
+`wall.sh status` and `log` say when the running wall's log file is no longer on
+disk, and restart advice with it.
+
+## 128. Nothing tells a session that a newer Maestro is out when the skill is first called — **OPEN, raised 5 Nov 2026**
+
+**What.** Maestro checks for a newer version but never installs one. In both
+the 2.8.0 and 2.12.1 jars the only related setting found is
+`MAESTRO_DISABLE_UPDATE_CHECK`, and the current docs list no auto-update option.
+The Mac stayed on 2.8.0 while 2.12.1, which fixes item 126, was out. Nothing in
+a driving session said so.
+
+**Why.** A session finds out about a fixed version only after something breaks.
+Item 126 cost an investigation that a one-line notice could have shortened.
+
+**To do.** The check runs the first time the skill is called in a session, and
+in no other session. Sessions that never call the skill run nothing.
+
+- Add a load-time command to `SKILL.md`, in the form
+  `` !`"${CLAUDE_SKILL_DIR}/bin/<script>.sh" "${CLAUDE_SESSION_ID}"` ``. Its
+  output goes into the loaded skill text.
+- On the first call, the script finds no stamp for that session ID and writes
+  one. It then compares the installed `maestro-cli-<version>.jar` on the Mac
+  with the latest GitHub release tag, over SSH with a short timeout. If they
+  differ it prints one line: `maestro: 2.8.0 installed, 2.12.1 available`.
+- On later calls in that session, the stamp exists, so it prints nothing and
+  makes no SSH call.
+- It always exits 0. An unreachable Mac or an unconfigured project must not
+  delay or block the skill loading.
+- Add a `SKILL.md` rule: tell the user, and do not upgrade unasked, because an
+  upgrade replaces `maestro-ios-driver.jar`, which `driverup.sh` reads.
+
+Not chosen: `preflight.sh`, which only fires in sessions that run it, and a
+`SessionStart` hook, which makes an SSH call in every Claude session.
+
+**Not tested.** No skill in `~/.claude/skills` uses this syntax. First confirm
+that the command runs under the Bash sandbox and that the session ID comes
+through.
+
+## 129. Refreshing the docs mirror switched off `docs-check.sh`'s warnings about two wrong claims that are still there — **OPEN, raised 5 Nov 2026**
+
+**What.** `docs-check.sh` warns about known-wrong claims only when
+`docs/VERSION` says `KNOWN_WRONG_FOR="2.8.0"`. The mirror was refreshed to
+Maestro 2.12.1 on 5 Nov 2026, so the warning no longer prints. Both claims are
+still in the new pages:
+
+- `get-started__supported-platform__ios__uikit.md:75` still says "Executing
+  tests on physical iOS devices is not supported yet".
+- `--apple-team-id` still appears in only one page,
+  `maestro-cli__maestro-cli-commands-and-options.md:138`. Whether it is still
+  documented only under `record`, and still hidden on `hierarchy` and `test`,
+  was not checked against the 2.12.1 CLI.
+
+**Why.** Item 55 added the warning because the physical-device claim ended
+investigations that would otherwise have succeeded.
+
+**To do.** Check both claims against 2.12.1, using `maestro <cmd> --help` and
+`bin/device.sh` on a physical iPhone. Then set `KNOWN_WRONG_FOR` to 2.12.1 for
+whichever still hold.
+
+## 130. `driver.sh text "x"` prints the screen and types nothing — **OPEN, raised 5 Nov 2026**
+
+**What.** `bin/driver.sh:1028` has `tree|nodes|text) _tree "$1" ;;` and
+`bin/driver.sh:1061` has the typing `text)` case. The first match wins, so the
+typing case never runs. Measured on 5 Nov 2026: `driver.sh text "wifi"` exited 0,
+printed the tree, and the screenshot showed an empty search field with the
+keyboard up. A raw `POST /inputText` with the same payload typed `wifi` on both
+the 2.8.0 and 2.12.1 runners, and the journey step `text wifi` passed
+(`bin/driver.sh:937`). The file's own usage text and `SKILL.md:727` list `text`
+as a typing verb. The installed copy has the same line at 958.
+
+**Why.** It reports success for input that never happened, so a session goes on
+to read a screen it believes it has typed into.
+
+**To do.** Decide which meaning `text` keeps. `--text` after a verb reads the
+screen back, and that may be why the read case exists; check before removing it.
+Have the verb type when given an argument and add a test that it does.
+
+## 131. A Maestro upgrade leaves the old runner in the driver cache, and a failed driver start reports a missing file — **OPEN, raised 5 Nov 2026**
+
+**What.** Two things in the driver start path.
+
+- `driverup.sh` extracts the runner from `maestro-ios-driver.jar` only when
+  `$WORK/driver-iPhoneSimulator` has no `.xctestrun`. After the 2.12.1 upgrade the
+  cache still held the 2.8.0 runner: `Runner.app` dated 16 Jul 2026, against
+  29 Sep 2026 when extracted from the new jar. The `.xctestrun` has the same hash
+  in both, so comparing that file would not detect it. The cache has to be
+  invalidated from the jar. It was moved aside by hand for this test.
+- `driver-up` in `runners/ios/platform.sh` runs `driverup.sh` with `2>/dev/null`,
+  then falls back to a second path on any failure. On 5 Nov 2026 one start failed
+  with `Mach error -308 - (ipc/mig) server died` in `drv/driver-<udid>.log`, and
+  the simulator ended up shut down. What the caller saw was
+  `sh: /tmp/maestro-mac/runners/ios/../../remote/driverup.sh: No such file or
+  directory`. That was 1 failure in 7 starts on 2.12.1, after repeated boots and
+  shutdowns of the same simulator; a retry worked. The cause of the -308 was not
+  established.
+
+**Why.** After an upgrade a session can test the new CLI against the old runner
+without knowing. A driver that failed to start reads as a broken install.
+
+**To do.** Key the cache on the jar's hash. Fall back only when the first path is
+missing, and print the failing start's log lines.

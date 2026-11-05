@@ -2,6 +2,8 @@
 
 # Test discovery and tags
 
+Organize tests with tags and control which flows run using include/exclude filters.
+
 As your test suite grows from a few files to hundreds of Flows, managing which tests to run and where they are located becomes critical. Maestro uses a combination of Inclusion patterns and metadata tagging to give you precise control over your execution.
 
 ### Test discovery via patterns
@@ -21,11 +23,31 @@ flows:
   - "tests/**"     # Recursive: Includes all Flows in tests and its subfolders
 ```
 
+#### Exclude files with negation patterns
+
+Prefix a glob with `!` to exclude files that would otherwise be included. Use this to skip anything you don't want Maestro to run, whether that's a `.yaml` file that isn't a Flow (such as a helper or data file living alongside your tests), a work-in-progress Flow, or an entire subdirectory.
+
+Maestro first collects every file matched by the positive patterns, then removes any file matched by a negation pattern.
+
+```yaml
+# config.yaml
+appId: com.example.app
+flows:
+  - "**"                    # Include every Flow, recursively
+  - "!ignored.yaml"         # Exclude a single file
+  - "!config_dir/**"        # Exclude an entire subdirectory
+  - "!featureA/skip.yaml"   # Exclude a specific file within an included folder
+```
+
+{% hint style="warning" %}
+A `flows` list must contain at least one positive pattern. Maestro rejects a list made up only of negation patterns and throws a validation error prompting you to add a positive pattern.
+{% endhint %}
+
 ### Filter test via tags
 
 Tags allow you to categorize your Flows based on their purpose, priority, or execution environment without changing your folder structure.
 
-To add tags to a Flow, you need to define them  in the configuration block at the top of your individual Flow files:
+To add tags to a Flow, you need to define them in the configuration block at the top of your individual Flow files:
 
 ```yaml
 # flows/login_smoke.yaml
@@ -38,7 +60,7 @@ tags:
 # ... rest of the flow
 ```
 
-When running your tests using the [Maestro CLI](/maestro-cli/readme.md), you can use the `--include-tags` or `--exclude-tags` flags to filter the execution on the fly.
+When running your tests using the [Maestro CLI](https://docs.maestro.dev/maestro-cli/), you can use the `--include-tags` or `--exclude-tags` flags to filter the execution on the fly.
 
 * **Include**: `maestro test . --include-tags=smoke` (Runs only smoke tests).
 * **Exclude**: `maestro test . --exclude-tags=wip` (Runs everything *except* work-in-progress tests).
@@ -65,7 +87,7 @@ If you use both `--include-tags` and `--exclude-tags` together, they perform an 
 Consider you have two Flows:
 
 * **Flow A**: tags: `[dev, pull-request]`
-* **Flow B**: tags: `[dev]`&#x20;
+* **Flow B**: tags: `[dev]`
 
 {% tabs %}
 {% tab title="Flow A" %}
@@ -98,7 +120,7 @@ tags:
 | `--include-tags=dev,pull-request`                | **Flow A & B**   | Uses **OR** logic, both contain at least one of the tags. |
 | `--exclude-tags=pull-request`                    | **Flow B**       | Flow A is removed due to the `pull-request` tag.          |
 | `--include-tags=dev --exclude-tags=pull-request` | **Flow B**       | Both are included via `dev`, then Flow A is excluded.     |
-| `--exclude-tags=dev`                             | **No flows run** | Both flows contain `dev`  and are removed.                |
+| `--exclude-tags=dev`                             | **No flows run** | Both flows contain `dev` and are removed.                 |
 
 ### Global tag configuration
 
@@ -159,16 +181,16 @@ Now that you've discovered your tests, learn how to manage their [sequential exe
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-flows/workspace-management/test-discovery-and-tags.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-flows/workspace-management/test-discovery-and-tags.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

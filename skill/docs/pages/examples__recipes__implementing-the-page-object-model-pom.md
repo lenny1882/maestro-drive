@@ -2,7 +2,9 @@
 
 # Implementing the Page Object Model (POM)
 
-As the number of test grows, one problem shows up quickly, you will use selectors in every Flow file.
+Implement the Page Object Model pattern for maintainable Maestro test suites.
+
+As the number of tests grows, one problem shows up quickly, you will use selectors in every Flow file.
 
 Hardcoded `id`s spread across dozens of YAML files are easy at first, but the moment a developer renames a button or changes a label, you may find yourself updating several tests just to fix one UI change. This is an example of a non-scalable approach.
 
@@ -226,16 +228,16 @@ To master the logic used in the Page Object Model, explore these deep-dives:
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/examples/recipes/implementing-the-page-object-model-pom.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/examples/recipes/implementing-the-page-object-model-pom.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

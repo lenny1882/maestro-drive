@@ -3,6 +3,8 @@
 # Commands available
 
 - [addMedia](https://docs.maestro.dev/reference/commands-available/addmedia.md): Add images or videos to the device gallery for media picker testing.
+- [assertDarkMode](https://docs.maestro.dev/reference/commands-available/assertdarkmode.md): Assert that the device is currently in dark mode.
+- [assertLightMode](https://docs.maestro.dev/reference/commands-available/assertlightmode.md): Assert that the device is currently in light mode.
 - [assertNoDefectsWithAI](https://docs.maestro.dev/reference/commands-available/assertnodefectswithai.md): AI-powered visual testing to detect UI defects and anomalies.
 - [assertNotVisible](https://docs.maestro.dev/reference/commands-available/assertnotvisible.md): Assert that a UI element is not present or visible on the screen.
 - [assertScreenshot](https://docs.maestro.dev/reference/commands-available/assertscreenshot.md): Perform visual regression testing of your application against existing screenshots
@@ -34,6 +36,7 @@
 - [scrollUntilVisible](https://docs.maestro.dev/reference/commands-available/scrolluntilvisible.md): Automatically scroll until a target element becomes visible on screen.
 - [setAirplaneMode](https://docs.maestro.dev/reference/commands-available/setairplanemode.md): Enable airplane mode to test offline behavior.
 - [setClipboard](https://docs.maestro.dev/reference/commands-available/setclipboard.md): Set the device clipboard content to a specified text value.
+- [setDarkMode](https://docs.maestro.dev/reference/commands-available/setdarkmode.md): Enable or disable dark mode to test light/dark UI behavior.
 - [setLocation](https://docs.maestro.dev/reference/commands-available/setlocation.md): Set device GPS location to specific coordinates for location testing.
 - [setOrientation](https://docs.maestro.dev/reference/commands-available/setorientation.md): Change device orientation between portrait and landscape modes.
 - [setPermissions](https://docs.maestro.dev/reference/commands-available/setpermissions.md): Grant or deny app permissions during flow execution.
@@ -44,6 +47,7 @@
 - [takeScreenshot](https://docs.maestro.dev/reference/commands-available/takescreenshot.md): Capture a screenshot and save it to the test output directory.
 - [tapOn](https://docs.maestro.dev/reference/commands-available/tapon.md): Tap on UI elements by text, ID, or coordinates with optional repeat and delay.
 - [toggleAirplaneMode](https://docs.maestro.dev/reference/commands-available/toggleairplanemode.md): Toggle airplane mode on or off during test execution.
+- [toggleDarkMode](https://docs.maestro.dev/reference/commands-available/toggledarkmode.md): Toggle dark mode on or off during test execution.
 - [travel](https://docs.maestro.dev/reference/commands-available/travel.md): Simulate time travel by adjusting the device system clock.
 - [waitForAnimationToEnd](https://docs.maestro.dev/reference/commands-available/waitforanimationtoend.md): Wait for UI animations to complete before proceeding.
 
@@ -54,16 +58,16 @@
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/reference/commands-available.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/reference/commands-available.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

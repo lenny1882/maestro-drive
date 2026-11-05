@@ -9,6 +9,7 @@ https://docs.maestro.dev/examples/recipes/download-and-open-a-file.md
 https://docs.maestro.dev/examples/recipes/get-the-last-matching-element.md
 https://docs.maestro.dev/examples/recipes/implementing-the-page-object-model-pom.md
 https://docs.maestro.dev/examples/recipes/reset-device-state-android.md
+https://docs.maestro.dev/examples/recipes/test-in-different-time-zones.md
 https://docs.maestro.dev/extra-materials/community/articles.md
 https://docs.maestro.dev/extra-materials/community/community-projects.md
 https://docs.maestro.dev/extra-materials/community/showcase.md
@@ -32,6 +33,7 @@ https://docs.maestro.dev/get-started/supported-platform/ios/uikit.md
 https://docs.maestro.dev/get-started/supported-platform/react-native.md
 https://docs.maestro.dev/get-started/supported-platform/web-browser.md
 https://docs.maestro.dev/get-started/what-is-maestro.md
+https://docs.maestro.dev/index.md
 https://docs.maestro.dev/maestro-cli/environment-variables.md
 https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli.md
 https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli/update-the-maestro-cli.md
@@ -43,12 +45,15 @@ https://docs.maestro.dev/maestro-cloud/advanced-features.md
 https://docs.maestro.dev/maestro-cloud/advanced-features/automatic-retries.md
 https://docs.maestro.dev/maestro-cloud/advanced-features/ip-allowlist.md
 https://docs.maestro.dev/maestro-cloud/advanced-features/manage-secrets.md
+https://docs.maestro.dev/maestro-cloud/advanced-features/queue-priority.md
 https://docs.maestro.dev/maestro-cloud/advanced-features/reuse-app-binary.md
+https://docs.maestro.dev/maestro-cloud/advanced-features/stop-previous-flows.md
 https://docs.maestro.dev/maestro-cloud/build-your-app-for-the-cloud.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/bitbucket-pipelines.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/bitrise.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/circleci.md
+https://docs.maestro.dev/maestro-cloud/ci-cd-integration/expo-eas.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/generic-ci-platform.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions.md
 https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions/advanced-configuration.md
@@ -101,6 +106,8 @@ https://docs.maestro.dev/maestro-studio/run-cloud-tests-from-maestro-studio.md
 https://docs.maestro.dev/maestro-studio/run-tests-with-maestro-studio.md
 https://docs.maestro.dev/reference/commands-available.md
 https://docs.maestro.dev/reference/commands-available/addmedia.md
+https://docs.maestro.dev/reference/commands-available/assertdarkmode.md
+https://docs.maestro.dev/reference/commands-available/assertlightmode.md
 https://docs.maestro.dev/reference/commands-available/assertnodefectswithai.md
 https://docs.maestro.dev/reference/commands-available/assertnotvisible.md
 https://docs.maestro.dev/reference/commands-available/assertscreenshot.md
@@ -132,6 +139,7 @@ https://docs.maestro.dev/reference/commands-available/scroll.md
 https://docs.maestro.dev/reference/commands-available/scrolluntilvisible.md
 https://docs.maestro.dev/reference/commands-available/setairplanemode.md
 https://docs.maestro.dev/reference/commands-available/setclipboard.md
+https://docs.maestro.dev/reference/commands-available/setdarkmode.md
 https://docs.maestro.dev/reference/commands-available/setlocation.md
 https://docs.maestro.dev/reference/commands-available/setorientation.md
 https://docs.maestro.dev/reference/commands-available/setpermissions.md
@@ -142,6 +150,7 @@ https://docs.maestro.dev/reference/commands-available/swipe.md
 https://docs.maestro.dev/reference/commands-available/takescreenshot.md
 https://docs.maestro.dev/reference/commands-available/tapon.md
 https://docs.maestro.dev/reference/commands-available/toggleairplanemode.md
+https://docs.maestro.dev/reference/commands-available/toggledarkmode.md
 https://docs.maestro.dev/reference/commands-available/travel.md
 https://docs.maestro.dev/reference/commands-available/waitforanimationtoend.md
 https://docs.maestro.dev/reference/readme.md

@@ -2,6 +2,8 @@
 
 # Known issues
 
+Known limitations and workarounds for Maestro on different platforms.
+
 Use this page to quickly find known limitations and their workarounds when debugging Maestro tests. Issues are grouped by cross-platform, Android, and iOS.
 
 {% hint style="info" %}
@@ -68,6 +70,34 @@ To resolve it:
 * Open **Developer Settings** (where you enabled ADB debugging).
 * Tap **Reset to default values** between 5 and 8 times
 * Tap **Disable permission monitoring** option when it appears
+
+</details>
+
+<details>
+
+<summary>Google Maps crashes on Maestro Cloud</summary>
+
+#### What is happening
+
+An app that displays a Google Map may crash when the map screen opens **on Maestro Cloud**, while working fine on physical devices and local emulators. The crash is:
+
+`java.lang.NoClassDefFoundError: Failed resolution of: Lorg/apache/http/ProtocolVersion;`
+
+thrown from inside Google's Maps module (`dynamite_mapsdynamite`), not from your app's own code.
+
+#### Why it happens
+
+Maestro Cloud runs on `google_apis` Android emulator images. Google's Maps module still references a legacy library (`org.apache.http`), which these images don't put on your app's classpath by default as it's opt-in. Physical devices and Play-Store emulator images provide that library automatically, so the crash only appears on Cloud.
+
+#### Workaround
+
+Declare the library in your app's `AndroidManifest.xml`, inside the `<application>` tag:
+
+```xml
+<uses-library android:name="org.apache.http.legacy" android:required="false" />
+```
+
+This makes the library available to the Maps module. It is harmless on physical devices and Play-Store images (`android:required="false"` means the app still installs where the library isn't needed), so it's safe to keep in all builds.
 
 </details>
 
@@ -232,11 +262,42 @@ func tableView(_ tableView: UITableView,
   // do not unintentional data fetch request
   guard let visibleIndexPaths = tableView.indexPathsForVisibleRows,
             visibleIndexPaths.contains(indexPath),
-            <additional checks that were previosly there> else { return }
+            <additional checks that were previously there> else { return }
         
   print("load new data..")
 }
 ```
+
+</details>
+
+<details>
+
+<summary><code>inputText</code> fails on password fields (<code>secureTextEntry</code>)</summary>
+
+#### What is happening
+
+On an iOS simulator, `inputText` fails when the focused field is a secure text field, such as a password field using `secureTextEntry`. iOS shows a **Strong Password** suggestion over the field and text entry stops working, so the step fails.
+
+This comes from iOS Password AutoFill, not from Maestro. Apple does not expose secure text fields to automation in a way that lets Maestro work around it.
+
+Whether AutoFill is on by default depends on the iOS version of the simulator, so the same flow can pass on one simulator and fail on another.
+
+#### **Workaround**
+
+Use one of the following:
+
+* **Turn off AutoFill Passwords in the simulator.** In the simulator, open **Settings** → **Passwords** → **Password Options** and turn off **AutoFill Passwords**. If the simulator asks for a password to open the Passwords settings, any text works. The exact menu path varies between iOS versions.
+* **Turn off AutoFill from the command line.** This is useful on CI. Boot the simulator first, then run both of these, replacing `<DEVICE_ID>` with the simulator's UDID from `xcrun simctl list devices`:
+
+  ```bash
+  plutil -replace restrictedBool.allowPasswordAutoFill.value -bool NO \
+    ~/Library/Developer/CoreSimulator/Devices/<DEVICE_ID>/data/Library/UserConfigurationProfiles/EffectiveUserSettings.plist
+  plutil -replace restrictedBool.allowPasswordAutoFill.value -bool NO \
+    ~/Library/Developer/CoreSimulator/Devices/<DEVICE_ID>/data/Containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/UserSettings.plist
+  ```
+
+  These files are internal to the simulator and Apple may change them, so this approach may stop working on newer iOS versions.
+* **Use a plain text field in test builds.** Disable `secureTextEntry` on the password field when the app is built for testing. This is the most reliable option, but it means the test build differs from the release build.
 
 </details>
 
@@ -247,16 +308,16 @@ func tableView(_ tableView: UITableView,
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/extra-materials/troubleshooting/known-issues.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/extra-materials/troubleshooting/known-issues.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

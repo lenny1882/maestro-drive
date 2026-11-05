@@ -2,9 +2,11 @@
 
 # What is Maestro?
 
+Maestro is an open-source UI automation framework for mobile and web with built-in tolerance, zero-wait intelligence, and declarative YAML syntax.
+
 Maestro is the simplest and most effective open-source UI automation framework for mobile and web. It is designed to allow developers and testers to define and automate user journeys with a level of reliability and ease that traditional tools cannot match.
 
-<figure><img src="/files/X1bhQ6R8DOGxKqLjKPwE" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2Fgit-blob-21170ddb991b54aac54042fe34b89711750c0c0f%2Ftwitter_continuous_v3_fast.gif?alt=media" alt=""><figcaption></figcaption></figure>
 
 Traditional testing tools often require deep instrumentation, access to the app's source code, and a strong coding ability. Maestro changes this by operating at "[arm's length](/get-started/how-maestro-works.md#the-arms-length-philosophy)," piloting the device, not the app, scrolling and tapping like a real user would through the same accessibility layer that real users rely on. This eliminates framework dependencies, allowing you to test any app, regardless of whether it was built with React Native, Flutter, or Native code.
 
@@ -28,7 +30,7 @@ While tools like Appium or Selenium treat testing like unit tests inspecting int
 
 Explore the core components of the Maestro ecosystem and begin your journey:
 
-<table data-card-size="large" data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody><tr><td><strong>How Maestro works</strong></td><td>Understand the "arm's length" philosophy and accessibility-first element detection.</td><td><a href="/pages/P05NwN6Aox1FpJgtQRoy">/pages/P05NwN6Aox1FpJgtQRoy</a></td></tr><tr><td><strong>QuickStart guide</strong></td><td>Install Maestro Studio and run your first test in under five minutes.</td><td><a href="/pages/IyVjUYlja4evcymb2uG3">/pages/IyVjUYlja4evcymb2uG3</a></td></tr><tr><td><strong>Maestro solutions</strong></td><td>Compare the Maestro CLI, Maestro Studio (IDE), and Maestro Cloud to find the right tool for your workflow.</td><td><a href="/pages/epPDXejAMuAN8YhVc0iR">/pages/epPDXejAMuAN8YhVc0iR</a></td></tr><tr><td><strong>Supported platforms</strong></td><td>View the full list of supported frameworks, including Jetpack Compose, SwiftUI, and Web.</td><td><a href="/pages/Yji3ZRqXunrjvcov0BhZ">/pages/Yji3ZRqXunrjvcov0BhZ</a></td></tr></tbody></table>
+<table data-card-size="large" data-view="cards"><thead><tr><th></th><th></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody><tr><td><strong>How Maestro works</strong></td><td>Understand the "arm's length" philosophy and accessibility-first element detection.</td><td><a href="/get-started/how-maestro-works.md">How Maestro works</a></td></tr><tr><td><strong>QuickStart guide</strong></td><td>Install Maestro Studio and run your first test in under five minutes.</td><td><a href="/get-started/quickstart.md">QuickStart</a></td></tr><tr><td><strong>Maestro solutions</strong></td><td>Compare the Maestro CLI, Maestro Studio (IDE), and Maestro Cloud to find the right tool for your workflow.</td><td><a href="/get-started/maestro-solutions.md">Maestro solutions</a></td></tr><tr><td><strong>Supported platforms</strong></td><td>View the full list of supported frameworks, including Jetpack Compose, SwiftUI, and Web.</td><td><a href="/get-started/supported-platform.md">Supported platforms</a></td></tr></tbody></table>
 
 
 ---
@@ -37,16 +39,16 @@ Explore the core components of the Maestro ecosystem and begin your journey:
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/get-started/what-is-maestro.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/get-started/what-is-maestro.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

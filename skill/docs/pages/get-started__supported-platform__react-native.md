@@ -2,7 +2,9 @@
 
 # React Native
 
-<figure><img src="/files/xx2tiTJ9467BEMWrb5Mi" alt=""><figcaption></figcaption></figure>
+Configure React Native apps for Maestro testing on both Android and iOS platforms.
+
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FfOlvD8erilZgxKRSNpTs%2Fimage.png?alt=media&amp;token=74c3e136-31e5-4a6e-891f-f504e55a52cd" alt=""><figcaption></figcaption></figure>
 
 Maestro provides full support for React Native applications on both Android and iOS. By operating at the accessibility layer, Maestro enables cross-platform testing with a single test suite, requiring zero instrumentation or modifications to your JavaScript/TypeScript source code.
 
@@ -111,16 +113,16 @@ To learn how to create tests, refer to the [Flows](https://docs.maestro.dev/maes
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/get-started/supported-platform/react-native.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/get-started/supported-platform/react-native.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 
