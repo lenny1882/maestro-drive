@@ -18,7 +18,7 @@
 # in the older source the prebuilt driver was compiled from.
 #
 # Xcode 27 refuses the project's deployment target of 14.0, so it is raised to
-# 15.0 for the build. Measured: 22 s, Maestro cli-2.8.0, Xcode 27.0.
+# 15.0 for the build. Measured: 31 s, Maestro cli-2.12.1, Xcode 27.2.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 VER=${1:-$(ls "$HOME/.maestro/lib" 2>/dev/null | sed -n 's/^maestro-cli-\(.*\)\.jar$/\1/p' | head -1)}

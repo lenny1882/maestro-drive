@@ -157,7 +157,23 @@ leave it alone or wrap it in a reattach loop.
 `log stream --device-name` does not exist on this macOS — device syslog is not
 available that way.
 
-## 3. Maestro 2.8.0 cannot build its own device driver
+## 3. Maestro's CLI cannot build its own device driver
+
+**On 2.12.1 the CLI does not see a phone at all.** Measured 5 Nov 2026 on a cabled
+iPhone XS Max whose `devicectl` tunnel read `connected`, `wired`.
+`DeviceService.listIOSDevices` has `// + listIOSConnectedDevices()` commented out,
+under `// Physical iOS devices aren't fully supported yet.` So `maestro --device
+<udid> hierarchy --apple-team-id <team>` answers `Device with id <udid> is not
+connected`, and `test` answers `Device <udid> was requested, but it is not
+connected.` It stops there: no build, no `-allowProvisioningUpdates`, nothing written
+to the Apple account. `--driver-host-port` with a live phone driver does not get
+round it, because the CLI picks a booted simulator instead. Maestro flows on a phone
+are not possible on this version. `device.sh` and `driver.sh` do not go through
+that check.
+
+The rest of this section is the record from 2.8.0, which did detect the phone. On
+5 Nov 2026 both drivers below were rebuilt and signed for Maestro 2.12.1, and each drove an iPhone
+XS Max on iOS 18.7.9. A Maestro upgrade means doing this again.
 
 **Superseded by building from source** (BACKLOG items 99 and 50).
 Maestro's git tag has the `MaestroDriverLib` target the jar leaves out, so
@@ -167,7 +183,7 @@ profile described below. That build is the only one reachable over wifi and
 the only one that survives a flat phone, and `deviceup.sh` prefers it. The
 re-sign below is the fallback when no signed build exists.
 
-Maestro **does** support a connected iPhone, despite its own documentation. The
+Maestro 2.8.0 **did** support a connected iPhone, despite its own documentation. The
 mirror in `docs/pages/` says the opposite in two places and is wrong:
 
 ```
@@ -293,7 +309,8 @@ for APP in maestro-driver-ios.app maestro-driver-iosUITests-Runner.app; do
   codesign --force --timestamp=none --generate-entitlement-der \
            --entitlements /tmp/ent.plist --sign "$IDENT" "$APP"
 done
-echo "version=2.8.0" > "$ROOT/version.properties"
+# the installed Maestro's version, e.g. 2.12.1
+echo "version=<maestro version>" > "$ROOT/version.properties"
 ```
 
 Sign nested items — frameworks, dylibs, the `.xctest` — before the `.app`.
@@ -413,8 +430,8 @@ Device with id <udid> is not connected
 ```
 
 Thirty seconds between waking the tunnel and starting Maestro was already too
-long. Any `devicectl` call wakes it, so do it in the same script, immediately
-before:
+long. Any `devicectl` call wakes it, so on 2.8.0 it was done in the same script,
+immediately before (2.12.1 refuses a phone regardless, section 3):
 
 ```sh
 xcrun devicectl device info lockState --device <udid> >/dev/null 2>&1
@@ -523,7 +540,7 @@ identity fields that are null unless logged into Maestro Cloud. No flow content,
 no app binary, no hierarchy: uploading those is `maestro cloud`, a different
 command. Off with `MAESTRO_CLI_NO_ANALYTICS=1`, or `"enabled": false` in
 `~/.maestro/analytics.json`. Building the driver downloads nothing — the Xcode
-project ships inside `maestro-cli-2.8.0.jar` under `driver/ios`.
+project ships inside `maestro-cli-<version>.jar` under `driver/ios`.
 
 **Apple.** `-allowProvisioningUpdates` is what creates signing assets when no
 local profile matches: an App ID record for each driver bundle id and an

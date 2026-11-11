@@ -2,6 +2,8 @@
 
 # Automate Facebook Sign-Up (Android)
 
+Automate Facebook sign-up on Android with random data, permission dialogs, and native date picker interactions.
+
 Automating high-security applications like Facebook provides an excellent case study for handling complex form navigation, system-level permission dialogs, and native OS components like date pickers. This example walks through the sign-up process, demonstrating how to use random data generation and precise element targeting to navigate a multi-step onboarding flow.
 
 {% hint style="warning" %}
@@ -115,16 +117,16 @@ Explore these pages to master the interaction commands used in this example:
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/examples/real-world-examples/automate-facebook-sign-up-android.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/examples/real-world-examples/automate-facebook-sign-up-android.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

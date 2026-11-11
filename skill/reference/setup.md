@@ -461,6 +461,34 @@ Step 7 (the MCP registration) is only needed for real Maestro flows —
 `bin/drivers.sh` starts its own drivers and does not use the server. Check it
 separately with `list_devices` in Claude.
 
+## Upgrading Maestro
+
+Do this when nobody is driving, because the install replaces the driver jar under
+any session that is. `bin/drivers.sh rig status` shows who holds a device. Steps
+1 to 3 run on the Mac.
+
+1. **Install the version.**
+   `curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=<version> bash`
+2. **Unpack the capture binary.** The install leaves the old one in place, and the
+   wall runs it.
+   `unzip -p ~/.maestro/lib/maestro-cli-<version>.jar deps/simulator-server/darwin/simulator-server > ~/.maestro/deps/simulator-server`
+3. **Rebuild and sign the phone driver, together.**
+   `runners/ios-device/driver/build.sh <version>`, then `driver/sign.sh` in the
+   Mac's GUI Terminal, because codesign fails over ssh (`osascript`, see
+   `physical-device.md`). `deviceup.sh` takes the newest `build-*` and falls back
+   to the prebuilt driver if that build is unsigned. The prebuilt driver is
+   re-signed as `physical-device.md` section 3 describes.
+4. **Restart the `maestro mcp` servers** that are still on the old jar. Stop them
+   by pid, never by pattern. Stopping one can disconnect a session's own
+   `maestro-mac` tools, and `/mcp` reconnects them.
+5. **Re-derive what the toolkit records about the version.** Run `bin/bench.sh`,
+   then `bin/drivers.sh up` to replace the driver it ends. Re-check the routes in
+   `reference/driver-api.md`. Run `bin/docs-refresh.sh`, and if `bin/docs-check.sh`
+   says its list needs re-checking, re-check it.
+
+The simulator driver looks after itself: `driverup.sh` extracts the runner again
+when the jar changes. `bin/preflight.sh` says if step 2 or 3 was missed.
+
 ## What breaks, and what it actually means
 
 | symptom | cause |

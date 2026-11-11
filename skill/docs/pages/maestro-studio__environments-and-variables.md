@@ -2,6 +2,8 @@
 
 # Environments and variables
 
+Manage dynamic test configurations in Maestro Studio. Use Environment Variables and Tags to run tests across different platforms and environments.
+
 Maestro Studio allows you to manage dynamic configurations through Environments. This is essential for running the same tests across different app variants, server environments, or localized settings without hardcoding values into your tests.
 
 ### Organize your environments
@@ -27,7 +29,7 @@ To add a new environment, follow these steps:
 2. In Maestro Studio, click the **Env** icon.
 3. Click on **Manage Environments**, then click **Create**.
 
-<figure><img src="/files/azvY5WUxhm0z5vqr15Mi" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://173198800-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FeQi66gxHTt2vx4HjhM9V%2Fuploads%2FDX518zD5w8zuNOg8ojVl%2Fenviroments.gif?alt=media&amp;token=ad3bb2c8-70b1-480d-88f7-7111241a004a" alt=""><figcaption></figcaption></figure>
 
 4. Specify the **Included** and **Excluded** tags for this environment.
 5. Add your variables as **Key-Value** pairs.
@@ -42,7 +44,7 @@ Imagine you have created a set of generic test to be used across all available o
 * **Define Variables**: Specify an `appId` variable containing the unique package name for your Android app (e.g., `com.example.android`).
   {% endhint %}
 
-<figure><img src="/files/TY4oYTy8lL5zuPhgIW6h" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://173198800-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FeQi66gxHTt2vx4HjhM9V%2Fuploads%2F3YBYl7vnGtBLoM2VLwrz%2FScreenshot%202026-04-21%20at%2018.57.38.png?alt=media&amp;token=31b27017-e7c6-4dce-83f7-523a2761048a" alt=""><figcaption></figcaption></figure>
 
 ### Using variables in your Tests
 
@@ -81,16 +83,16 @@ If you want to deepen your understanding of how Maestro works, explore the relat
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-studio/environments-and-variables.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-studio/environments-and-variables.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

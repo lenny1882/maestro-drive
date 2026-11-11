@@ -2,6 +2,8 @@
 
 # QuickStart
 
+Install Maestro Studio, set up your environment, and run your first automated test in five minutes.
+
 You are starting your journey with Maestro. This guide will help you install [Maestro Studio](https://docs.maestro.dev/maestro-studio/), set up your environment, and execute your first automated test (called a **Flow**) in just five minutes.
 
 {% stepper %}
@@ -86,12 +88,12 @@ Once your device is running and Maestro Studio is open, you can create your firs
 
 1. Open Maestro Studio and click **Choose new workspace location** to define the directory on your computer to store your tests.
 
-<figure><img src="/files/eHHGoJx0G5pH7ZHUZ56u" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2F8xc84a6h1ogLkSlHhMTf%2Fquickstart-1.png?alt=media&amp;token=598e81f0-bff7-4dda-a8b0-cd0e90eeb611" alt=""><figcaption></figcaption></figure>
 
 2. Click the **No device connected** button at the top. Select your running Android Emulator or iOS Simulator from the list. The virtual device will pop up.
 3. Click **Create a new test** to open the setup window.
 
-<figure><img src="/files/OmG5AdwLtTcdwwLIDWy9" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2Fjbu6uWVXKRcqPXrqw0u5%2Fquickstart-create-a-new-test.png?alt=media&amp;token=0ebb93d0-e7f3-4c7e-8ca7-1d390d0cb14d" alt=""><figcaption></figcaption></figure>
 
 4. On the **Add a new test to your workspace** window, select **Mobile Test** and enter the following:
 
@@ -101,7 +103,7 @@ Once your device is running and Maestro Studio is open, you can create your firs
 * **Name**: Name for your YAML file.
 * **App Id**: From the dropdown menu, select the App Id for testing. For this QuickStart, select **com.google.android.contacts** from the dropdown menu.
 
-<figure><img src="/files/nZhvZp1ini7rXPEn4TKt" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FdjmIiLY8CHGHo2E2eIny%2Fimage.png?alt=media&amp;token=19c5920e-0532-476f-94b4-62ea7c4b1604" alt=""><figcaption></figcaption></figure>
 {% endtab %}
 
 {% tab title="iOS" %}
@@ -109,7 +111,7 @@ Once your device is running and Maestro Studio is open, you can create your firs
 * **Name**: Name for your YAML file.
 * **App Id**: From the dropdown menu, select the App Id for testing. For this QuickStart, select **com.apple.MobileAddressBook** from the dropdown menu.
 
-<figure><img src="/files/Ohat0wCtHgDBO2Zg7Z9Y" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FzDBD9RNEdqNoOUT3y824%2Fimage.png?alt=media&amp;token=fd7b7193-a8b3-4ab2-98b1-84fd23907472" alt=""><figcaption></figcaption></figure>
 {% endtab %}
 {% endtabs %}
 
@@ -187,7 +189,7 @@ To learn about how you can structure tests, also referred to in Maestro as Flows
 
 After pasting, click **Run Locally**. Watch your virtual device execute the steps automatically. Maestro Studio will highlight each step as it succeeds or provide a failure reason if an element cannot be found.
 
-<figure><img src="/files/juNkGVxIAuPhWOk0cyQq" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2F5KsyREgrX1Xea97egCqd%2F2026-02-15_18-41-27.gif?alt=media&amp;token=10b208a1-b4f3-4296-9d25-3f28e644c786" alt=""><figcaption></figcaption></figure>
 {% endtab %}
 
 {% tab title="iOS" %}
@@ -222,7 +224,7 @@ To learn about how you can structure tests, also referred to in Maestro as Flows
 
 After pasting, click **Run Locally**. Watch your virtual device execute the steps automatically. Maestro Studio will highlight each step as it succeeds or provide a failure reason if an element cannot be found.
 
-<figure><img src="/files/cXUBcec2N2iH8vYVeOMg" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1411608689-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FCbCMt5C3rawmE9oIus7f%2Fuploads%2FtGa2Qii9wZNxzJqniVjJ%2F2026-02-15_18-26-33.gif?alt=media&amp;token=dc0a0d94-2635-4ca2-87b0-b849cfcc7055" alt=""><figcaption></figcaption></figure>
 {% endtab %}
 {% endtabs %}
 {% endstep %}
@@ -261,16 +263,16 @@ Now that you’ve seen the power of "arm's length" automation, explore these res
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/get-started/quickstart.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/get-started/quickstart.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

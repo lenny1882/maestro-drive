@@ -2,6 +2,8 @@
 
 # Run cloud tests from Maestro Studio
 
+Execute mobile tests on cloud devices directly from Maestro Studio. Select apps, pick device models, and monitor live results from the editor.
+
 Maestro Studio provides a seamless way to execute your mobile tests on cloud infrastructure without leaving your development environment. This allows you to test on various device models and OS versions while keeping your local machine free for other tasks.
 
 ### Prerequisites&#x20;
@@ -18,7 +20,7 @@ After creating your tests, you can initiate a [cloud](/maestro-cloud/readme.md) 
 1. **Run All Tests**: Click on the **Cloud tab**, and then click on the **Run All Tests** button to execute all root-level tests in your workspace.
 2. **Run a Single Test**: Open a specific test file in the editor and click on the **Cloud** tab, then click on **Run Test**.
 
-<figure><img src="/files/6tRKyOtUP3P0RFRzyJvq" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://173198800-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FeQi66gxHTt2vx4HjhM9V%2Fuploads%2FsIFdgigmNfEyoUjWIqFs%2Fcloud.gif?alt=media&amp;token=7cab6a32-0804-4152-bcbb-cf0cc70ddc0f" alt=""><figcaption></figcaption></figure>
 {% endstep %}
 
 {% step %}
@@ -30,7 +32,7 @@ Clicking on **Cloud,** and then on **Run Test**, opens a configuration modal. Yo
 * **Device**: Select the specific device model and API level for your test (e.g., Pixel 6 - API 34).
 * **App Selection**: Select your application. If this is your first time testing the app, click the app selector and choose **Upload App File** to pick your `.apk` or `.app` bundle.
 
-<figure><img src="/files/lQvstqP8Za75dabAAGwi" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://173198800-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FeQi66gxHTt2vx4HjhM9V%2Fuploads%2F8QhtCQRqPRtP2YUc5YSm%2FScreenshot%202026-04-21%20at%2019.03.33.png?alt=media&amp;token=5e6bfbe8-3f70-42e5-9987-36468c083427" alt=""><figcaption></figcaption></figure>
 
 For more advanced testing scenarios, you can expand **More Options** to select:
 
@@ -68,7 +70,7 @@ To deep-dive into a specific run, click the **View on Maestro Cloud** button in 
 * Review the screen recording of the execution.
 * Access detailed logs and UI hierarchy data for debugging.
 
-<figure><img src="/files/DWPwsZYyThAleToS55rh" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://173198800-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FeQi66gxHTt2vx4HjhM9V%2Fuploads%2FfqQS2EDmrThQbCuOfcYj%2Frun-on-cloud-dashboard.png?alt=media&amp;token=471d2026-5fe7-4802-b338-f31b2fd06f94" alt=""><figcaption></figcaption></figure>
 {% endstep %}
 {% endstepper %}
 
@@ -79,16 +81,16 @@ To deep-dive into a specific run, click the **View on Maestro Cloud** button in 
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-studio/run-cloud-tests-from-maestro-studio.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-studio/run-cloud-tests-from-maestro-studio.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

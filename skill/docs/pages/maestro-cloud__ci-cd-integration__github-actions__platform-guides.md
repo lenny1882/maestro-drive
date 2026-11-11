@@ -2,13 +2,15 @@
 
 # Platform guides
 
+Set up Maestro Cloud GitHub Actions for Android, iOS, and Flutter.
+
 This guide covers platform-specific configurations for setting up Maestro Cloud GitHub Actions.
 
 {% tabs %}
 {% tab title="Android" %}
 To run tests on Android, you generally need to build an ARM compatible APK (typically a debug build) and upload it to Maestro Cloud.
 
-**Build command**
+#### Build command
 
 Use Gradle to assemble your debug APK before the Maestro step.
 
@@ -21,7 +23,7 @@ Use Gradle to assemble your debug APK before the Maestro step.
 - run: ./gradlew assembleDebug
 ```
 
-**Action configuration**
+#### Action configuration
 
 Point the `app-file` to your generated APK.
 
@@ -37,7 +39,7 @@ Point the `app-file` to your generated APK.
 The `app-file` path supports glob patterns. If multiple files match, the first one is used.
 {% endhint %}
 
-**ProGuard deobfuscation**
+#### ProGuard deobfuscation
 
 If your app uses ProGuard/R8, you should upload the mapping file to deobfuscate performance traces and error logs.
 
@@ -50,7 +52,7 @@ If your app uses ProGuard/R8, you should upload the mapping file to deobfuscate 
     mapping-file: app/build/outputs/mapping/release/mapping.txt
 ```
 
-**Specifying the Android OS version and device**
+#### Specifying the Android OS version and device
 
 The default API level on Maestro Cloud is 33 (Android 13). You can override the OS version and the device model using `device-os` and `device-model`:
 
@@ -65,9 +67,9 @@ with:
 The `android-api-level` input is deprecated in favor of `device-os`. Run `maestro list-cloud-devices` to see all supported Android device models and OS versions.
 {% endhint %}
 
-**Complete example for Android**
+#### Complete example for Android
 
-The following code snippet shows a complete GitHub Action to build your Android app and test is using Maestro Cloud.
+The following code snippet shows a complete GitHub Action to build your Android app and test it using Maestro Cloud.
 
 ```yaml
 name: Build and run Maestro tests (Native Android)
@@ -103,7 +105,7 @@ jobs:
 {% tab title="iOS" %}
 To run tests on iOS, you must build your app for the iOS Simulator. Real device builds (ARM64 only) are not supported on the Cloud emulators.
 
-**Build command**
+#### Build command
 
 You must specify `-destination 'generic/platform=iOS Simulator'` to ensure the build is compatible with Maestro Cloud simulators.
 
@@ -118,7 +120,7 @@ You must specify `-destination 'generic/platform=iOS Simulator'` to ensure the b
       CONFIGURATION_BUILD_DIR=$PWD/build
 ```
 
-**Action configuration**
+#### Action configuration
 
 Point the `app-file` to the `.app` bundle generated in your build directory.
 
@@ -130,7 +132,7 @@ Point the `app-file` to the `.app` bundle generated in your build directory.
     app-file: build/MyApp.app
 ```
 
-**Uploading symbol files (.dSYM)**
+#### Uploading symbol files (.dSYM)
 
 To get symbolicated stack traces, include the generated `.dSYM` file.
 
@@ -143,7 +145,7 @@ To get symbolicated stack traces, include the generated `.dSYM` file.
     mapping-file: build/MyApp.app.dSYM
 ```
 
-**Specify the iOS Version and device**
+#### Specify the iOS Version and device
 
 The default iOS version is 16. You can specify a different OS version or device model if needed, using `device-os` and `device-model` respectively:
 
@@ -158,9 +160,9 @@ with:
 The `ios-version` input is deprecated in favor of `device-os`. Run `maestro list-cloud-devices` to see all supported iOS device models and OS versions.
 {% endhint %}
 
-**Complete example for iOS**
+#### Complete example for iOS
 
-The following code snippet shows a complete GitHub Action to build your iOS app and test is using Maestro Cloud.
+The following code snippet shows a complete GitHub Action to build your iOS app and test it using Maestro Cloud.
 
 ```yaml
 name: Build and run Maestro tests (Native iOS)
@@ -190,7 +192,7 @@ jobs:
 {% tab title="Flutter" %}
 Flutter requires specific build flags to generate binaries compatible with Maestro Cloud.
 
-**Flutter Android**
+#### Flutter Android
 
 Build the APK in debug mode.
 
@@ -221,7 +223,7 @@ jobs:
           app-file: build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-**Flutter iOS**
+#### Flutter iOS
 
 Build the iOS app for the simulator.
 
@@ -267,16 +269,16 @@ jobs:
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions/platform-guides.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-cloud/ci-cd-integration/github-actions/platform-guides.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

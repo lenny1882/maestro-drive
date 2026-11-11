@@ -2,7 +2,7 @@ name: Release
 
 # Cutting a release is: push a vX.Y.Z tag from its release/vX.x branch. This
 # turns that tag into a GitHub Release with auto-generated notes, which is
-# what update.sh and lib/update-check.sh read via /releases/latest.
+# what update.sh and bin/update-notice.sh read via /releases/latest.
 #
 # GitHub fires this on any vX.Y.Z tag push, regardless of branch — a tag push
 # and a branch push are separate ref events, so `on.push` can't require the

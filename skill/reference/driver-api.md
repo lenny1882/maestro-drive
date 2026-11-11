@@ -93,8 +93,11 @@ gives each body) and then exercised against the live driver:
 | `isScreenStatic` | GET | yes — `{"isScreenStatic":true}` |
 | `keyboard` | `{"appIds":[...]}` | yes — `{"isKeyboardVisible":true}` |
 | `runningApp` | `{"appIds":[...]}` | yes — returns whichever of the given ids is in front, else `com.apple.springboard`; it cannot name an app not in the list (item 104) |
-| `installedApps`, `setPermissions` | — | not exercised |
+| `setPermissions` | `{"permissions":{"notifications":"allow"}}` | 200 on simulator and phone. A bad body is 400; an unknown value is accepted. The driver reads only the `notifications` key, and taps the alert during a hierarchy read while springboard is in front. Its effect on a live alert was not exercised |
+| `installedApps` | — | named by the client, **404 on this driver**, simulator and phone |
 | `keyboardInfo` | — | named by the client, **404 on this driver** |
+
+The routes above were run again on Maestro 2.12.1's runner on 5 Nov 2026 and behaved as described.
 
 All of it is in `bin/driver.sh`: `tap`, `text`, `key`, `button`, `erase`,
 `swipe`, `orient`, `launch`, `kill`, `static`, `keyboard`, `app`.
@@ -486,22 +489,20 @@ none. It exits the moment its stdin closes — that is the shutdown signal, and
 the same pipe is how input events are written to it. Two instances can run
 against one device, each taking its own port.
 
-It loads Apple's private SimulatorKit from a path compiled into the binary,
-`/Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks/`.
-**Xcode 27 deleted that directory** and moved SimulatorKit to
-`Contents/SharedFrameworks`, so every stream fails with "simulator-server exited
-before announcing stream_ready" until the path is put back:
+It loads Apple's private SimulatorKit relative to the Xcode root. **Xcode 27
+moved it** from `Contents/Developer/Library/PrivateFrameworks` to
+`Contents/SharedFrameworks`. Maestro 2.12.1's binary looks in both places. Older
+binaries look only in the old one, and every stream fails with `SimulatorKit could
+not be loaded`, then `Failed to initialize iOS simulator bridge`. 2.10.0's binary
+is byte-identical to 2.8.0's; versions between 2.10.0 and 2.12.1 were not measured.
 
-```sh
-sudo mkdir -p /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks
-sudo ln -s /Applications/Xcode.app/Contents/SharedFrameworks/SimulatorKit.framework \
-           /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks/
-```
+The fix is Maestro 2.12.1 or later, which needs no sudo and does not depend on
+Xcode's layout beyond those two places. `bin/wall.sh status` prints the commands.
+Measured on 5 Nov 2026 on Xcode 27.1 and 27.2. The Maestro install leaves
+`~/.maestro/deps/simulator-server` alone until something unpacks it, so check with
+`simulator-server verify`, which reports which way round it is. On older Maestro
+a sudo symlink at the old path also works, until an Xcode update removes it.
 
-`simulator-server verify` reports which way round it is. `DEVELOPER_DIR` does
-not steer the lookup — tested against a full shim Xcode tree, with
-`xcode-select -p` confirmed to be honouring it, and the reported path did not
-move. Upgrading Maestro does not help either: 2.10.0's copy of the binary is
-byte-identical to 2.8.0's, same SHA-256, same hardcoded path. Xcode is an App
-Store install, so an Xcode update removes the symlink again.
+None of these steer the 2.8.0 binary's lookup: `DEVELOPER_DIR`, tested against a
+shim Xcode tree, and `DYLD_FRAMEWORK_PATH`.
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# For real Maestro flows on a chosen device. The MCP `run` tool is ~2.2s for a
-# two-action flow against ~17.6s here, but it can only address the device on
-# port 22087, whereas --device here works.
+# For real Maestro flows on a chosen device. The MCP `run` tool is ~4.3s for a
+# two-action flow against ~10.8s here, but one MCP session stays on the first
+# device it reached and ignores later device ids, whereas --device here works.
 #
 # Either way it costs that device its driver. Measured: Maestro
 # terminates the runner for the device it was given when the command finishes,
@@ -22,7 +22,7 @@
 #   ./flow.sh -s shot1 <<'YAML' ... YAML   # also fetch a screenshot
 #
 # Batch aggressively. Maestro pays its full startup (JVM ~2.5s, plus iOS driver
-# connect — 15-30s all in) on EVERY invocation, whether the flow has one step
+# connect — about 11s all in) on EVERY invocation, whether the flow has one step
 # or thirty. One journey per call, not one tap per call.
 #
 # Assert inside the flow. Maestro reports COMPLETED for a tap that landed on
@@ -73,6 +73,7 @@ $(cat)"
 fi
 
 d=$(_dev) || exit 1
+_no_phone "$d" || exit 2
 
 POST=""
 [ "$QUIET" -eq 0 ] && POST="

@@ -101,19 +101,31 @@ turning it by hand takes several `sips` calls.
 
 `maestro mcp` is registered as a user-scope MCP server (`maestro-mac`), running
 over SSH. The harness holds one session open for the whole conversation, so one
-JVM and one driver session serve every call. Measured on that Mac:
+JVM and one driver session serve every call. Measured on 5 Nov 2026 on Maestro
+2.12.1 and Xcode 27.2, against an iPhone 16 Pro simulator on iOS 18.6:
 
 | operation | via MCP | as a fresh CLI call |
 | --- | --- | --- |
-| `inspect_screen`, first call | 4.1–5.1 s | — |
-| **`inspect_screen`, thereafter** | **0.19–0.36 s** | 7.7 s (`maestro hierarchy`) |
-| `run`, one action | 1.1–2.7 s | — |
-| `run`, three actions | 3.6 s (~1.2 s each) | — |
-| two-action flow | ~2.2 s | 17.6 s (`flow.sh`) |
-| flow + hierarchy | ~2.4 s | 22.5 s |
+| `inspect_screen`, first call | 3.15–3.16 s | — |
+| **`inspect_screen`, thereafter** | **0.23–0.38 s** | 5.2–5.9 s (`maestro hierarchy`) |
+| `run`, one action | 1.2–1.5 s | — |
+| `run`, three actions | 4.4–4.6 s (~1.5 s each) | — |
+| two-action flow | 4.2–4.4 s | 10.8 s (`flow.sh -q`) |
+| flow + hierarchy | 4.4–4.6 s | 17.2–19.3 s (`flow.sh`) |
 
-Reading the screen is roughly 40x cheaper over MCP: 100 Maestro-bearing calls
-that take 35.3 minutes as fresh CLI calls take 3–4 minutes.
+Reading the screen is roughly 20x cheaper over MCP. A hundred flows that each
+read the screen afterwards take about 30 minutes as fresh CLI calls and about
+7.5 minutes over MCP.
+
+One MCP session serves one device. Measured with two simulators booted: after
+the session has reached a device, `inspect_screen` with the other's `device_id`
+answers from the first, without an error. With a driver live on port 22087, a
+session's first call read that driver's device whatever id it was given.
+
+Stop the device's `drivers.sh` driver first. With one up, the same MCP session
+failed at its tenth call with `Device became unreachable`, three runs out of three,
+and every call after that failed too. With `drivers.sh down` first, all 16 calls
+passed, three runs out of three.
 
 The CLI path (`bin/flow.sh`, `bin/hier.sh`) still works, and unlike the MCP
 server it honours `--device`. Everything below applies to all three paths.
@@ -441,9 +453,9 @@ clear "^(Search|[0-9]{8,})$"
 text "${BARCODE}"
 ```
 
-`clear` long-presses the element, taps "Select All" from the iOS edit menu,
-and deletes the selection — the only reliable way to empty a field whose caret
-position is unknown. `erase [n]` deletes backwards from the caret and leaves
+`clear` long-presses the element, taps "Select All" from the iOS edit menu, and
+deletes the selection — the only reliable way to empty a field whose caret
+position is unknown. It then reads the field back and fails if text is still there. `erase [n]` deletes backwards from the caret and leaves
 anything ahead of it; `erase --all` sends 9999 backspaces, which helps only
 when the caret is already at the end. Prefer `clear` for replacing a field's
 contents.

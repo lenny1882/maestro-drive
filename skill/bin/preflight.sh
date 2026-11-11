@@ -15,6 +15,7 @@ d=$(_dev) || exit 1
 # without -w0, which macOS's base64 does not have.
 AC=$(base64 < "$(dirname "$0")/../remote/appcheck.sh" | tr -d '\n')
 GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
+UC=$(base64 < "$(dirname "$0")/../remote/upgradecheck.sh" | tr -d '\n')
 
 # "Is a dev session live, and what is lost when it is not" is the framework's
 # question, not this script's: React Native looks for Metro, a plain Xcode app
@@ -27,6 +28,13 @@ GS=$(base64 < "$(dirname "$0")/../remote/gitstate.sh" | tr -d '\n')
 FW=$("$(dirname "$0")/runner.sh" rpath framework) || exit 1
 
 _ssh "
+if [ '${PLATFORM:-ios}' != android ]; then
+  echo '== maestro upgrade =='
+  printf '%s' '$UC' | base64 -d > '$RDIR/upgradecheck.sh' 2>/dev/null
+  # Run with sh, do NOT source — same reason as gitstate.sh below.
+  sh '$RDIR/upgradecheck.sh'
+  echo
+fi
 # The framework's residue list, if it has one. Only an exit 0 overrides
 # gitstate.sh's own default: a module that exits 2 has no opinion, and taking
 # its empty output as 'nothing is residue' would quietly reclassify every lock

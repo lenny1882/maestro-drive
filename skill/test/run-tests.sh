@@ -604,7 +604,7 @@ mkdir -p "$TMP/dckit/bin" "$TMP/dckit/docs"
 cp "$REPO/bin/docs-check.sh" "$TMP/dckit/bin/"
 printf '_ssh(){ echo 2.8.0; }\nMAC_HOST=x; MAC_FQDN=x; APP_ID=x; SSH_OPTS=(-o X=y)\n' > "$TMP/dckit/bin/lib.sh"
 
-printf 'MAESTRO_VERSION=2.8.0\nMIRRORED=2026-08-11\nPAGES=154\n' > "$TMP/dckit/docs/VERSION"
+printf 'MAESTRO_VERSION=2.12.1\nMIRRORED=2026-11-05\nPAGES=163\n' > "$TMP/dckit/docs/VERSION"
 out=$(bash "$TMP/dckit/bin/docs-check.sh" --quiet 2>&1)
 case "$out" in
   *"KNOWN-WRONG"*"physical iOS"*"device.sh"*) ok "the pinned mirror's physical-iOS denial is surfaced as known-wrong" ;;
@@ -616,6 +616,11 @@ out=$(bash "$TMP/dckit/bin/docs-check.sh" --quiet 2>&1)
 case "$out" in
   *"KNOWN-WRONG"*) no "the known-wrong list is gated on the pinned version" "printed for the wrong version" ;;
   *) ok "the known-wrong list is gated on the pinned version" ;;
+esac
+# A refresh turned that list off without a word (item 129), so the gate says so.
+case "$out" in
+  *"last checked against Maestro 2.12.1, this mirror is 9.9.9"*) ok "a mirror past the known-wrong list says the list needs re-checking" ;;
+  *) no "a mirror past the known-wrong list says the list needs re-checking" "got: $out" ;;
 esac
 
 echo
@@ -670,6 +675,25 @@ cat > "$TMP/typed-secure.json" <<'JSON'
 JSON
 $T "1234" < "$TMP/typed-secure.json" >/dev/null 2>&1
 [ $? = 0 ] && ok "a focused secure field suspends the check" || no "a focused secure field suspends the check" "it cried wolf"
+
+# Nothing focused but the caller knows where it tapped (item 148), which is every
+# field measured on 2.12.1.
+TF(){ printf '{"axElement":{"elementType":2,"children":[%s]}}' "$1"; }
+F1='{"elementType":49,"value":"%s","frame":{"X":10,"Y":100,"Width":300,"Height":50}}'
+fld(){ printf "$F1" "$1"; }
+TF "$(fld LOC1)" | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: text in the tapped field passes" || no "by point: text in the tapped field passes" "failed"
+out=$(TF "$(fld 4001LOC1)" | $T LOC1 20 110 2>&1); rc=$?
+[ "$rc" = 1 ] && case "$out" in *'holds "4001LOC1"'*) true ;; *) false ;; esac && ok "by point: an appended value fails and says what is there" || no "by point: an appended value fails and says what is there" "rc=$rc $out"
+TF "$(fld "")" | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 1 ] && ok "by point: an empty field fails" || no "by point: an empty field fails" "passed"
+TF "$(fld LOC1)" | $T LOC1 390 800 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: a field that moved is still found by its text" || no "by point: a field that moved is still found by its text" "failed"
+TF "$(fld other)" | $T LOC1 390 800 >/dev/null 2>&1; [ $? = 1 ] && ok "by point: no field holding the text fails" || no "by point: no field holding the text fails" "passed"
+TF '{"elementType":48,"label":"LOC1"}' | $T LOC1 20 110 >/dev/null 2>&1; [ $? = 0 ] && ok "by point: no field on screen passes and says so" || no "by point: no field on screen passes and says so" "failed"
+TF '{"elementType":49,"value":"","frame":{"X":10,"Y":100,"Width":300,"Height":50}},{"elementType":48,"label":"LOC1"}' | $T LOC1 20 110 >/dev/null 2>&1
+[ $? = 1 ] && ok "by point: a menu row with the text does not pass" || no "by point: a menu row with the text does not pass" "passed"
+TF '{"elementType":50,"value":"••••","frame":{"X":10,"Y":100,"Width":300,"Height":50}}' | $T 1234 20 110 >/dev/null 2>&1
+[ $? = 0 ] && ok "by point: a secure field suspends the check" || no "by point: a secure field suspends the check" "failed"
+TF '{"elementType":49,"hasFocus":true,"value":"other","frame":{"X":10,"Y":100,"Width":300,"Height":50}},{"elementType":49,"value":"LOC1","frame":{"X":10,"Y":200,"Width":300,"Height":50}}' | $T LOC1 20 210 >/dev/null 2>&1
+[ $? = 1 ] && ok "a focused field still wins over the point" || no "a focused field still wins over the point" "passed"
 
 # Nothing focused: no field to read, so it says so and passes rather than a
 # tree-wide search that is not really a check.
@@ -975,7 +999,7 @@ echo "an action and the read after it are one round trip"
 # load. A stub curl and a stub lib.sh give it a whole fake device, which is what
 # lets the --tree flag and the settle-after-acting rule be checked at all.
 DBIN="$TMP/dbin"; mkdir -p "$DBIN"
-cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" \
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/fieldvalue.py" \
    "$REPO/bin/jtok.py" "$DBIN/"
 cat > "$DBIN/lib.sh" <<'LIBSH'
 # config.sh defines these and a stub lib.sh replaces config.sh (item 96, 1.3).
@@ -1803,6 +1827,8 @@ w=$(why "[FlyingFox] server error: SocketError. Bind(49): Can't assign requested
 case "$w" in *"was rebuilt with a new address"*) ok "a gone tunnel address is named" ;; *) no "a gone tunnel address is named" "got: $w" ;; esac
 w=$(why 'ScreenSizeHelper.swift:99: Fatal error: Not implemented yet\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"FACE-UP crash"*) ok "the face-up crash is named at bring-up" ;; *) no "the face-up crash is named at bring-up" "got: $w" ;; esac
+w=$(why 'Failed to initialize for UI testing: Timed out while enabling automation mode.\n** TEST EXECUTE FAILED **\n')
+case "$w" in *"waiting for"*"input"*) ok "a phone that would not enter automation mode says to look at it" ;; *) no "a phone that would not enter automation mode says to look at it" "got: $w" ;; esac
 w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"XCTest session dying (item 46)"*) ok "anything else is item 46's session death" ;; *) no "anything else is item 46's session death" "got: $w" ;; esac
 
@@ -4647,6 +4673,517 @@ perm_set "$PA/home/.claude/settings.json" 'not json {'
     'mkdir -p "$LDIR"; . '"$REPO"'/bin/config.sh' ) >/dev/null 2>&1 \
   && ok "allows: a malformed settings.json does not stop the skill loading" \
   || no "allows: a malformed settings.json does not stop the skill loading" "config.sh returned non-zero"
+
+echo
+echo "driver.sh text types, and --index works as the refusal says (items 130, 111)"
+# Its own stub: tests above this point rewrite the shared one.
+mkdir -p "$TMP/stub130"
+cat > "$TMP/stub130/curl" <<'CURLSH'
+#!/usr/bin/env bash
+prev=; for a in "$@"; do
+  case "$a" in http*) url=$a ;; esac
+  [ "$prev" = -d ] && body=$a; prev=$a
+done
+echo "$url ${body:-}" >> "$CURL_LOG"
+case "$url" in
+  */status)          printf '200' ;;
+  */isScreenStatic)  printf '{"isScreenStatic":true}' ;;
+  */deviceInfo)      printf '{"widthPoints":402,"heightPoints":874}' ;;
+  */viewHierarchy)   cat "$FIXTURE" ;;
+  *)                 printf '{}' ;;
+esac
+CURLSH
+chmod +x "$TMP/stub130/curl"
+D130="$TMP/d130"; mkdir -p "$D130"
+cp "$REPO/bin/driver.sh" "$REPO/bin/tree.py" "$REPO/bin/resolve.py" "$REPO/bin/typed.py" "$REPO/bin/fieldvalue.py" "$REPO/bin/jtok.py" "$D130/"
+cat > "$D130/lib.sh" <<'LIBSH'
+_fs_shared()  { [ "${TRANSPORT:-ssh}" != ssh ]; }
+_ports_here() { [ "${TRANSPORT:-ssh}" = local ]; }
+MAC_FQDN=stub.invalid; APP_ID=test.app; DEV=stub; DPORT=1; DRIVER_PORT=1
+DRIVER_PORT_BASE=1; RDIR=/tmp/none; JOURNEY_DIR=/tmp/none; SSH_OPTS=(-o X=y)
+_driver_base(){ printf 'http://%s:%s' "$MAC_FQDN" "$DPORT"; }
+RHELP=/tmp/none; RMODS=/tmp/none/runners; DEVICE_MAP=/tmp/none/devmap; PLATFORM_SH=/x/platform.sh
+_driver_bind(){ return 0; }
+_ssh(){ return 0; }
+_push(){ return 0; }
+_dev(){ echo stub; }
+LIBSH
+drv(){ PATH="$TMP/stub130:$PATH" CURL_LOG="$TMP/curl.log" \
+       FIXTURE="$FIX/iphone-portrait-keyboard-up.json" bash "$D130/driver.sh" "$@" 2>&1; }
+: > "$TMP/curl.log"
+out=$(drv text hello there)
+grep -q 'inputText.*hello there' "$TMP/curl.log" \
+  && ok "text with an argument types it" \
+  || no "text with an argument types it" "$(cat "$TMP/curl.log" | head -5): $out"
+: > "$TMP/curl.log"
+out=$(drv text)
+grep -q inputText "$TMP/curl.log" \
+  && no "text with no argument reads and types nothing" "it posted inputText" \
+  || { case "$out" in
+         *SCAN*) ok "text with no argument reads and types nothing" ;;
+         *) no "text with no argument reads and types nothing" "$out" ;;
+       esac; }
+a=$(drv point e 10); b=$(drv point e --index 10); c=$(drv point e --index=10)
+case "$a" in [0-9]*" "[0-9]*) : ;; *) a= ;; esac
+[ -n "$a" ] && [ "$a" = "$b" ] && [ "$a" = "$c" ] \
+  && ok "--index N and --index=N pick what the positional index picks" \
+  || no "--index N and --index=N pick what the positional index picks" "'$a' '$b' '$c'"
+case "$(drv tapon e --index)" in
+  *"--index needs a number"*) ok "--index with nothing after it says so" ;;
+  *) no "--index with nothing after it says so" "$(drv tapon e --index)" ;;
+esac
+
+echo
+echo "clear finds a two-node Select All and reads the field back (item 145)"
+C145="$TMP/c145"; mkdir -p "$C145/stub"
+field(){ printf '{"elementType":49,"label":"%s","value":"%s","frame":{"X":10,"Y":100,"Width":300,"Height":50},"children":[]}' "$1" "$2"; }
+menu='{"elementType":9,"label":"Select All","frame":{"X":10,"Y":40,"Width":96,"Height":44},"enabled":true,"children":[]},{"elementType":48,"label":"Select All","frame":{"X":20,"Y":50,"Width":64,"Height":18},"enabled":true,"children":[]}'
+tree(){ printf '{"axElement":{"elementType":0,"label":"","frame":{"X":0,"Y":0,"Width":402,"Height":874},"children":[%s]},"depth":1}' "$1"; }
+tree "$(field "" 777),$menu" > "$C145/full.json"
+tree "$(field Search "")" > "$C145/empty.json"
+tree "$(field "" 777)" > "$C145/nomenu.json"
+cat > "$C145/stub/curl" <<'CURLSH'
+#!/usr/bin/env bash
+prev=; for a in "$@"; do
+  case "$a" in http*) url=$a ;; esac
+  [ "$prev" = -d ] && body=$a; prev=$a
+done
+echo "$url ${body:-}" >> "$CURL_LOG"
+case "$url" in
+  */status)          printf '200' ;;
+  */isScreenStatic)  printf '{"isScreenStatic":true}' ;;
+  */deviceInfo)      printf '{"widthPoints":402,"heightPoints":874}' ;;
+  */viewHierarchy)   if grep -q eraseText "$CURL_LOG"; then cat "$FIXTURE_AFTER"; else cat "$FIXTURE"; fi ;;
+  *)                 printf '{}' ;;
+esac
+CURLSH
+chmod +x "$C145/stub/curl"
+clr(){ : > "$TMP/curl.log"; PATH="$C145/stub:$PATH" CURL_LOG="$TMP/curl.log" FIXTURE="$1" FIXTURE_AFTER="$2" bash "$D130/driver.sh" clear 777 2>&1; }
+out=$(clr "$C145/full.json" "$C145/empty.json"); rc=$?
+[ "$rc" = 0 ] && grep -q eraseText "$TMP/curl.log" \
+  && ok "two Select All nodes: it selects, erases and passes" \
+  || no "two Select All nodes: it selects, erases and passes" "rc=$rc $out"
+out=$(clr "$C145/full.json" "$C145/full.json"); rc=$?
+[ "$rc" != 0 ] && case "$out" in *"still holds '777'"*) true ;; *) false ;; esac \
+  && ok "text still there after the erase fails and says what it holds" \
+  || no "text still there after the erase fails and says what it holds" "rc=$rc $out"
+out=$(clr "$C145/nomenu.json" "$C145/nomenu.json"); rc=$?
+[ "$rc" != 0 ] && ! grep -q eraseText "$TMP/curl.log" \
+  && ok "no menu over a field holding text fails, where it used to pass" \
+  || no "no menu over a field holding text fails, where it used to pass" "rc=$rc $out"
+FV(){ python3 "$REPO/bin/fieldvalue.py" "$@"; }
+[ -z "$(tree "$(field Search "")" | FV 20 110)" ] && ok "fieldvalue: an empty field's label is not its value" || no "fieldvalue: an empty field's label is not its value" "$(tree "$(field Search "")" | FV 20 110)"
+[ -z "$(tree "$(field "" 777)" | FV 390 860)" ] && ok "fieldvalue: no field at the point prints nothing" || no "fieldvalue: no field at the point prints nothing" ""
+ph='{"elementType":45,"label":"Search","value":"Search","placeholderValue":"Search","frame":{"X":10,"Y":100,"Width":300,"Height":50},"children":[]}'
+[ -z "$(tree "$ph" | FV 20 110)" ] && ok "fieldvalue: a value equal to the placeholder counts as empty" || no "fieldvalue: a value equal to the placeholder counts as empty" "$(tree "$ph" | FV 20 110)"
+
+echo
+echo "type takes an index before the pattern (item 134)"
+touch_of(){ grep -o '"x":[^,]*,"y":[^,}]*' "$TMP/curl.log" | head -1; }
+typed_of(){ grep -o '"text":"[^"]*"' "$TMP/curl.log" | head -1; }
+pt=$(drv point e --index 10); want="\"x\":${pt% *},\"y\":${pt#* }"
+for form in "--index 10" "--index=10"; do
+  : > "$TMP/curl.log"
+  # shellcheck disable=SC2086
+  out=$(TYPE_VERIFY=0 drv type $form e hello there)
+  grep -q "touch.*$want" "$TMP/curl.log" && [ "$(typed_of)" = '"text":"hello there"' ] \
+    && ok "type $form taps match 10 and types all the text" \
+    || no "type $form taps match 10 and types all the text" "$out: $(cat "$TMP/curl.log" | tail -5)"
+done
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type --index 10 e --index 3)
+[ "$(typed_of)" = '"text":"--index 3"' ] \
+  && ok "--index after the pattern is text, and is typed" \
+  || no "--index after the pattern is text, and is typed" "$out: $(typed_of)"
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type e hello)
+case "$out" in
+  *"pass --index"*) grep -q inputText "$TMP/curl.log" \
+    && no "type on an ambiguous pattern with no index refuses" "it typed" \
+    || ok "type on an ambiguous pattern with no index refuses" ;;
+  *) no "type on an ambiguous pattern with no index refuses" "$out" ;;
+esac
+for bad in "--index" "--index 10" "--index 10 e" "--index=10 e" "e"; do
+  : > "$TMP/curl.log"
+  # shellcheck disable=SC2086
+  out=$(TYPE_VERIFY=0 drv type $bad)
+  case "$out" in
+    *"usage:"*"type [--index n]"*) grep -q touch "$TMP/curl.log" \
+      && no "type $bad gives usage and taps nothing" "it tapped" \
+      || ok "type $bad gives usage and taps nothing" ;;
+    *) no "type $bad gives usage and taps nothing" "$out" ;;
+  esac
+done
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv script --steps 'type --index 10 e hello there')
+grep -q "touch.*$want" "$TMP/curl.log" && [ "$(typed_of)" = '"text":"hello there"' ] \
+  && ok "the journey step takes --index" \
+  || no "the journey step takes --index" "$out: $(tail -5 "$TMP/curl.log")"
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv script --steps 'type --index 10 e')
+case "$out" in
+  *"type needs a pattern and some text"*) grep -q touch "$TMP/curl.log" \
+    && no "the journey step with no text refuses before tapping" "it tapped" \
+    || ok "the journey step with no text refuses before tapping" ;;
+  *) no "the journey step with no text refuses before tapping" "$out" ;;
+esac
+: > "$TMP/curl.log"
+out=$(TYPE_VERIFY=0 drv type --tree --index 10 e hello)
+[ "$(typed_of)" = '"text":"hello"' ] \
+  && ok "--tree goes before --index" \
+  || no "--tree goes before --index" "$out: $(typed_of)"
+
+echo
+echo "bench.sh gives ssh one alias (item 132)"
+B132="$TMP/b132"; mkdir -p "$B132/bin" "$B132/stub"
+cp "$REPO/bin/bench.sh" "$B132/bin/"
+cat > "$B132/bin/lib.sh" <<'LIBSH'
+MAC_HOST="mac-a mac-b mac-c"; SSH_OPTS=(-o X=y)
+_fs_shared(){ return 1; }
+_dev(){ echo stub; }
+_pick_host(){ MAC_HOST=mac-b; }
+_ssh(){ if [ -n "${BENCH_REMOTE:-}" ]; then bash -c "$1"; else return 0; fi; }
+LIBSH
+sed -n '/^_no_phone()/,/^}/p' "$REPO/bin/lib.sh" >> "$B132/bin/lib.sh"
+cat > "$B132/stub/ssh" <<'SSHSH'
+#!/usr/bin/env bash
+for a in "$@"; do printf '[%s]' "$a"; done >> "$SSH_LOG"; echo >> "$SSH_LOG"
+SSHSH
+chmod +x "$B132/stub/ssh"
+: > "$B132/ssh.log"
+out=$(PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" 2>&1)
+case "$out" in
+  *"ended stub's driver"*"drivers.sh up stub"*) ok "bench.sh says it ended the driver and how to bring it back" ;;
+  *) no "bench.sh says it ended the driver and how to bring it back" "$out" ;;
+esac
+[ "$(grep -c '\[mac-b\]\[true\]$' "$B132/ssh.log")" = 3 ] && ! grep -q 'mac-a' "$B132/ssh.log" \
+  && ok "each round trip goes to the one picked alias" \
+  || no "each round trip goes to the one picked alias" "$(cat "$B132/ssh.log")"
+
+cat > "$B132/stub/maestro" <<'STUB'
+#!/bin/sh
+case "$*" in *hierarchy*) echo "Device with id stub is not connected" >&2; exit 1 ;; esac
+exit 0
+STUB
+chmod +x "$B132/stub/maestro"
+out=$(BENCH_REMOTE=1 PATH="$B132/stub:$PATH" SSH_LOG="$B132/ssh.log" bash "$B132/bin/bench.sh" 2>&1); rc=$?
+case "$out" in
+  *"run 1: FAILED: Device with id stub is not connected"*"are not timings"*)
+    case "$out" in
+      *"ended stub's driver"*) no "a failed hierarchy is reported as failed, not timed" "it still claims the driver ended" ;;
+      *) [ "$rc" = 1 ] && ok "a failed hierarchy is reported as failed, not timed" || no "a failed hierarchy is reported as failed, not timed" "rc=$rc" ;;
+    esac ;;
+  *) no "a failed hierarchy is reported as failed, not timed" "$out" ;;
+esac
+
+echo
+echo "the CLI scripts refuse a phone before Maestro does (item 150)"
+NP(){ bash -c 'sed -n "/^_no_phone()/,/^}/p" "$1" > "$2"; . "$2"; PLATFORM=$3 _no_phone "$4"' _ "$REPO/bin/lib.sh" "$B132/np.sh" "$1" "$2" 2>&1; }
+case "$(NP ios 00008020-000A396C3606002E)" in
+  *"is a phone"*"bin/device.sh up 00008020-000A396C3606002E"*) ok "an iPhone id is refused and pointed at device.sh" ;;
+  *) no "an iPhone id is refused and pointed at device.sh" "$(NP ios 00008020-000A396C3606002E)" ;;
+esac
+[ -z "$(NP ios C61983AE-1974-4ACD-8087-8FD849CF89B1)" ] && ok "a simulator id passes" || no "a simulator id passes" "refused"
+[ -z "$(NP android 00008020-000A396C3606002E)" ] && ok "an Android serial of that shape passes" || no "an Android serial of that shape passes" "refused"
+[ -z "$(NP ios emulator-5554)" ] && ok "an emulator id passes" || no "an emulator id passes" "refused"
+for f in flow hier bench; do
+  grep -q '^_no_phone "\$d" || exit 2$' "$REPO/bin/$f.sh" \
+    && ok "$f.sh checks before it calls Maestro" || no "$f.sh checks before it calls Maestro" "no call"
+done
+
+echo
+echo "preflight says when an upgrade was left unfinished (item 151)"
+UC="$TMP/uc"; mkdir -p "$UC/home/.maestro/lib" "$UC/home/.maestro/deps" "$UC/bin"
+: > "$UC/home/.maestro/lib/maestro-cli-2.12.1.jar"
+cat > "$UC/bin/unzip" <<'STUB'
+#!/bin/sh
+echo jar-binary
+STUB
+chmod +x "$UC/bin/unzip"
+ucr(){ PATH="$UC/bin:$PATH" HOME="$UC/home" sh "$REPO/remote/upgradecheck.sh" 2>&1; }
+echo jar-binary > "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"Maestro 2.12.1: capture binary and phone driver match"*) ok "a finished upgrade with no phone driver says it matches" ;;
+  *) no "a finished upgrade with no phone driver says it matches" "$(ucr)" ;;
+esac
+echo old-binary > "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"simulator-server is not the one in Maestro 2.12.1 (step 2)"*"unzip -p"*) ok "an old capture binary names step 2 and the command" ;;
+  *) no "an old capture binary names step 2 and the command" "$(ucr)" ;;
+esac
+rm "$UC/home/.maestro/deps/simulator-server"
+case "$(ucr)" in
+  *"(step 2)"*) ok "a missing capture binary names step 2" ;;
+  *) no "a missing capture binary names step 2" "$(ucr)" ;;
+esac
+echo jar-binary > "$UC/home/.maestro/deps/simulator-server"
+mkdir -p "$UC/home/maestro-drive-driver/build-2.8.0"
+case "$(ucr)" in
+  *"no phone driver for Maestro 2.12.1 (step 3)"*) ok "a phone driver for an older version names step 3" ;;
+  *) no "a phone driver for an older version names step 3" "$(ucr)" ;;
+esac
+mkdir -p "$UC/home/.maestro/maestro-iphoneos-driver-build"
+echo version=2.12.1 > "$UC/home/.maestro/maestro-iphoneos-driver-build/version.properties"
+case "$(ucr)" in
+  *"(step 3)"*) no "the prebuilt driver at the right version is enough" "$(ucr)" ;;
+  *) ok "the prebuilt driver at the right version is enough" ;;
+esac
+grep -q "sh '\$RDIR/upgradecheck.sh'" "$REPO/bin/preflight.sh" \
+  && ok "preflight runs it" || no "preflight runs it" "no call"
+
+echo
+echo "docs-refresh.sh follows redirects and names empty pages (item 133)"
+D133="$TMP/d133"; mkdir -p "$D133/bin" "$D133/ball/pages" "$D133/l"
+cp "$REPO/bin/docs-refresh.sh" "$D133/bin/"
+: > "$D133/ball/pages/index.md"
+echo content > "$D133/ball/pages/reference__run.md"
+echo https://docs.maestro.dev/index.md > "$D133/ball/urls.txt"
+echo PAGES=2 > "$D133/ball/VERSION"
+tar czf "$D133/docs.tgz" -C "$D133/ball" pages urls.txt VERSION
+cat > "$D133/bin/lib.sh" <<LIBSH
+RDIR=/tmp/none; LDIR=$D133/l
+_where(){ echo stub; }
+_ssh(){ printf '%s' "\$1" > "$D133/remote.sh"; }
+_pull(){ cp "$D133/docs.tgz" "\$2"; }
+LIBSH
+out=$(bash "$D133/bin/docs-refresh.sh" --into "$D133/dest" 2>&1)
+grep -o 'curl [^|]*' "$D133/remote.sh" | grep -v -- '-sSL' \
+  && no "every curl follows redirects" "see above" \
+  || { [ "$(grep -c 'curl ' "$D133/remote.sh")" -ge 2 ] \
+       && ok "every curl follows redirects" \
+       || no "every curl follows redirects" "$(cat "$D133/remote.sh")"; }
+case "$out" in
+  *"came back empty"*index.md*) ok "an empty page is named" ;;
+  *) no "an empty page is named" "$out" ;;
+esac
+case "$out" in
+  *reference__run.md*) no "a page with content is not named" "$out" ;;
+  *) ok "a page with content is not named" ;;
+esac
+rm "$D133/ball/pages/index.md"
+tar czf "$D133/docs.tgz" -C "$D133/ball" pages urls.txt VERSION
+out=$(bash "$D133/bin/docs-refresh.sh" --into "$D133/dest" 2>&1)
+case "$out" in
+  *"came back empty"*) no "no empty pages, no list" "$out" ;;
+  *) ok "no empty pages, no list" ;;
+esac
+
+echo
+echo "the driver cache follows the jar, and a failed start says why (item 131)"
+DU="$TMP/du"; mkdir -p "$DU/home/.maestro/lib" "$DU/bin" "$DU/work"
+cat > "$DU/bin/unzip" <<'STUB'
+#!/bin/sh
+# The real layout, with the jar's own content in the runner so a test can see
+# which jar a tree came from.
+case "$*" in
+  *driver-iPhoneSimulator*)
+    jar=$3; echo x >> "$UNZIP_LOG"
+    mkdir -p driver-iPhoneSimulator/Debug-iphonesimulator
+    cp "$jar" driver-iPhoneSimulator/Debug-iphonesimulator/runner
+    echo run > driver-iPhoneSimulator/maestro-driver-ios-config.xctestrun ;;
+esac
+STUB
+cat > "$DU/bin/curl" <<'STUB'
+#!/bin/sh
+case "$*" in *"%{http_code}"*) printf 200 ;; *) exit 7 ;; esac
+STUB
+printf '#!/bin/sh\nexit 0\n' > "$DU/bin/xcodebuild"
+# The helper needs the Mac's sh, which takes pipefail; dash, which is sh here, does not.
+printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "$DU/bin/sh"
+chmod +x "$DU/bin/"*
+du_up(){ PATH="$DU/bin:$PATH" HOME="$DU/home" UNZIP_LOG="$DU/unzips" bash "$REPO/remote/driverup.sh" U 7000 "$DU/work" 2>&1; }
+du_runner="$DU/work/driver-iPhoneSimulator/Debug-iphonesimulator/runner"
+echo old > "$DU/home/.maestro/lib/maestro-ios-driver.jar"
+du_up >/dev/null; du_up >/dev/null
+[ "$(wc -l < "$DU/unzips" | tr -d ' ')" = 1 ] && [ "$(cat "$du_runner")" = old ] \
+  && ok "an unchanged jar is extracted once" \
+  || no "an unchanged jar is extracted once" "unzips: $(cat "$DU/unzips" | wc -l), runner: $(cat "$du_runner" 2>&1)"
+echo new > "$DU/home/.maestro/lib/maestro-ios-driver.jar"
+du_up >/dev/null
+[ "$(cat "$du_runner")" = new ] \
+  && ok "an upgraded jar replaces the cached runner" \
+  || no "an upgraded jar replaces the cached runner" "runner: $(cat "$du_runner" 2>&1)"
+rm -f "$DU/work/driver-iPhoneSimulator/.jar-cksum"; echo stale > "$du_runner"
+du_up >/dev/null
+[ "$(cat "$du_runner")" = new ] \
+  && ok "a cache from before this check counts as stale" \
+  || no "a cache from before this check counts as stale" "runner: $(cat "$du_runner" 2>&1)"
+ls -A "$DU/work" | grep -q '^\.extract' \
+  && no "no half-built tree is left behind" "$(ls -A "$DU/work")" \
+  || ok "no half-built tree is left behind"
+
+# A failed start keeps its log, because the next start deletes the plain one (item 143).
+cat > "$DU/bin/xcodebuild" <<'STUB'
+#!/bin/sh
+echo "xcodebuild: error: Mach error -308"
+STUB
+cat > "$DU/bin/curl" <<'STUB'
+#!/bin/sh
+case "$*" in *"%{http_code}"*) printf 000 ;; *) exit 7 ;; esac
+STUB
+out=$(du_up 2>&1); rc=$?
+kept=$(ls "$DU"/work/driver-U.failed-*.log 2>/dev/null | head -1)
+[ "$rc" != 0 ] && [ -n "$kept" ] && grep -q 'Mach error -308' "$kept" \
+  && case "$out" in *"log kept: $kept"*) true ;; *) false ;; esac \
+  && ok "a failed start keeps its log and says where" \
+  || no "a failed start keeps its log and says where" "rc=$rc kept=$kept: $out"
+for i in 1 2 3 4 5 6 7; do touch "$DU/work/driver-U.failed-2020010$i.log"; done
+touch -t 202001010000 "$DU"/work/driver-U.failed-2020010*.log
+du_up >/dev/null 2>&1
+[ "$(ls "$DU"/work/driver-U.failed-*.log | wc -l | tr -d ' ')" = 5 ] \
+  && ok "only the newest five failed logs stay" \
+  || no "only the newest five failed logs stay" "$(ls "$DU/work" | grep -c failed)"
+
+PU="$TMP/pu"; mkdir -p "$PU/help"
+printf 'echo "xcodebuild failed: Mach error -308" >&2\nexit 1\n' > "$PU/help/driverup.sh"
+out=$(RHELP="$PU/help" RDIR="$PU" sh "$REPO/runners/ios/platform.sh" driver-up U 7000 "$PU" 2>&1); rc=$?
+case "$out" in
+  *"Mach error -308"*"No such file"*|*"No such file"*) no "a failed start reports its own error" "$out" ;;
+  *"Mach error -308"*) [ "$rc" != 0 ] && ok "a failed start reports its own error and fails" \
+                       || no "a failed start reports its own error and fails" "rc=$rc" ;;
+  *) no "a failed start reports its own error" "$out" ;;
+esac
+out=$(PATH="$DU/bin:$PATH" HOME="$PU" RHELP="$PU/nothing" RDIR="$PU" bash "$REPO/runners/ios/platform.sh" driver-up U 7000 "$PU" 2>&1)
+case "$out" in
+  *"no maestro-ios-driver.jar"*) ok "with no helper on the Mac it still falls back to the checkout's" ;;
+  *) no "with no helper on the Mac it still falls back to the checkout's" "$out" ;;
+esac
+
+echo
+echo "the wall names the cause, and says when its log has gone (items 127, 126)"
+WE="$TMP/we"; mkdir -p "$WE"
+cat > "$WE/capture" <<'STUB'
+#!/bin/sh
+echo "2026-11-05 12:08:48 simulator-server[1:2] JPEG encoder initialized"
+echo "2026-11-05 12:08:48 simulator-server[1:3] Error: SimulatorKit could not be loaded (Xcode search path: /Applications/Xcode.app)"
+echo "2026-11-05 12:08:48 simulator-server[1:3] Error: Failed to initialize SimulatorControl"
+echo "Error: Failed to initialize iOS simulator bridge"
+STUB
+chmod +x "$WE/capture"
+out=$(WE="$WE" REPO="$REPO" PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY' 2>&1
+import os, sys
+sys.path.insert(0, os.environ["REPO"] + "/remote")
+import wall
+wall.capture_cmd = lambda u: os.environ["WE"] + "/capture"
+s = wall.Stream("u", "n")
+print(s.start(), s.error)
+PY
+)
+case "$out" in
+  *"False SimulatorKit could not be loaded"*"Failed to initialize iOS simulator bridge"*)
+    ok "the tile leads with the first error in the chain, not the last" ;;
+  *) no "the tile leads with the first error in the chain, not the last" "$out" ;;
+esac
+
+WK="$TMP/wk"; mkdir -p "$WK/bin" "$WK/rdir" "$WK/stub"
+cp "$REPO/bin/wall.sh" "$WK/bin/"
+cat > "$WK/bin/lib.sh" <<'LIBSH'
+RDIR=$WK_RDIR; RHELP=$WK_RDIR; RMODS=$WK_RDIR; WALLPORT=9990; WALL_URL=http://stub.invalid/
+_ports_here(){ return 1; }
+_ssh(){ case "$1" in *"simulator-server verify"*) printf '%s\n' "${WK_VERIFY:-[ok] ios: fine}" ;; *) sh -c "$1" ;; esac; }
+_where(){ echo stub; }
+LIBSH
+printf '#!/bin/sh\nexit "${WK_PGREP:-0}"\n' > "$WK/stub/pgrep"
+printf '#!/bin/sh\nprintf 000\n' > "$WK/stub/curl"
+chmod +x "$WK/stub/"*
+wk(){ PATH="$WK/stub:$PATH" WK_RDIR="$WK/rdir" bash "$WK/bin/wall.sh" "$@" 2>&1; }
+case "$(wk log)" in
+  *"log was deleted while it ran"*) ok "wall.sh log says the running wall's log has gone" ;;
+  *) no "wall.sh log says the running wall's log has gone" "$(wk log)" ;;
+esac
+case "$(wk status)" in
+  *"wall: running"*"log was deleted"*) ok "wall.sh status says so too" ;;
+  *) no "wall.sh status says so too" "$(wk status)" ;;
+esac
+case "$(WK_PGREP=1 wk log)" in
+  *"no log yet"*) ok "no wall and no log is still just no log" ;;
+  *) no "no wall and no log is still just no log" "$(WK_PGREP=1 wk log)" ;;
+esac
+echo "a line" > "$WK/rdir/wall.log"
+case "$(wk log)" in
+  *"a line"*) ok "a log on disk is shown" ;;
+  *) no "a log on disk is shown" "$(wk log)" ;;
+esac
+out=$(WK_VERIFY='[skip] ios: SimulatorKit not present' wk status)
+case "$out" in
+  *"MAESTRO_VERSION=2.12.1"*"simulator-server > ~/.maestro/deps/simulator-server"*"sudo ln -s"*)
+    ok "the wall gives the upgrade first, and the symlink only as what is left" ;;
+  *) no "the wall gives the upgrade first, and the symlink only as what is left" "$out" ;;
+esac
+
+echo
+echo "the update notice runs once a session and can never stop the skill (items 128, 114)"
+UN="$TMP/un"; mkdir -p "$UN/bin" "$UN/home/.local/share/maestro-drive" "$UN/tmp"
+cp "$REPO/bin/update-notice.sh" "$UN/bin/"
+cat > "$UN/home/.local/share/maestro-drive/update-check.sh" <<'STUB'
+[ "$1" = notice-for ] && [ "$2" = v9.9.9 ] && echo "maestro-drive: v1 installed, v9.9.9 available."
+exit 0
+STUB
+cat > "$UN/bin/lib.sh" <<'LIBSH'
+[ -n "${UN_LIB_FAILS:-}" ] && exit 1
+echo "config.sh saying something of its own"
+_ssh(){ echo x >> "$UN_CALLS"; [ -n "${UN_HANG:-}" ] && sleep 20; [ -n "${UN_DOWN:-}" ] && return 255
+        printf '%s\n' "$UN_ANSWER"; }
+LIBSH
+un(){ HOME="$UN/home" TMPDIR="$UN/tmp" UN_CALLS="$UN/calls" CLAUDE_CODE_SESSION_ID= bash "$UN/bin/update-notice.sh" "$@"; }
+UN_NEWER='installed 2.8.0
+latest mobile-dev-inc/maestro cli-2.12.1
+latest lenny1882/maestro-drive v9.9.9'
+out=$(UN_ANSWER=$UN_NEWER un s1); rc=$?
+[ "$rc" = 0 ] && [ "$out" = 'maestro: 2.8.0 installed, 2.12.1 available.
+maestro-drive: v1 installed, v9.9.9 available.' ] \
+  && ok "an older Maestro and an older toolkit each get a line, and nothing else prints" \
+  || no "an older Maestro and an older toolkit each get a line, and nothing else prints" "rc=$rc: $out"
+: > "$UN/calls"
+out=$(UN_ANSWER=$UN_NEWER un s1)
+[ -z "$out" ] && [ ! -s "$UN/calls" ] \
+  && ok "a later load in the same session says nothing and asks nothing" \
+  || no "a later load in the same session says nothing and asks nothing" "$out; calls: $(wc -l < "$UN/calls")"
+out=$(UN_ANSWER=$UN_NEWER un s2)
+[ -n "$out" ] && ok "a new session asks again" || no "a new session asks again" "said nothing"
+out=$(UN_ANSWER='installed 2.12.1
+latest mobile-dev-inc/maestro cli-2.12.1
+latest lenny1882/maestro-drive v1' un s3)
+[ -z "$out" ] && ok "up to date says nothing" || no "up to date says nothing" "$out"
+out=$(UN_ANSWER='installed 2.9.0
+latest mobile-dev-inc/maestro cli-2.10.0' un s4)
+case "$out" in
+  *"2.9.0 installed, 2.10.0 available"*) ok "2.10.0 counts as newer than 2.9.0" ;;
+  *) no "2.10.0 counts as newer than 2.9.0" "$out" ;;
+esac
+out=$(UN_ANSWER='installed 2.12.1
+latest mobile-dev-inc/maestro cli-2.10.0' un s5)
+[ -z "$out" ] && ok "a local build ahead of the release says nothing" || no "a local build ahead of the release says nothing" "$out"
+out=$(UN_ANSWER='installed 2.10.0
+latest mobile-dev-inc/maestro 
+latest lenny1882/maestro-drive ' un s5b); rc=$?
+[ "$rc" = 0 ] && [ "$out" = 'maestro: 2.10.0 installed. GitHub could not be reached, so whether a newer one is out is unknown.' ] \
+  && ok "no route to GitHub says so, rather than reading as up to date" \
+  || no "no route to GitHub says so, rather than reading as up to date" "rc=$rc: $out"
+out=$(UN_ANSWER='latest mobile-dev-inc/maestro 
+latest lenny1882/maestro-drive ' un s5c)
+[ -z "$out" ] && ok "no Maestro installed and no route says nothing" || no "no Maestro installed and no route says nothing" "$out"
+out=$(UN_DOWN=1 un s6); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a Mac that cannot be reached says nothing and exits 0" \
+  || no "a Mac that cannot be reached says nothing and exits 0" "rc=$rc: $out"
+out=$(UN_LIB_FAILS=1 un s7); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "a project with no conf says nothing and exits 0" \
+  || no "a project with no conf says nothing and exits 0" "rc=$rc: $out"
+t0=$SECONDS; out=$(UN_HANG=1 UPDATE_NOTICE_LIMIT=1 un s8); rc=$?
+[ "$rc" = 0 ] && [ "$((SECONDS - t0))" -lt 10 ] && ok "a hung connection is cut off and exits 0" \
+  || no "a hung connection is cut off and exits 0" "rc=$rc after $((SECONDS - t0))s"
+: > "$UN/calls"
+out=$(UN_ANSWER=$UN_NEWER un ""); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && [ ! -s "$UN/calls" ] \
+  && ok "no session id asks nothing rather than asking on every load" \
+  || no "no session id asks nothing rather than asking on every load" "rc=$rc: $out"
+# A failed command in SKILL.md aborts the skill, so the guard is part of the line.
+grep -qE '^!`bash "\$\{CLAUDE_SKILL_DIR\}/bin/update-notice\.sh" "\$\{CLAUDE_SESSION_ID\}" \|\| true`$' "$REPO/SKILL.md" \
+  && ok "SKILL.md runs it from the start of a line, guarded with || true" \
+  || no "SKILL.md runs it from the start of a line, guarded with || true" "line not found"
+sed -n '/^---$/,/^---$/p' "$REPO/SKILL.md" | grep -qE '^ *- Bash$' \
+  && ok "SKILL.md's allowed-tools pre-approves it" \
+  || no "SKILL.md's allowed-tools pre-approves it" "no Bash in allowed-tools"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

@@ -2,6 +2,8 @@
 
 # Custom scrolling for screen fragments
 
+Scroll to elements inside fragments using custom swipe logic when scrollUntilVisible fails on partial screens.
+
 Maestro’s native [`scrollUntilVisible`](/reference/commands-available/scrolluntilvisible.md) is a powerful tool, but it works in a specific way:
 
 1. Checks for the element defined by the selector.
@@ -18,7 +20,7 @@ This recipe shows you how to build a scrolling logic that swipes exactly where y
 
 This issue was first reported by the developers at Amicara. Their team was instrumental in helping create this solution to overcome difficulties scrolling through complex, fragmented layouts.
 
-<p align="center"><img src="/files/UxM1ITPN2pg9VFpc7Idv" alt="" data-size="original"></p>
+<p align="center"><img src="https://862532213-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2FJjfcEdmJ9ojsT3Jtpsi8%2Fuploads%2FbPq1BYtrY9n9hZUMrvZD%2Fimage.png?alt=media&amp;token=c65152e3-449e-434a-b33d-e1b10bf45eaa" alt="" data-size="original"></p>
 {% endhint %}
 
 ### The workflow
@@ -118,16 +120,16 @@ Explore the following documentation pages if some of the concepts used in this r
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/examples/recipes/custom-scrolling-for-screen-fragments.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/examples/recipes/custom-scrolling-for-screen-fragments.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

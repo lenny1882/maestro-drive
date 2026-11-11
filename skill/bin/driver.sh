@@ -13,7 +13,7 @@
 #   /touch          0.46s   a tap at raw screen coordinates, in points
 #   /inputText      1.13s   type into whatever has focus
 #
-# Compare that with 7.7s for `maestro hierarchy` over SSH, or 2.2s for a
+# Compare that with 5.2-5.9s for `maestro hierarchy` over SSH, or 4.3s for a
 # two-action flow through the MCP server. The frames here are what Maestro
 # itself reads before converting them into the bounds that inspect_screen
 # reports, so this is also the way to tell a driver problem from a Maestro
@@ -342,15 +342,23 @@ _gt() { python3 -c "print(1 if float('$1') > float('$2') else 0)"; }
 
 _resolve() {  # _resolve <pattern> [index] [--anyway|--enabled|--disabled] -- prints "x y"
   _ensure_screen || return 1
-  local idx=() extra=()
-  for _a in "${@:2}"; do
-    [ -z "$_a" ] && continue
-    case "$_a" in
-      --anyway|--enabled|--disabled) extra+=("$_a") ;;
-      *) [ ${#idx[@]} -eq 0 ] && idx=(--index "$_a") ;;
+  local idx=() extra=() pat=$1
+  shift
+  # resolve.py's refusal says "pass --index", so that form has to work here as
+  # well as the bare positional one (item 111). It used to reach the catch-all,
+  # which took the word --index itself as the index.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      "") ;;
+      --anyway|--enabled|--disabled) extra+=("$1") ;;
+      --index) [ $# -ge 2 ] || { echo "--index needs a number" >&2; return 2; }
+               idx=(--index "$2"); shift ;;
+      --index=*) idx=(--index "${1#--index=}") ;;
+      *) [ ${#idx[@]} -eq 0 ] && idx=(--index "$1") ;;
     esac
+    shift
   done
-  _hier | python3 "$HERE/resolve.py" "$1" \
+  _hier | python3 "$HERE/resolve.py" "$pat" \
     --width "$SCREEN_W" --height "$SCREEN_H" --point "${idx[@]}" "${extra[@]}"
 }
 
@@ -432,13 +440,38 @@ _tapon() {  # _tapon <pattern> [index] [--anyway]
 # read back rather than assumed (bin/typed.py). TYPE_VERIFY=0 turns it off for
 # the case this cannot judge: text that the app immediately transforms or
 # clears. It does not judge what the app then DID with the text — see item 14.
-_type() {  # _type <pattern> <text>
-  _tapon "$1" || return $?
-  _post inputText "{\"text\":$(printf '%s' "$2" |
+#
+# The index goes before the pattern because everything after the pattern is the
+# text to type (item 134).
+_type() {  # _type [--index n] <pattern> <text...>
+  local idx=() pat text
+  case "$1" in
+    --index)   idx=(--index "$2"); shift 2 ;;
+    --index=*) idx=(--index "${1#--index=}"); shift ;;
+  esac
+  pat=$1; shift; text="$*"
+  # The point is kept for the read-back, which is why this is not _tapon.
+  local pt x y
+  pt=$(_resolve "$pat" "${idx[@]}") || return 1
+  x=${pt% *}; y=${pt#* }
+  _post touch "{\"x\":$x,\"y\":$y}" >/dev/null || return 1
+  _settle || return 1
+  _post inputText "{\"text\":$(printf '%s' "$text" |
     python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}" >/dev/null || return 1
   _settle || return 1
   [ "${TYPE_VERIFY:-1}" = 0 ] && return 0
-  _hier | python3 "$HERE/typed.py" "$2"
+  _hier | python3 "$HERE/typed.py" "$text" "$x" "$y"
+}
+
+# Whether the arguments are enough for _type: a pattern and some text, after any
+# index. Separate so the verb and the journey step can each refuse in their own
+# words before anything is tapped.
+_type_shape() {
+  case "${1:-}" in
+    --index)   shift; [ $# -gt 0 ] && shift ;;
+    --index=*) shift ;;
+  esac
+  [ $# -ge 2 ]
 }
 
 # The route is swipeV2, not swipe. POST /swipe is answered 200 whether or not it
@@ -600,13 +633,21 @@ _clear() {  # _clear <pattern> — select-all-then-delete via long-press
   x=${pt% *}; y=${pt#* }
   _post touch "{\"x\":$x,\"y\":$y,\"duration\":1.0}" >/dev/null || return 1
   _settle || true
-  # The long-press raises the iOS edit menu; tap "Select All" from it.
-  # If "Select All" is not on screen (field is empty, or the menu did not
-  # appear), skip — there is nothing to clear.
-  if _resolve "^Select All$" >/dev/null 2>&1; then
-    _tapon "^Select All$" || return 1
+  # The long-press raises the iOS edit menu; tap "Select All" from it. The menu
+  # item is two nodes at nearly the same place, a button and its text, so it needs
+  # an index: without one the refusal read as "no menu" and nothing was cleared
+  # (item 145). No menu at all usually means an empty field.
+  if _resolve "^Select All$" 0 >/dev/null 2>&1; then
+    _tapon "^Select All$" 0 || return 1
     _post eraseText "{\"charactersToErase\":1,$_appids}" >/dev/null || return 1
     _settle || true
+  fi
+  # Either way the field is read back, so a clear that did nothing says so.
+  local left
+  left=$(_hier | python3 "$HERE/fieldvalue.py" "$x" "$y") || return 1
+  if [ -n "$left" ]; then
+    echo "clear: /$1/ still holds '$left'" >&2
+    return 1
   fi
 }
 
@@ -932,8 +973,8 @@ _journey() {  # _journey <file> <depth>
       # Both take the rest of the line, so they mean here what they mean from
       # the command line. Quoting is still the clearer way to write it, but
       # forgetting it no longer silently shortens what gets typed.
-      type)       [ "${#a[@]}" -ge 3 ] || { echo "journey: $file:$n — type needs a pattern and some text" >&2; return 2; }
-                  _type "${a[1]}" "${a[*]:2}" || rc=$? ;;
+      type)       _type_shape "${a[@]:1}" || { echo "journey: $file:$n — type needs a pattern and some text" >&2; return 2; }
+                  _type "${a[@]:1}" || rc=$? ;;
       text)       [ "${#a[@]}" -ge 2 ] || { echo "journey: $file:$n — text needs something to type" >&2; return 2; }
                   _post inputText "{\"text\":$(printf '%s' "${a[*]:1}" |
                     python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}" >/dev/null &&
@@ -1025,7 +1066,7 @@ case "${1:-start}" in
           fi ;;
   info)   _start && curl -s -m 5 "$BASE/deviceInfo"; echo ;;
   hierarchy) _hier ;;
-  tree|nodes|text) _tree "$1" ;;
+  tree|nodes) _tree "$1" ;;
   shot) shift; _shot "$@" ;;
   static)   _start && curl -s -m 10 "$BASE/isScreenStatic"; echo ;;
   keyboard) _post keyboard "{$_appids}"; echo ;;
@@ -1058,7 +1099,13 @@ except Exception: print("")')
             # a duration turns the tap into a long press, so only send one when asked
             if [ -n "${4:-}" ]; then _post touch "{\"x\":$2,\"y\":$3,\"duration\":$4}"
             else _post touch "{\"x\":$2,\"y\":$3}"; fi; echo ;;
-  text)     shift; _post inputText "{\"text\":$(printf '%s' "$*" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}"; echo ;;
+  # With an argument it types. Bare, it prints the screen as text, which is what
+  # --text after a verb does (item 130). A `tree|nodes|text` case above this one
+  # used to catch both, so `text "x"` printed the tree and exited 0 having typed
+  # nothing. CMD changes for the read so the settle below does not wait after it.
+  text)     if [ $# -lt 2 ]; then CMD=read; _tree text
+            else shift; _post inputText "{\"text\":$(printf '%s' "$*" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}"; echo
+            fi ;;
   key)      _post pressKey "{\"key\":\"${2:?key name, e.g. delete / return}\"}"; echo ;;
   button)   _post pressButton "{\"button\":\"${2:?button name, e.g. home}\"}"; echo ;;
   erase)    if [ "${2:-}" = "--all" ]; then
@@ -1096,15 +1143,15 @@ except Exception: print("")')
               *)      _watch_start "$@" ;;
             esac ;;
   probe)    _probe ;;
-  point)    _resolve "${2:?usage: $0 point <pattern> [index]}" "${3:-}" ;;
-  tapon)    [ $# -ge 2 ] || { echo "usage: $0 tapon <pattern> [index] [--anyway]" >&2; exit 2; }
+  point)    [ $# -ge 2 ] || { echo "usage: $0 point <pattern> [index|--index n]" >&2; exit 2; }
+            shift; _resolve "$@" ;;
+  tapon)    [ $# -ge 2 ] || { echo "usage: $0 tapon <pattern> [index|--index n] [--anyway]" >&2; exit 2; }
             shift; _tapon "$@" ;;
-  type)     pat=${2:?usage: $0 type <pattern> <text...>}; shift 2
-            [ $# -ge 1 ] || { echo "usage: $0 type <pattern> <text...>" >&2; exit 2; }
-            # "$*" rather than "$1": `text` has always joined its arguments and
-            # this quietly ignored everything after the first, which is the same
-            # silent shortening the journey verbs had.
-            _type "$pat" "$*" ;;
+  type)     shift
+            _type_shape "$@" || { echo "usage: $0 type [--index n] <pattern> <text...>" >&2; exit 2; }
+            # _type joins the text with "$*", as `text` does. Taking only the
+            # first word is the silent shortening the journey verbs once had.
+            _type "$@" ;;
   blank)    shift; _blank "$@" ;;
   dismiss)  shift; _dismiss "$@" ;;
   expect)   case "${3:-}" in
@@ -1140,7 +1187,7 @@ except Exception: print("")')
               echo "== $j"
               _journey "$j" 0 || exit $?
             done ;;
-  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text <s>|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
+  *) echo "usage: $0 [start|stop|info|hierarchy|tree|nodes|shot <file> [--raw|--on <pat>|--crop x,y,w,h|--scale pct]|static|keyboard|app|find <pat>|rows <pat>|probe|watch <pat>|watch status|watch stop|point <pat>|blank|dismiss [--no-key]|tapon <pat>|type [--index n] <pat> <text...>|clear <pat>|scrollto <pat> [dir] [max]|clearstate|expect[-not] <pat>|settle|script <journey...>|script --steps '<step>; <step>'|tap <x> <y>|text [<s>]|key <name>|button <name>|erase [n|--all]|swipe <x1> <y1> <x2> <y2>|orient <o>|launch [id]|kill [id]]
        every action verb takes --tree or --nodes directly after the verb, which
        prints the screen once the action has settled: $0 tapon --tree '^SAVE\$'
        the action verbs wait for the screen to go still by themselves — do not

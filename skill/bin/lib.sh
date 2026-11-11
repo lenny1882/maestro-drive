@@ -517,6 +517,22 @@ _macip() {
 }
 
 # Resolve the device id once per shell and cache it for the session.
+# Maestro 2.12.1's CLI lists no physical iPhones, so it answers "not connected"
+# about a phone that is connected (physical-device.md section 3). A phone's id is
+# 8 and 16 hex digits, or 40 on an older one; a simulator's has five groups, and an
+# Android serial is left alone.
+_no_phone() {  # _no_phone <device-id>
+  [ "${PLATFORM:-ios}" = android ] && return 0
+  case "$1" in
+    ????????-????????????????|????????????????????????????????????????)
+      printf '%s' "$1" | grep -qiE '^([0-9a-f]{8}-[0-9a-f]{16}|[0-9a-f]{40})$' || return 0
+      echo "$1 is a phone, and Maestro's CLI does not see phones: it would say \"not connected\"." >&2
+      echo "  Drive it with bin/device.sh up $1, then DEV=$1 bin/driver.sh. See physical-device.md section 3." >&2
+      return 1 ;;
+  esac
+  return 0
+}
+
 _dev() {
   if [ -z "$DEV" ]; then
     # Say so when the choice was arbitrary. The driver is per-device, so driving

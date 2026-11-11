@@ -13,8 +13,9 @@
 #   bin/device.sh up 00008020-0011...          # once
 #   DEV=00008020-0011... bin/driver.sh nodes   # then drive it as usual
 #
-# The prebuilt device driver must have been re-signed by hand first — Maestro
-# 2.8.0 cannot build its own (physical-device.md §3). Everything physical-device
+# The device driver must have been built and signed first: driver/build.sh and
+# driver/sign.sh, or the prebuilt re-signed by hand (physical-device.md §3). After
+# a Maestro upgrade, do that again for the new version. Everything physical-device
 # is in physical-device.md; this is BACKLOG.md item 45's device path, and the
 # ensure-driver recovery is item 46.
 set -uo pipefail

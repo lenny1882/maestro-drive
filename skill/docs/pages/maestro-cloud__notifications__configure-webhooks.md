@@ -2,6 +2,8 @@
 
 # Configure webhooks
 
+Enable webhooks for real-time POST notifications of Maestro Cloud upload results to external services. Supports multiple webhooks and token auth.
+
 Enable webhooks to send real-time notifications about upload results from a specific Maestro project to your custom workflows, monitoring systems, or external services.
 
 {% hint style="info" %}
@@ -17,7 +19,7 @@ Follow these steps to configure a webhook in the Maestro:
 3. Select the project for which you want to configure webhooks.
 4. Under **Webhook Management**, enter your webhook URL. You must provide the full URL where Maestro should send POST requests.
 
-<figure><img src="/files/EDu8TM5wZe7k7txhef3B" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1537828429-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fky7LkNoLfvcORtXOzzBs%2Fuploads%2FHznkpgmkfoaVyrLPVkK6%2Fset-webhook-configuration.png?alt=media&amp;token=f066444f-d73f-453c-b988-4a7314d6acb7" alt=""><figcaption></figcaption></figure>
 
 {% hint style="warning" %}
 Ensure that your webhook endpoint can handle POST requests and is publicly accessible.
@@ -25,7 +27,7 @@ Ensure that your webhook endpoint can handle POST requests and is publicly acces
 
 If you need to authenticate webhook requests from Maestro Cloud, you can use the **Webhook Token** generated after you add the webhook URL. Use this token in your webhook endpoint as a **Bearer token** to authenticate requests from Maestro.
 
-<figure><img src="/files/D3JMxLnhVBDSktUae5ad" alt=""><figcaption></figcaption></figure>
+<figure><img src="https://1537828429-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fky7LkNoLfvcORtXOzzBs%2Fuploads%2FbeITruFKJANY9EVxXY5f%2Fwebhook-token.png?alt=media&amp;token=356e982f-69f1-4aaf-91b5-c8c51462bf7f" alt=""><figcaption></figcaption></figure>
 
 You can update URLs or tokens, or disable an integration at any time from the settings page.
 
@@ -99,16 +101,16 @@ Check the other notification options available when testing your app with Maestr
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-cloud/notifications/configure-webhooks.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-cloud/notifications/configure-webhooks.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

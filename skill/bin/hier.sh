@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# FALLBACK ONLY. Prefer `bin/driver.sh nodes`, which is ~0.4s against ~10.7s
+# FALLBACK ONLY. Prefer `bin/driver.sh nodes`, which is ~0.4s against ~5.7s
 # here and can be pointed at any device with DEV=<udid>.
 # Unlike the MCP server this does honour --device, so it is the way to read a
 # second simulator when no driver is up for it yet.
@@ -23,5 +23,6 @@
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 d=$(_dev) || exit 1
+_no_phone "$d" || exit 2
 _ssh "maestro --device $d hierarchy > '$RDIR/hier.json' 2>/dev/null
       python3 '$RHELP/hier.py' '$RDIR/hier.json'"

@@ -2,7 +2,9 @@
 
 # How to install Maestro CLI
 
-Maestro also provides you with the option to use the CLI by terminal. This document will cover the installation of Maestro CLI on the three operational system supported: macOS, Windows and Linux.
+Step-by-step installation guide for Maestro CLI on macOS, Windows, and Linux.
+
+Maestro also provides you with the option to use the CLI by terminal. This document will cover the installation of Maestro CLI on the three operating systems supported: macOS, Windows and Linux.
 
 ### Prerequisites
 
@@ -40,7 +42,7 @@ brew install mobile-dev-inc/tap/maestro
 Run `maestro --help` to verify that the Maestro CLI is working properly.
 
 {% hint style="warning" %}
-For macOS, ensure that your have also the last version os [XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) and [XCode Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/) installed.
+For macOS, ensure that you have also the last version of [XCode](https://apps.apple.com/us/app/xcode/id497799835?mt=12) and [XCode Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/) installed.
 {% endhint %}
 {% endtab %}
 
@@ -148,7 +150,7 @@ Android Emulators run on the Windows host. You need to bridge ADB from WSL to Wi
 
 **On Windows (PowerShell):**
 
-Start the ADB server to allow external connections.&#x20;
+Start the ADB server to allow external connections.
 
 ```powershell
 adb -a -P 5037 nodaemon server
@@ -210,7 +212,7 @@ adb devices
 ```
 
 {% hint style="success" %}
-To identify the `WINDOWS_IP`, run the following command in yout WSL terminal:
+To identify the `WINDOWS_IP`, run the following command in your WSL terminal:
 
 ```bash
 ip route show | grep default | awk '{print $3}'
@@ -218,7 +220,7 @@ ip route show | grep default | awk '{print $3}'
 
 {% endhint %}
 
-You should see your emulator listed, indicating your connection is working.&#x20;
+You should see your emulator listed, indicating your connection is working.
 
 #### 4. Running Maestro
 
@@ -254,16 +256,16 @@ If you need to update the CLI or install a specific Maestro CLI version, check t
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-cli/how-to-install-maestro-cli.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

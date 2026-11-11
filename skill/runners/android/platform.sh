@@ -4,7 +4,8 @@
 # MEASURED (BACKLOG item 94, 5.3). Every verb below has run against
 # Pixel_6_Pro_API_34 — `sdk_gphone64_x86_64`, API 34 — on the machine this
 # package is driven from, reached over item 96's bridge, with the SDK at
-# /mnt/sda/User/Programs/android-sdk and Maestro 2.10.0. Each verb says what it
+# /mnt/sda/User/Programs/android-sdk and Maestro 2.10.0. On 5 Nov 2026 the flows
+# and hierarchy ran on 2.12.1 too; capture-cmd says what did not. Each verb says what it
 # did and what it printed; where a verb still refuses, the comment says what was
 # run to establish that it has to.
 #
@@ -489,6 +490,10 @@ capture-cmd)
   # executable, and it exits 0 having done nothing. So the command below runs
   # and produces no frames, which is worse than failing: the wall gets a tile
   # that never updates and no error to explain it.
+  #
+  # Maestro 2.12.1 does not cure this here. Its CLI leaves the file alone, and the
+  # Linux binary in its jar needs GLIBC 2.32 to 2.34 where this machine's Ubuntu
+  # 20.04 has 2.31, so it fails to start. Measured 5 Nov 2026.
   #
   # The shape is still the obvious one — the capture binary takes the platform
   # as its first argument and the iOS runner passes `ios` — but where an Android

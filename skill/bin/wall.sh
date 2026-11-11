@@ -24,8 +24,9 @@
 # spawns Maestro's capture binary per device and re-serves every stream from
 # this one port instead. Backlog 64 and 65.
 #
-# It needs SimulatorKit where the capture binary looks for it. Xcode 27 moved
-# it, so `status` says so rather than leaving a blank page to explain itself.
+# It needs SimulatorKit where the capture binary looks for it. Xcode 27 moved it
+# and Maestro older than 2.12.1 does not look there, so `status` says so rather
+# than leaving a blank page to explain itself.
 set -uo pipefail
 # shellcheck disable=SC1091
 . "$(dirname "$0")/lib.sh"
@@ -50,9 +51,10 @@ _bind() {
   fi
 }
 
-# The capture binary loads Apple's private SimulatorKit from a path compiled
-# into it. Xcode 27 dropped that directory. Nothing else in the wall can work
-# until this is right, so it is checked first and reported in full.
+# The capture binary loads Apple's private SimulatorKit relative to the Xcode
+# root. Xcode 27 moved it, and only Maestro 2.12.1's binary of those measured
+# looks in both places (item 126). Nothing else in the wall can work until this
+# is right, so it is checked first and reported in full.
 _check_simulatorkit() {
   local out
   # Apple's private framework, loaded by Apple's capture binary. It is not a
@@ -69,14 +71,22 @@ _check_simulatorkit() {
       cat >&2 <<MSG
 $out
 
-Maestro's capture binary loads SimulatorKit from a path compiled into it, and
-Xcode 27 moved the framework to Contents/SharedFrameworks. Put the path back:
+Xcode 27 moved SimulatorKit to Contents/SharedFrameworks. Maestro 2.12.1's capture
+binary looks there as well; older ones do not. On the Mac, with no session driving,
+because the install replaces the driver jar:
+
+  curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.12.1 bash
+
+The install leaves the old binary in ~/.maestro/deps until something unpacks it:
+
+  unzip -p ~/.maestro/lib/maestro-cli-2.12.1.jar deps/simulator-server/darwin/simulator-server > ~/.maestro/deps/simulator-server
+
+If Maestro has to stay where it is, a symlink needing sudo also works, until the
+next Xcode update removes it:
 
   sudo mkdir -p /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks
   sudo ln -s /Applications/Xcode.app/Contents/SharedFrameworks/SimulatorKit.framework \\
              /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks/
-
-Xcode is an App Store install, so an Xcode update removes the symlink again.
 MSG
       return 1 ;;
   esac
@@ -145,7 +155,9 @@ case "${1:-start}" in
 
   status)
     _check_simulatorkit
-    _ssh "pgrep -f 'wall.py $WALLPORT' >/dev/null && echo 'wall: running' || echo 'wall: not running'"
+    _ssh "if pgrep -f 'wall.py $WALLPORT' >/dev/null; then echo 'wall: running'
+[ -e '$RDIR/wall.log' ] || echo \"wall: its log was deleted while it ran, so nothing can read what it says. Restart it: wall.sh start\"
+else echo 'wall: not running'; fi"
     url=$(_url)
     code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$url")
     echo "$url -> HTTP $code"
@@ -154,7 +166,11 @@ case "${1:-start}" in
     ;;
 
   log)
-    _ssh "tail -n 40 '$RDIR/wall.log' 2>/dev/null || echo 'no log yet'"
+    # A wall outlives its log when $RDIR is rebuilt under it: the process keeps
+    # writing to a file with no name (item 127). "no log yet" would be wrong.
+    _ssh "if [ -e '$RDIR/wall.log' ]; then tail -n 40 '$RDIR/wall.log'
+elif pgrep -f 'wall.py $WALLPORT' >/dev/null; then echo \"the running wall's log was deleted while it ran, so nothing can read it. Restart the wall for a new one: wall.sh start\"
+else echo 'no log yet'; fi"
     ;;
 
   start)

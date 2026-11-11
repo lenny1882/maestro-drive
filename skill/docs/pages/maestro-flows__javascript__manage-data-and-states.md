@@ -2,6 +2,8 @@
 
 # Manage data and states
 
+Share data between scripts using the global output object, namespaces, and the maestro.copiedText property.
+
 Sharing data between UI elements and JavaScript scripts is essential for creating dynamic, resilient tests. This guide covers how to use the global `output` object, manage namespaces, and capture UI text for use in your logic.
 
 ### The `output` object
@@ -90,10 +92,10 @@ onFlowStart:
 
 The `maestro` object is a built-in utility that provides information about the current test environment and captured UI data.
 
-| Property             | Description                                                                                                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maestro.copiedText` | Contains the text retrieved by the most recent [`copyTextFrom`](/reference/commands-available/copytextfrom.md) command.                                                                                   |
-| `maestro.platform`   | <p>Identifies the OS:<br><br>- <code>ios</code><br>- <code>android</code><br>- <code>web</code><br><br>This is useful for <a href="/pages/PSh3jkLSoQSvjzMpuuNY">conditional</a> cross-platform logic.</p> |
+| Property             | Description                                                                                                                                                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maestro.copiedText` | Contains the text retrieved by the most recent [`copyTextFrom`](/reference/commands-available/copytextfrom.md) command.                                                                                                           |
+| `maestro.platform`   | <p>Identifies the OS:<br><br>- <code>ios</code><br>- <code>android</code><br>- <code>web</code><br><br>This is useful for <a href="/maestro-flows/flow-control-and-logic/conditions.md">conditional</a> cross-platform logic.</p> |
 
 #### Capturing UI Text
 
@@ -124,16 +126,16 @@ Now that you already knows how to manage data when using JavaScript in Maestro F
 This documentation is published with GitBook. GitBook is the documentation platform designed so that both humans and AI agents can read, navigate, and reason over technical content effectively. Learn more at gitbook.com.
 
 ## Querying This Documentation
-If you need additional information that is not directly available in this page, you can query the documentation dynamically by asking a question.
+If you need additional information that is not directly available in this page, you can query the documentation by asking a question.
 
-Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:
+Perform an HTTP GET request on the following URL with the `ask` and `goal` query parameters:
 
 ```
-GET https://docs.maestro.dev/maestro-flows/javascript/manage-data-and-states.md?ask=<question>&goal=<endgoal>
+GET https://docs.maestro.dev/maestro-flows/javascript/manage-data-and-states.md?ask=<question>&goal=<user_goal>
 ```
 
 `ask` is the immediate question: it should be specific, self-contained, and written in natural language.
-`goal` is optional and describes the broader end goal you are ultimately trying to accomplish on behalf of the user. GitBook uses it to tailor the answer towards what is most useful for that goal.
+`goal` is what the user is ultimately trying to achieve, the reason they need the answer. Sharing it helps GitBook give you a better, more relevant answer. A goal is most helpful when it describes the outcome the user wants rather than restating the question. For example, with `ask=how do I create an API token`, a goal like `automate deployments from our CI pipeline` lets GitBook tailor the answer to that use case.
 
 The response will contain a direct answer to the question and relevant excerpts and sources from the documentation.
 

@@ -1504,5 +1504,20 @@ else
   no "the skill's own suite runs from the installed path" "not installed or not executable"
 fi
 
+echo
+echo "notice-for compares a version it is handed, with no network and no writes (item 114)"
+NF="$TMP/nf"; mkdir -p "$NF/maestro-drive"
+printf '2.1.0\n' > "$NF/maestro-drive/installed"; printf '/some/repo\n' > "$NF/maestro-drive/repo-dir"
+nf(){ XDG_STATE_HOME="$NF" bash "$REPO/lib/update-check.sh" notice-for "$@"; }
+case "$(nf v2.1.1)" in
+  "maestro-drive: v2.1.0 installed, v2.1.1 available. Update: cd /some/repo && ./update.sh") ok "a newer tag gets one line naming the update" ;;
+  *) no "a newer tag gets one line naming the update" "$(nf v2.1.1)" ;;
+esac
+[ -z "$(nf v2.1.0)" ] && [ -z "$(nf v2.0.9)" ] && [ -z "$(nf '')" ] \
+  && ok "the same, an older or an empty tag says nothing" \
+  || no "the same, an older or an empty tag says nothing" "$(nf v2.1.0)$(nf v2.0.9)"
+[ "$(ls "$NF/maestro-drive" | wc -l | tr -d ' ')" = 2 ] \
+  && ok "it writes nothing" || no "it writes nothing" "$(ls "$NF/maestro-drive")"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]
