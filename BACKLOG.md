@@ -243,6 +243,16 @@ builds.
 
 **Gated on.** Item 87 landing, so the contract is stable.
 
+**2.0 plan, 11 Nov 2026.** `flutter-hot-reload-mac` is being rebuilt as 2.0 on
+this package: it will source `skill/bin/lib.sh` and call
+`runners/flutter/framework.sh`, as rrcd sources rrc's `rrc-lib.sh`. Plan:
+claude-skills branch `flutter-hot-reload-mac-v2-plan`,
+`packages/flutter-hot-reload-mac/V2-PLAN.md` (commit e148cc3). It needs four
+changes here first: items 171 (library version constant), 172 (`describe
+--env`), 173 (`vmservice.sh` reads the per-device log) and the 2.0 addition to
+item 112 (label check as a callable function). Do not implement any of them
+until the user says so.
+
 ## 90. The wall shows simulators only, and a phone is a device too — **OPEN**
 
 **What.** `bin/wall.sh` puts every booted simulator on one live page. A
@@ -627,6 +637,14 @@ today's label from a different live session, naming that session. Cheap: the
 label file is already on the Mac. A `PreToolUse` hook on `flutter run -d
 <udid>` over `mac.sh`/`ssh` would catch the hand-launched case too.
 
+**2.0 addition, 11 Nov 2026 (item 93).** Ship the check as a function a
+launch path can call, not only as a step inside `build.sh` and `drivers.sh up`.
+`flutter-hot-reload-mac` 2.0's `start.sh` calls it before launching; it
+refuses when the device carries today's label from a different live session,
+naming that session. `start.sh` also refuses when another run uses the same
+`REPO` (the shared-checkout case in item 24); that half lives in the
+hot-reload skill. Do not implement until the user says so.
+
 ## 113. The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven — **OPEN**
 
 **What.** The Android runner works on the machine running the skill (items 94,
@@ -949,3 +967,43 @@ and in portrait.
 text reaches the tree in that form (spaces, a non-breaking space, separate nodes for each number), whether the
 pattern is anchored against a longer label, and whether the swipes went past the chips.
 
+## 171. `skill/bin/lib.sh` has no version a dependent can check — **OPEN, raised 11 Nov 2026**
+
+**What.** `flutter-hot-reload-mac` 2.0 (item 93) will source `skill/bin/lib.sh`. Nothing in it says which
+set of functions, arguments and behaviour a caller is getting.
+
+**Why.** A maestro-drive update that changes what a function takes or does breaks the dependent silently,
+at the point it calls that function.
+
+**To do.** Add `MAESTRO_DRIVE_LIB_VERSION=1` to `skill/bin/lib.sh`, with `rrc-lib.sh`'s rule written next to
+it: adding a function leaves the number alone; changing what one takes or does, or removing one, increments
+it. The dependent refuses any other value. A test that fails when a function in `lib.sh` is removed without
+the number moving would hold the rule. Do not implement until the user says so.
+
+## 172. `framework.sh describe` prints a report for people, not values a script can read — **OPEN, raised 11 Nov 2026**
+
+**What.** `runners/flutter/framework.sh describe` runs `build.sh --detect`, which prints aligned prose:
+`flutter    <path>` plus a version line, `cocoapods  not on PATH; using GEM_HOME=<dir>`,
+`flavour    dev — the only one whose bundle id is <id>`, `target     lib/main_dev.dart`,
+`last build <path> (<date>)`. `flutter-hot-reload-mac` 2.0 (item 93) needs the SDK, flavour, entrypoint
+and gem home as values.
+
+**Why.** Parsing the prose ties the dependent to wording that is written to be changed.
+
+**To do.** Add `describe --env`, printing `FLUTTER=`, `FLAVOR=`, `TARGET=` and `GEM_HOME=` one per line,
+`GEM_HOME=` empty when `pod` is on `PATH`. It exits non-zero, with the reason on stderr, where the report
+refuses today (flavour not decided). Cover it in `skill/test/run-tests.sh`. Do not implement until the user
+says so.
+
+## 173. `vmservice.sh` reads one shared `/tmp/frun.log`, so two hot-reload runs share it — **OPEN, raised 11 Nov 2026**
+
+**What.** `skill/runners/flutter/vmservice.sh:16` defaults `FRUN_LOG` to `/tmp/frun.log`, the hot-reload
+skill's single log. `flutter-hot-reload-mac` 2.0 (item 93) keys its pipe, log and PID file by UDID and
+writes `$RDIR/frun-$DEV.log`.
+
+**Why.** With 2.0, `/tmp/frun.log` is never written, so the VM Service URI is not found there; with two runs
+on one Mac, one log would give the other device's URI.
+
+**To do.** Read `$RDIR/frun-$DEV.log` instead, and update `skill/reference/connection.md:253` and the
+`vmservice.sh` tests in `skill/test/run-tests.sh` (around line 2222) to match. Do not implement until the
+user says so.
