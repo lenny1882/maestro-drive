@@ -27,6 +27,7 @@
 - **160.** No iOS simulator has been driven on the machine running the skill.
 - **161.** `uninstall` on `runners/ios-device` has never been measured.
 - **162.** Phase C of `wizard.sh` has not applied a new static address.
+- **163.** Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried against the
 upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
@@ -871,3 +872,22 @@ never went true. The false path is measured asleep and awake.
 **Why.** Applying one is the part that changes the network.
 
 **To do.** Run it on a setup where the address really changes.
+
+## 163. Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one — **OPEN, raised 11 Nov 2026**
+
+**What.** Item 50 made `deviceup.sh` pick the driver built from source whenever a signed one exists, and that
+driver survives a phone lying flat. Making one is still two hand steps (`reference/setup.md` step 3):
+`runners/ios-device/driver/build.sh`, then `driver/sign.sh '<identity>' <profile> <build-dir>` typed into
+Terminal on the Mac. With no signed build, `deviceup.sh` falls back to the prebuilt driver with a one-line note,
+and every touch on a flat phone kills it until the phone is stood upright.
+
+**Why.** Signing was left manual because codesign fails over SSH (`errSecInternalComponent`). The skill already
+gets round that for app builds: `runners/flutter/build.sh:269` hands the job to the Mac's GUI Terminal with
+`osascript … do script` and polls a log, with no password. Both of `sign.sh`'s arguments can be found too:
+`security find-identity -v -p codesigning` with the login keychain named, and the wildcard profile in either
+profile folder `physical-device.md` §1 lists.
+
+**To do.** A subcommand that builds the driver for the installed Maestro version and signs it through the GUI
+Terminal, finding the identity and profile itself and refusing by name when either is missing. Run only when
+asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
+Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
