@@ -2035,6 +2035,12 @@ out=$($B --repo "$RP2" --app-id com.example.app.dev 2>&1); rc=$?
   *) no "two flavours building one id is reported, not resolved" "got: $out" ;;
 esac || no "two flavours building one id is reported, not resolved" "rc=$rc"
 
+# describe --env: the same answers as values (item 172). An undecided flavour
+# has no value, so it refuses rather than printing an empty FLAVOR=.
+out=$($B --repo "$RP2" --detect --env --app-id com.example.app.dev 2>/dev/null); rc=$?
+[ "$rc" != 0 ] && [ -z "$out" ] && ok "describe --env refuses an undecided flavour and prints nothing" \
+  || no "describe --env refuses an undecided flavour and prints nothing" "rc=$rc: $out"
+
 # --detect must never stop at the refusal: reporting is the whole job.
 $B --repo "$RP2" --detect --app-id com.example.app.dev >/dev/null 2>&1 \
   && ok "--detect reports and exits 0 even when the flavour is undecided" \
@@ -2055,6 +2061,20 @@ case "$out" in
   *"flavour    none"*) ok "a project with lib/main.dart and no schemes needs no flavour" ;;
   *) no "a project with lib/main.dart and no schemes needs no flavour" "got: $out" ;;
 esac
+
+out=$(sh "$REPO/runners/flutter/framework.sh" describe "$RP" com.example.app.dev --env 2>/dev/null); rc=$?
+exp="FLUTTER=$RP/.fvm/flutter/bin/flutter
+FLAVOR=dev
+TARGET=lib/main_dev.dart
+GEM_HOME="
+[ "$rc" = 0 ] && [ "$out" = "$exp" ] && ok "describe --env prints FLUTTER, FLAVOR, TARGET and GEM_HOME and nothing else (item 172)" \
+  || no "describe --env prints FLUTTER, FLAVOR, TARGET and GEM_HOME and nothing else (item 172)" "rc=$rc: $out"
+out=$(sh "$REPO/runners/flutter/framework.sh" describe "$RP3" --env 2>/dev/null)
+[ "$out" = "FLUTTER=$RP3/.fvm/flutter/bin/flutter
+FLAVOR=
+TARGET=lib/main.dart
+GEM_HOME=" ] && ok "an unflavoured project gets an empty FLAVOR and flutter's default TARGET" \
+  || no "an unflavoured project gets an empty FLAVOR and flutter's default TARGET" "got: $out"
 
 # No SDK at all is the one failure that has to name the fix, because a repo
 # that pins with fvm needs `fvm install` before anything here can work.
@@ -2083,6 +2103,12 @@ case "$out" in
   *"GEM_HOME"*) no "a pod already on PATH is left alone" "GEM_HOME set anyway" ;;
   *) ok "a pod already on PATH is left alone" ;;
 esac
+out=$(PATH="$TMP/minbin:$TMP/gemhome/.gem/bin:/usr/bin:/bin" HOME="$TMP/gemhome" $B --repo "$RP" --detect --env --app-id com.example.app.dev 2>/dev/null)
+grep -qx 'GEM_HOME=' <<< "$out" && ok "describe --env leaves GEM_HOME empty when pod is on PATH" \
+  || no "describe --env leaves GEM_HOME empty when pod is on PATH" "got: $out"
+out=$(HOME="$TMP/gemhome" $B --repo "$RP" --detect --env --app-id com.example.app.dev 2>/dev/null)
+grep -qx "GEM_HOME=$TMP/gemhome/.gem" <<< "$out" && ok "and names it when pod is only under a gem dir" \
+  || no "and names it when pod is only under a gem dir" "got: $out"
 
 # A build that installs nothing must not exit 0 (item 40). Stub xcrun so the
 # install and the residency check can each be made to fail, and drop a fake built
@@ -2151,6 +2177,22 @@ out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" FRUN_LOG="$TMP/no
 { [ "$rc" != 0 ] && grep -q "NOT the same as 'the app is not in debug'" <<< "$out"; } \
   && ok "vmservice tells 'no service found' apart from 'not in debug'" \
   || no "vmservice tells 'no service found' apart from 'not in debug'" "rc=$rc: $out"
+
+# The hot-reload skill's log is per device from 2.0 (item 173): FRUN_LOG unset,
+# vmservice.sh finds $RDIR/frun-<udid>.log for the device it was asked about,
+# and does not read another device's.
+mkdir -p "$TMP/vmrdir"
+printf 'A Dart VM Service on iPhone 16 Pro is available at: http://127.0.0.1:55408/Per-Device=/\n' > "$TMP/vmrdir/frun-SIMUDID.log"
+out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" RDIR="$TMP/vmrdir" \
+      $VMS SIMUDID "$TMP/vmcache3" 2>&1)
+case "$out" in
+  *"55408/Per-Device= isolates/123"*) ok "vmservice reads the hot-reload skill's per-device log, \$RDIR/frun-<udid>.log (item 173)" ;;
+  *) no "vmservice reads the hot-reload skill's per-device log, \$RDIR/frun-<udid>.log (item 173)" "got: $out" ;;
+esac
+out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" RDIR="$TMP/vmrdir" \
+      $VMS OTHERUDID "$TMP/vmcache4" 2>&1); rc=$?
+[ "$rc" != 0 ] && ok "and another device's log is not read for this one" \
+  || no "and another device's log is not read for this one" "rc=$rc: $out"
 
 
 echo
@@ -5184,6 +5226,76 @@ grep -qE '^!`bash "\$\{CLAUDE_SKILL_DIR\}/bin/update-notice\.sh" "\$\{CLAUDE_SES
 sed -n '/^---$/,/^---$/p' "$REPO/SKILL.md" | grep -qE '^ *- Bash$' \
   && ok "SKILL.md's allowed-tools pre-approves it" \
   || no "SKILL.md's allowed-tools pre-approves it" "no Bash in allowed-tools"
+
+echo
+echo "lib.sh's version counts what a dependent can call (item 171)"
+# The functions each MAESTRO_DRIVE_LIB_VERSION offers. A dependent such as
+# flutter-hot-reload-mac 2.0 refuses any version but its own, so removing or
+# renaming one of these without moving the number breaks it at the call. When
+# the number moves, add the new version's list here; adding a function only
+# needs it appended to the current list.
+LIB_API_1="_java_env _mac_load _host_candidates _probe_host _pick_host _ssh_aliases _payload
+_bridge_id _bridge_send _ssh _where _urlhost _driver_base _push _pull _label_by _label_guard
+_macip _no_phone _dev _driver_own _driver_disown _driver_owned _driver_scan _driver_map
+_ports_read _ports_remember _ports_forget _dport_for _driver_gone_note _driver_bind"
+lv=$(sed -n 's/^MAESTRO_DRIVE_LIB_VERSION=\([0-9][0-9]*\)$/\1/p' "$REPO/bin/lib.sh")
+[ -n "$lv" ] && ok "lib.sh sets MAESTRO_DRIVE_LIB_VERSION to a plain integer ($lv)" \
+  || no "lib.sh sets MAESTRO_DRIVE_LIB_VERSION to a plain integer" "no such line"
+eval "api=\${LIB_API_$lv:-}"
+if [ -z "$api" ]; then
+  no "test/run-tests.sh lists the functions of lib version $lv" "no LIB_API_$lv"
+else
+  have=$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*\(\)' "$REPO/bin/lib.sh" | tr -d '()')
+  gone=; for f in $api; do grep -qx "$f" <<< "$have" || gone="$gone $f"; done
+  [ -z "$gone" ] && ok "every function lib version $lv offers is still defined" \
+    || no "every function lib version $lv offers is still defined" "missing:$gone — increment MAESTRO_DRIVE_LIB_VERSION"
+fi
+lv_out=$(TRANSPORT=local APP_ID=x MAESTRO_DRIVE_CONF=/dev/null bash -c '
+  . '"$REPO"'/bin/lib.sh 2>/dev/null; printf "%s" "$MAESTRO_DRIVE_LIB_VERSION"' 2>/dev/null)
+[ "$lv_out" = "$lv" ] && ok "a script that sources lib.sh sees the version" \
+  || no "a script that sources lib.sh sees the version" "got '$lv_out'"
+
+echo
+echo "_label_guard refuses a device another session labelled today (item 112)"
+LG="$TMP/lg"; mkdir -p "$LG/labels"
+lg() {  # lg <udid> [env...] -- run _label_guard as session "blue · aaaaaaa"
+  local u=$1; shift
+  env "$@" TRANSPORT=local APP_ID=x MAESTRO_DRIVE_CONF=/dev/null RDIR="$LG" \
+    CLAUDE_SESSION_COLOUR=blue CLAUDE_CODE_SESSION_ID=aaaaaaa1111 bash -c '
+    . '"$REPO"'/bin/lib.sh 2>/dev/null; RDIR="'"$LG"'"; _label_guard "$1"' _ "$u" 2>&1
+}
+printf 'name=com.example.app\ngroup=other\nby=cyan \xc2\xb7 d978fd3\n' > "$LG/labels/PEER"
+printf 'name=com.example.app\ngroup=mine\nby=blue \xc2\xb7 aaaaaaa\n' > "$LG/labels/MINE"
+cp "$LG/labels/PEER" "$LG/labels/OLD"; touch -d '2 days ago' "$LG/labels/OLD"
+out=$(lg PEER); rc=$?
+{ [ "$rc" = 1 ] && grep -q 'cyan · d978fd3' <<< "$out" && grep -q 'LABEL_GUARD=off' <<< "$out"; } \
+  && ok "a peer's label from today refuses the launch and names the peer" \
+  || no "a peer's label from today refuses the launch and names the peer" "rc=$rc: $out"
+out=$(lg MINE); rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "this session's own label lets it through" \
+  || no "this session's own label lets it through" "rc=$rc: $out"
+out=$(lg OLD); rc=$?
+[ "$rc" = 0 ] && ok "a peer's label from a previous day is work that has ended" \
+  || no "a peer's label from a previous day is work that has ended" "rc=$rc: $out"
+out=$(lg NONE); rc=$?
+[ "$rc" = 0 ] && ok "an unlabelled device lets it through" || no "an unlabelled device lets it through" "rc=$rc: $out"
+out=$(lg PEER LABEL_GUARD=off); rc=$?
+[ "$rc" = 0 ] && ok "LABEL_GUARD=off overrides it" || no "LABEL_GUARD=off overrides it" "rc=$rc: $out"
+
+# And the two launch paths item 112 names call it before doing anything.
+LGU=11111111-2222-3333-4444-555555555555
+cp "$LG/labels/PEER" "$LG/labels/$LGU"
+lgenv=(TRANSPORT=local APP_ID=x MAESTRO_DRIVE_CONF=/dev/null RDIR="$LG" REPO="$TMP"
+       CLAUDE_SESSION_COLOUR=blue CLAUDE_CODE_SESSION_ID=aaaaaaa1111)
+out=$(env "${lgenv[@]}" DEV=$LGU timeout 60 bash "$REPO/bin/build.sh" 2>&1); rc=$?
+{ [ "$rc" = 2 ] && grep -q 'labelled by another session today: cyan' <<< "$out"; } \
+  && ok "bin/build.sh refuses to install onto a peer's device before building" \
+  || no "bin/build.sh refuses to install onto a peer's device before building" "rc=$rc: $out"
+out=$(env "${lgenv[@]}" timeout 60 bash "$REPO/bin/drivers.sh" up $LGU 2>&1); rc=$?
+{ [ "$rc" = 1 ] && grep -q 'labelled by another session today: cyan' <<< "$out" \
+  && ! grep -q 'starting on' <<< "$out"; } \
+  && ok "drivers.sh up <udid> refuses a peer's device and starts no driver" \
+  || no "drivers.sh up <udid> refuses a peer's device and starts no driver" "rc=$rc: $out"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" = 0 ]

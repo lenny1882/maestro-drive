@@ -8,12 +8,14 @@
 DEV="$1"; CACHE="${2:-/tmp/hbtest/vmservice}"
 
 # Where `flutter run` was told to write its log. This skill's own recipe
-# redirects to /tmp/flutter-run.log (SKILL.md); the hot-reload skill uses
-# /tmp/frun.log. A log FILE keeps the URI however long ago the app started —
-# unlike the simulator's system log, which only holds the last few minutes, so
+# redirects to /tmp/flutter-run.log (SKILL.md); the hot-reload skill, from 2.0,
+# writes one log per device, $RDIR/frun-<udid>.log, and its pipe and PID file are
+# keyed the same way (item 173). Per device, so with two runs on one Mac this
+# never hands back the other device's URI. A log FILE keeps the URI however
+# long ago the app started — unlike the simulator's system log, which only holds the last few minutes, so
 # an app whose build you sat through has already scrolled out of it (item 39).
 : "${FLUTTER_RUN_LOG:=/tmp/flutter-run.log}"
-: "${FRUN_LOG:=/tmp/frun.log}"
+: "${FRUN_LOG:=${RDIR:-/tmp/maestro-mac}/frun-$DEV.log}"
 : "${VM_LOG_WINDOW:=5m}"
 
 # A collected isolate does not return an error — it returns
