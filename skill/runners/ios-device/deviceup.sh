@@ -60,8 +60,7 @@ SRCOK=
 if [ "$LINK" = localNetwork ]; then
   [ -n "$TUNNEL" ] || { echo "the phone is on wifi but devicectl gives no tunnel address — is it paired and awake?" >&2; exit 1; }
   [ -n "$SRCOK" ] || { echo "the phone is on wifi, and that needs the driver built from source and signed:" >&2
-    echo "  sh $HERE/driver/build.sh" >&2
-    echo "  then, from Terminal on the Mac: $HERE/driver/sign.sh '<identity>' <profile> <build-dir>" >&2
+    echo "  bin/device.sh driver $UDID   (builds it and signs it in the Mac's GUI Terminal)" >&2
     echo "The prebuilt driver listens on the phone's loopback only, which wifi cannot reach." >&2
     exit 1; }
   XCTR=$SRCXCTR
@@ -70,9 +69,9 @@ elif [ -n "$SRCOK" ]; then
 else
   [ -r "$XCTR" ] || { echo "no device driver: neither a signed build from driver/build.sh nor the prebuilt one at" >&2
     echo "  $XCTR" >&2
-    echo "Build one (driver/build.sh, then driver/sign.sh), or re-sign the prebuilt — physical-device.md §3." >&2
+    echo "Build one: bin/device.sh driver $UDID — or re-sign the prebuilt, physical-device.md §3." >&2
     exit 1; }
-  echo "note: using the prebuilt driver, which crashes on a phone lying flat (item 50) — driver/build.sh replaces it" >&2
+  echo "note: using the prebuilt driver, which crashes on a phone lying flat (item 50) — bin/device.sh driver $UDID replaces it" >&2
 fi
 
 # A locked phone cannot run XCUITest and fails as a connection error, not a lock

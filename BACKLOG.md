@@ -876,25 +876,6 @@ never went true. The false path is measured asleep and awake.
 
 **To do.** Run it on a setup where the address really changes.
 
-## 163. Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one — **OPEN, raised 11 Nov 2026**
-
-**What.** Item 50 made `deviceup.sh` pick the driver built from source whenever a signed one exists, and that
-driver survives a phone lying flat. Making one is still two hand steps (`reference/setup.md` step 3):
-`runners/ios-device/driver/build.sh`, then `driver/sign.sh '<identity>' <profile> <build-dir>` typed into
-Terminal on the Mac. With no signed build, `deviceup.sh` falls back to the prebuilt driver with a one-line note,
-and every touch on a flat phone kills it until the phone is stood upright.
-
-**Why.** Signing was left manual because codesign fails over SSH (`errSecInternalComponent`). The skill already
-gets round that for app builds: `runners/flutter/build.sh:269` hands the job to the Mac's GUI Terminal with
-`osascript … do script` and polls a log, with no password. Both of `sign.sh`'s arguments can be found too:
-`security find-identity -v -p codesigning` with the login keychain named, and the wildcard profile in either
-profile folder `physical-device.md` §1 lists.
-
-**To do.** A subcommand that builds the driver for the installed Maestro version and signs it through the GUI
-Terminal, finding the identity and profile itself and refusing by name when either is missing. Run only when
-asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
-Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
-
 ## 164. Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2 — **OPEN, raised 11 Nov 2026**
 
 **What.** Reported from `hugoboss-flutter-runner` on 11 Nov 2026: Mac `oi-jamesl-mac`, iPhone 11 Pro
@@ -921,7 +902,17 @@ on each Maestro upgrade whether `listIOSConnectedDevices` has a caller.
   after `Device orientation is 5`. `driver.sh` printed only `the device driver for <udid> is not answering —
   restarting it (item 46)`, and not the STAND THE PHONE UPRIGHT message. `_devdrv_hint` in `bin/driver.sh` prints
   that message only when the last 6 lines of `~/devdrv-<udid>.log`, written in the last 600 s, contain
-  `ScreenSizeHelper` or `Not implemented yet`. Which of those failed here is not known.
+  `ScreenSizeHelper` or `Not implemented yet`. **Cause found 11 Nov 2026: neither.** The run used the copy at
+  `~/.claude/skills/maestro-drive`, which is v2.1.0 (installed 21 Sep). That version's `_ensure_device` restarts
+  the driver without calling `_devdrv_hint` first, and the restart empties the log. It also writes the shared
+  `~/devdrv.log`, not `~/devdrv-<udid>.log`. Commit `833338c` (item 46, in v2.1.1) calls the hint before the
+  restart. `run-tests.sh` passes all 688 on main, including "a restart that brings the driver back still names the
+  face-up crash first". Nothing to change in the code; the fix is installing a release newer than v2.1.0. Not yet
+  seen live on main: on 11 Nov the iPhone 11 Pro's driver failed to start twice with `The connection was
+  invalidated` (item 46), and the Mac's signed source build (`~/maestro-drive-driver/build-2.12.1`) does not crash
+  flat, so a live check needs the prebuilt driver forced. Forced later the same day: the prebuilt driver's
+  session died at bring-up (item 46) before any touch, so `driver.sh tap` named the item 46 death, correctly for
+  that log, and restarted onto the source build. On this phone the face-up message still has not been seen live.
 - **Landscape** (orientation 3). `deviceInfo` answered 812x375, and `rows` marked the portrait nodes `off`. Nothing
   warned that the phone was on its side.
 - **Untrusted certificate.** After a `flutter run --debug` install, the runner would not launch: `the Developer App

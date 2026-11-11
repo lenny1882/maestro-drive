@@ -473,9 +473,10 @@ any session that is. `bin/drivers.sh rig status` shows who holds a device. Steps
    wall runs it.
    `unzip -p ~/.maestro/lib/maestro-cli-<version>.jar deps/simulator-server/darwin/simulator-server > ~/.maestro/deps/simulator-server`
 3. **Rebuild and sign the phone driver, together.**
-   `runners/ios-device/driver/build.sh <version>`, then `driver/sign.sh` in the
-   Mac's GUI Terminal, because codesign fails over ssh (`osascript`, see
-   `physical-device.md`). `deviceup.sh` takes the newest `build-*` and falls back
+   `MAESTRO_VERSION=<version> bin/device.sh driver` builds it with
+   `driver/build.sh` and signs it with `driver/sign.sh` in the Mac's GUI
+   Terminal, because codesign fails over ssh. It finds the identity and the
+   profile itself, and refuses naming whichever is missing (item 163). `deviceup.sh` takes the newest `build-*` and falls back
    to the prebuilt driver if that build is unsigned. The prebuilt driver is
    re-signed as `physical-device.md` section 3 describes.
 4. **Restart the `maestro mcp` servers** that are still on the old jar. Stop them

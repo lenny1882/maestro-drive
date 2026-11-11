@@ -27,7 +27,7 @@ BUILDS=$(ls -d "$HOME"/maestro-drive-driver/build-* 2>/dev/null | grep -v '\.log
 if [ -n "$BUILDS" ] || [ -r "$PRE" ]; then
   PV=$(sed -n 's/^version=//p' "$PRE" 2>/dev/null)
   if [ ! -d "$HOME/maestro-drive-driver/build-$V" ] && [ "$PV" != "$V" ]; then
-    echo "  no phone driver for Maestro $V (step 3): runners/ios-device/driver/build.sh $V, then driver/sign.sh in the Mac's GUI Terminal"
+    echo "  no phone driver for Maestro $V (step 3): MAESTRO_VERSION=$V bin/device.sh driver"
     SAID=1
   fi
 fi

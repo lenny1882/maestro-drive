@@ -114,6 +114,14 @@ driver-up)
   sh "$HERE/deviceup.sh" "${1:?driver-up <id> <port>}" "${2:?port}" "${3:-${RDIR:-/tmp/maestro-mac}}"
   ;;
 
+driver-make)
+  # driver/make.sh beside this file: build the driver from source for the
+  # installed Maestro version and sign it through the Mac's GUI Terminal,
+  # finding the identity and the profile itself (BACKLOG item 163). Only when
+  # asked: bin/device.sh driver.
+  bash "$HERE/driver/make.sh" "${1:-}" "${2:-}"
+  ;;
+
 driver-down)
   _id=${1:?driver-down <id>}
   pkill -f "xcodebuild test-without-building.*$_id" 2>/dev/null

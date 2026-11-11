@@ -2991,6 +2991,73 @@ esac
   || no "and the restart still happens" "device.sh did not run"
 
 echo
+echo "phone driver: identity and profile lookup for bin/device.sh driver (item 163)"
+# pick.py is given find-identity output and decoded profiles. The fixtures are
+# written here: a certificate is any bytes, and find-identity prints the SHA-1
+# of those bytes, which is all pick.py compares.
+PK="$TMP/pick"; mkdir -p "$PK"
+python3 - "$PK" <<'PY'
+import plistlib, hashlib, datetime, sys, os
+d = sys.argv[1]
+mine, other = b"cert-mine", b"cert-someone-else"
+h = lambda b: hashlib.sha1(b).hexdigest().upper()
+open(os.path.join(d, "ids"), "w").write(
+    '  1) %s "Apple Development: Example Developer (AB12CD34EF)"\n'
+    '  2) %s "iPhone Distribution: Example Ltd (TEAM123456)"\n'
+    '     2 valid identities found\n' % (h(mine), "0" * 40))
+open(os.path.join(d, "noids"), "w").write("     0 valid identities found\n")
+exp = lambda y: datetime.datetime(y, 1, 1)
+def prof(name, appid, gta=True, year=2030, certs=(mine,), devs=("PHONE1",)):
+    p = {"Name": name, "ExpirationDate": exp(year), "DeveloperCertificates": list(certs),
+         "ProvisionedDevices": list(devs),
+         "Entitlements": {"application-identifier": appid, "get-task-allow": gta}}
+    plistlib.dump(p, open(os.path.join(d, name + ".plist"), "wb"))
+prof("prefix", "TEAM123456.dev.mobile.*")
+prof("later", "TEAM123456.*", year=2031)
+prof("app", "TEAM123456.com.example.app")
+prof("store", "TEAM123456.*", gta=False)
+prof("old", "TEAM123456.*", year=2020)
+prof("othercert", "TEAM123456.*", year=2032, certs=(other,))
+prof("nophone", "TEAM123456.*", year=2033, devs=("PHONE2",))
+PY
+PKB=(--bundle-id dev.mobile.maestro-driver-ios --bundle-id dev.mobile.maestro-driver-iosUITests.xctrunner --now 2026-11-11T00:00:00)
+_pk() { local ids=$1; shift; python3 "$REPO/runners/ios-device/driver/pick.py" --identities "$PK/$ids" "${PKB[@]}" "$@"; }
+_pp() { for n in "$@"; do printf '%s ' "/profiles/$n.mobileprovision=$PK/$n.plist"; done; }
+out=$(_pk ids $(_pp prefix app) 2>&1)
+case "$out" in
+  *"/profiles/prefix.mobileprovision"*"Apple Development: Example Developer"*) ok "a TEAM.dev.mobile.* profile covers both driver bundle ids and pairs with its identity by hash" ;;
+  *) no "a TEAM.dev.mobile.* profile covers both driver bundle ids and pairs with its identity by hash" "got: $out" ;;
+esac
+out=$(_pk ids $(_pp prefix later store old othercert nophone) --udid PHONE1 2>&1)
+case "$out" in
+  *"/profiles/later.mobileprovision"*) ok "of several that qualify, the one expiring last; expired, store, other-certificate and other-phone ones are passed over" ;;
+  *) no "of several that qualify, the one expiring last; expired, store, other-certificate and other-phone ones are passed over" "got: $out" ;;
+esac
+out=$(_pk noids $(_pp prefix) 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q "no codesigning identity in the login keychain" <<< "$out" \
+  && ok "no identity: refuses and says the keychain has none" \
+  || no "no identity: refuses and says the keychain has none" "rc=$rc: $out"
+out=$(_pk ids $(_pp app store old othercert) 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q "no provisioning profile can sign the phone driver" <<< "$out" &&
+  grep -q "old (old.mobileprovision): expired 2020-01-01" <<< "$out" &&
+  grep -q "othercert (othercert.mobileprovision): none of its certificates" <<< "$out" &&
+  ! grep -q "app (app.mobileprovision)" <<< "$out" \
+  && ok "no profile: refuses, names each near miss and why, and leaves other apps' profiles out" \
+  || no "no profile: refuses, names each near miss and why, and leaves other apps' profiles out" "rc=$rc: $out"
+out=$(_pk ids $(_pp nophone) --udid PHONE1 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q "does not list the phone PHONE1" <<< "$out" \
+  && ok "a profile that does not list the phone is named as such" \
+  || no "a profile that does not list the phone is named as such" "rc=$rc: $out"
+out=$(_pk ids 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q "No profiles were found" <<< "$out" \
+  && ok "no profiles at all: says both folders were empty" \
+  || no "no profiles at all: says both folders were empty" "rc=$rc: $out"
+grep -q 'bin/device.sh driver' "$REPO/runners/ios-device/deviceup.sh" &&
+  ! grep -q 'driver/build.sh replaces it' "$REPO/runners/ios-device/deviceup.sh" \
+  && ok "deviceup.sh's prebuilt-driver note names bin/device.sh driver" \
+  || no "deviceup.sh's prebuilt-driver note names bin/device.sh driver" "note still names driver/build.sh"
+
+echo
 echo "local transport: no relay, and the driver's own port (item 94, 4.1)"
 # The two URL helpers, against the real lib.sh rather than a stub, because what
 # they answer decides whether a URL names a port anything is listening on. A

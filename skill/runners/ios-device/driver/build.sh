@@ -50,4 +50,4 @@ xcodebuild build-for-testing \
   { echo "build: xcodebuild failed; $WORK/build-$VER.log ends:" >&2; grep 'error:' "$WORK/build-$VER.log" | sort -u | head -5 >&2; exit 1; }
 XCTR=$(ls "$OUT"/Build/Products/*.xctestrun | head -1)
 echo "built, unsigned: $XCTR"
-echo "next, from Terminal on this Mac:  $HERE/sign.sh '<identity>' <profile> $OUT"
+echo "next, from Terminal on this Mac:  $HERE/sign.sh '<identity>' <profile> $OUT  (make.sh does both)"

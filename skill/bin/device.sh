@@ -4,6 +4,7 @@
 #   bin/device.sh up <udid> [port]   # forwarder + persistent driver, then register
 #   bin/device.sh down <udid>        # tear both down, unregister
 #   bin/device.sh list               # what is registered
+#   bin/device.sh driver [udid]      # build and sign the driver from source (item 163)
 #
 # A phone's XCUITest driver binds its HTTP server ON THE PHONE, so it needs a
 # usbmux forwarder the simulator path never does, and the device tunnel idles
@@ -13,9 +14,9 @@
 #   bin/device.sh up 00008020-0011...          # once
 #   DEV=00008020-0011... bin/driver.sh nodes   # then drive it as usual
 #
-# The device driver must have been built and signed first: driver/build.sh and
-# driver/sign.sh, or the prebuilt re-signed by hand (physical-device.md §3). After
-# a Maestro upgrade, do that again for the new version. Everything physical-device
+# The device driver must have been built and signed first: bin/device.sh driver,
+# or the prebuilt re-signed by hand (physical-device.md §3). After a Maestro
+# upgrade, do that again for the new version. Everything physical-device
 # is in physical-device.md; this is BACKLOG.md item 45's device path, and the
 # ensure-driver recovery is item 46.
 set -uo pipefail
@@ -70,6 +71,17 @@ _unregister() {  # _unregister <udid>
   mv -f "$DEVICE_MAP.tmp" "$DEVICE_MAP" 2>/dev/null || rm -f "$DEVICE_MAP.tmp"
 }
 
+# The ios-device module, copied to the Mac before anything there runs it. A
+# function because `up` and `driver` both need it, with the same file list.
+_push_module() {
+  local M="$HERE/../runners/ios-device"
+  _ssh "mkdir -p '$RMODS/ios-device/driver'" >/dev/null
+  _push "$M/platform.sh" "$M/deviceup.sh" "$M/iproxy.py" "$RMODS/ios-device/" &&
+    _push "$M/driver/build.sh" "$M/driver/sign.sh" "$M/driver/make.sh" "$M/driver/pick.py" \
+          "$M/driver/bind-address.patch" "$RMODS/ios-device/driver/" ||
+    { echo "device: could not copy the ios-device module" >&2; return 1; }
+}
+
 case "${1:-list}" in
   up)
     udid=${2:?usage: device.sh up <udid> [port]}
@@ -81,13 +93,7 @@ case "${1:-list}" in
       PLATFORM=ios-device "$HERE/runner.sh" platform claim "$udid" >/dev/null 2>&1 || {
         echo "device: $udid is not a physical device udid — a simulator is bin/drivers.sh up" >&2
         exit 2; }
-    _ssh "mkdir -p '$RMODS/ios-device/driver'" >/dev/null
-    _push "$HERE/../runners/ios-device/platform.sh" \
-          "$HERE/../runners/ios-device/deviceup.sh" "$HERE/../runners/ios-device/iproxy.py" \
-          "$RMODS/ios-device/" &&
-      _push "$HERE/../runners/ios-device/driver/build.sh" "$HERE/../runners/ios-device/driver/sign.sh" \
-            "$HERE/../runners/ios-device/driver/bind-address.patch" "$RMODS/ios-device/driver/" ||
-      { echo "device: could not copy the ios-device module" >&2; exit 1; }
+    _push_module || exit 1
     live=$(_ssh "sh '$PL' driver-scan" 2>/dev/null)
     port=$(_device_port "$udid" "${3:-}" "$live") || exit 2
     echo "device: $udid on port $port"
@@ -98,6 +104,16 @@ case "${1:-list}" in
     _register "$udid" "$port"
     echo "registered $udid on port $port"
     echo "drive it:  DEV=$udid $HERE/driver.sh nodes"
+    ;;
+  driver)
+    # Build the phone driver from source for the Mac's Maestro version and sign
+    # it (BACKLOG item 163). The build survives a phone lying flat, which the
+    # prebuilt driver does not (item 50), and is the only one reachable over
+    # wifi. Only when asked, like bin/build.sh: it replaces the build for that
+    # version. With a udid, the profile chosen must list that phone.
+    udid=${2:-}
+    _push_module || exit 1
+    TMO=${TMO:-900} _ssh "bash '$RMODS/ios-device/platform.sh' driver-make '${MAESTRO_VERSION:-}' '$udid'"
     ;;
   down)
     udid=${2:?usage: device.sh down <udid>}
@@ -125,5 +141,5 @@ case "${1:-list}" in
       echo "no physical devices registered — bin/device.sh up <udid>"
     fi
     ;;
-  *) echo "usage: device.sh up <udid> [port] | down <udid> | list" >&2; exit 2 ;;
+  *) echo "usage: device.sh up <udid> [port] | down <udid> | list | driver [udid]" >&2; exit 2 ;;
 esac

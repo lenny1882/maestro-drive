@@ -179,7 +179,9 @@ XS Max on iOS 18.7.9. A Maestro upgrade means doing this again.
 Maestro's git tag has the `MaestroDriverLib` target the jar leaves out, so
 `runners/ios-device/driver/build.sh` (on the Mac) builds the driver from it,
 and `driver/sign.sh` (from Terminal on the Mac) signs it with the wildcard
-profile described below. That build is the only one reachable over wifi and
+profile described below. `bin/device.sh driver [udid]` does both: it builds over
+ssh, finds the identity and profile (`driver/pick.py`), and hands the signing to
+the Mac's GUI Terminal with `osascript` (item 163). That build is the only one reachable over wifi and
 the only one that survives a flat phone, and `deviceup.sh` prefers it. The
 re-sign below is the fallback when no signed build exists.
 
