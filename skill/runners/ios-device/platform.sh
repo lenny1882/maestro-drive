@@ -114,6 +114,15 @@ driver-up)
   sh "$HERE/deviceup.sh" "${1:?driver-up <id> <port>}" "${2:?port}" "${3:-${RDIR:-/tmp/maestro-mac}}"
   ;;
 
+state)
+  # The phone's State column in `devicectl list devices`: connected,
+  # available (paired), unavailable, or nothing when it is not listed. Asked
+  # by driver.sh when a driver stops answering, so a phone that has come off
+  # the cable is named as that and not as a dying session (item 165).
+  xcrun devicectl list devices 2>/dev/null | awk -v u="${1:?state <id>}" 'index($0, u) {
+    for (i = 1; i <= NF; i++) if ($i == "(UDID)") { s = $(i + 1); if ($(i + 2) ~ /^\(/) s = s " " $(i + 2); print s; exit } }'
+  ;;
+
 driver-make)
   # driver/make.sh beside this file: build the driver from source for the
   # installed Maestro version and sign it through the Mac's GUI Terminal,

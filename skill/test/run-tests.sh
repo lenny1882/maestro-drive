@@ -1601,6 +1601,88 @@ else
 fi
 
 echo
+echo "phone states that each have their own fix: untrusted certificate, flat, on its side (item 165)"
+# The Mac-side half of _devdrv_hint is run for real here, against a log in a
+# fake HOME, with a stat shim that answers the BSD form the Mac uses. _ssh runs
+# its argument locally, which is what the payload would do on the Mac.
+H165="$TMP/h165"; mkdir -p "$H165/home" "$H165/bin"
+printf '#!/bin/sh\n[ "$1" = -f ] && [ "$2" = %%m ] && exec date -r "$3" +%%s\nexec /usr/bin/stat "$@"\n' > "$H165/bin/stat"
+chmod +x "$H165/bin/stat"
+_h165() {  # _h165 <log file> -> the hint's output
+  cp "$1" "$H165/home/devdrv-devudid.log"
+  ( DEV=devudid; PLATFORM_SH=/x/platform.sh
+    _ssh(){ case "$*" in *locked*) return 1 ;; esac; HOME="$H165/home" PATH="$H165/bin:$PATH" sh -c "$1"; }
+    source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
+    _devdrv_hint 2>&1 )
+}
+out=$(_h165 "$FIX/devdrv-untrusted-certificate.log")
+grep -q 'VPN & Device Management' <<< "$out" && ! grep -q 'restart is the fix' <<< "$out" &&
+  ! grep -q '^    MD_' <<< "$out" \
+  && ok "an untrusted certificate in the driver log names the Settings path, not the item 46 restart" \
+  || no "an untrusted certificate in the driver log names the Settings path, not the item 46 restart" "got: $(tail -4 <<< "$out")"
+# The flat crash with the fatal line scrolled out of the last six: the case the
+# report hit. The whole log is searched, so it is still named.
+{ echo "ScreenSizeHelper.swift:99: Fatal error: Not implemented yet"; for i in 1 2 3 4 5 6 7 8; do echo "noise $i"; done
+  echo "** TEST EXECUTE FAILED **"; } > "$TMP/flat-scrolled.log"
+out=$(_h165 "$TMP/flat-scrolled.log")
+grep -q 'FACE-UP crash' <<< "$out" && ! grep -q 'restart is the fix' <<< "$out" \
+  && ok "a face-up fatal earlier than the last six log lines is still named" \
+  || no "a face-up fatal earlier than the last six log lines is still named" "got: $(tail -4 <<< "$out")"
+printf 'Testing started\nThe connection was invalidated\n** TEST EXECUTE FAILED **\n' > "$TMP/plain46.log"
+out=$(_h165 "$TMP/plain46.log")
+grep -q 'restart is the fix' <<< "$out" && ! grep -q 'VPN\|FACE-UP' <<< "$out" \
+  && ok "a plain session death still gets the item 46 message" \
+  || no "a plain session death still gets the item 46 message" "got: $(tail -4 <<< "$out")"
+out=$( source <(sed -n '/^_why()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _why "$FIX/devdrv-untrusted-certificate.log" 2>&1 )
+grep -q 'VPN & Device Management' <<< "$out" && ! grep -q 'item 46' <<< "$out" \
+  && ok "deviceup.sh names the untrusted certificate at bring-up, ahead of the item 46 message" \
+  || no "deviceup.sh names the untrusted certificate at bring-up, ahead of the item 46 message" "got: $out"
+_l165() {  # _l165 <is-device 0|1> <w> <h>
+  ( SCREEN_W=$2; SCREEN_H=$3
+    if [ "$1" = 1 ]; then _is_device(){ return 0; }; else _is_device(){ return 1; }; fi
+    source <(sed -n '/^_landscape_note()/,/^}/p; /^_gt()/p' "$REPO/bin/driver.sh")
+    _landscape_note 2>&1 )
+}
+out=$(_l165 1 812 375)
+grep -q 'on its side' <<< "$out" && grep -q '812x375' <<< "$out" \
+  && ok "a phone answering 812x375 is said to be on its side" \
+  || no "a phone answering 812x375 is said to be on its side" "got: $out"
+[ -z "$(_l165 1 375 812)" ] && [ -z "$(_l165 1 1194 834)" ] && [ -z "$(_l165 0 812 375)" ] \
+  && ok "portrait phones, landscape iPads and simulators get no note" \
+  || no "portrait phones, landscape iPads and simulators get no note" "a note was printed"
+# A phone the Mac cannot reach is refused by name before xcodebuild runs
+# (item 165). _state reads the State column of a real `devicectl list devices`.
+mkdir -p "$TMP/xc165"
+printf '#!/bin/sh\ncat "%s"\n' "$FIX/devicectl-list-devices.txt" > "$TMP/xc165/xcrun"; chmod +x "$TMP/xc165/xcrun"
+_st165() { ( UDID=$1; PATH="$TMP/xc165:$PATH"; source <(sed -n '/^_state()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _state ); }
+[ "$(_st165 00008020-000A11B22C33D44E)" = unavailable ] && [ "$(_st165 00008030-000B11B22C33D44E)" = connected ] &&
+  [ "$(_st165 00008030-000C11B22C33D44E)" = "available (paired)" ] && [ -z "$(_st165 00008030-000D11B22C33D44E)" ] \
+  && ok "deviceup.sh reads unavailable, connected, available (paired) and not-listed from devicectl" \
+  || no "deviceup.sh reads unavailable, connected, available (paired) and not-listed from devicectl" "got '$(_st165 00008020-000A11B22C33D44E)' '$(_st165 00008030-000C11B22C33D44E)'"
+out=$(PATH="$TMP/xc165:$PATH" bash "$REPO/runners/ios-device/deviceup.sh" 00008020-000A11B22C33D44E 22187 "$TMP/xc165w" 2>&1); rc=$?
+[ "$rc" = 1 ] && grep -q "'unavailable' to this Mac, not connected" <<< "$out" && ! grep -q "item 46" <<< "$out" \
+  && ok "an unavailable phone is refused as not connected, not given the item 46 message" \
+  || no "an unavailable phone is refused as not connected, not given the item 46 message" "rc=$rc: $out"
+out=$( DEV=devudid; PLATFORM_SH=/x/platform.sh
+       _ssh(){ case "$*" in (*" state "*) echo unavailable ;; (*locked*) return 1 ;; (*) printf 'The connection was invalidated\n** TEST EXECUTE FAILED **\n' ;; esac; }
+       source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh"); _devdrv_hint 2>&1; echo "rc=$?" )
+grep -q 'NOT CONNECTED' <<< "$out" && grep -q 'rc=3' <<< "$out" && ! grep -q 'remoted\|item 46' <<< "$out" \
+  && ok "a phone devicectl lists as unavailable is named as not connected, without the item 46 advice" \
+  || no "a phone devicectl lists as unavailable is named as not connected, without the item 46 advice" "got: $out"
+out=$( PATH="$TMP/xc165:$PATH" sh "$REPO/runners/ios-device/platform.sh" state 00008030-000C11B22C33D44E )
+[ "$out" = "available (paired)" ] \
+  && ok "platform.sh state reads the same column deviceup.sh does" \
+  || no "platform.sh state reads the same column deviceup.sh does" "got: $out"
+out=$( DEV=devudid; PLATFORM_SH=/x/ios/platform.sh; RMODS=/x; DEVICE_MAP="$TMP/pl165.map"; echo "devudid 22187 device" > "$DEVICE_MAP"
+       source <(sed -n '/^_is_device()/p; /^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
+       _ssh(){ echo "$*" >> "$TMP/pl165.calls"; return 1; }; : > "$TMP/pl165.calls"
+       _devdrv_hint >/dev/null 2>&1; cat "$TMP/pl165.calls" )
+grep -q "/x/ios-device/platform.sh' state" <<< "$out" && grep -q "/x/ios-device/platform.sh' locked" <<< "$out" &&
+  ! grep -q "/x/ios/platform.sh" <<< "$out" \
+  && ok "a registered phone's state and lock are asked of the ios-device module, not the project's platform" \
+  || no "a registered phone's state and lock are asked of the ios-device module, not the project's platform" "calls: $out"
+
+echo
 echo "a registered physical device resolves like a simulator (item 45)"
 # bin/device.sh registers a phone in DEVICE_MAP; _driver_map must merge it so
 # _driver_bind finds it. Test the seam by extracting the two functions.

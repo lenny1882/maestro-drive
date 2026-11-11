@@ -122,7 +122,24 @@ _rebind() {
 # device driver run and only a recent one is this session's, so its presence is a
 # self-gating device signal — a simulator run adds nothing.
 _devdrv_hint() {
-  local t
+  local t st pl=$PLATFORM_SH
+  # A registered phone is the ios-device module's, whatever PLATFORM says.
+  # PLATFORM_SH is the project's platform (ios, the simulators, here), whose
+  # module has neither `locked` nor `state` and on this Mac is not even
+  # installed, so neither question below ever reached a phone (found 11 Nov
+  # 2026, item 165). device.sh pushes the ios-device module on every `up`.
+  if declare -F _is_device >/dev/null && _is_device; then pl="$RMODS/ios-device/platform.sh"; fi
+  # Not connected at all: nothing below applies, and the item 46 advice to
+  # restart CoreDevice would send the reader the wrong way (item 165, seen with
+  # the cable out). The verb self-gates: a simulator's platform has no `state`
+  # and prints nothing, so only a phone the Mac lists as unavailable stops here.
+  st=$(_ssh "sh '$pl' state '$DEV'" 2>/dev/null)
+  if [ "$st" = unavailable ]; then
+    echo "  the phone is NOT CONNECTED — devicectl lists it as 'unavailable' on the Mac." >&2
+    echo "  Check the cable is in the Mac (not a hub), the phone is unlocked, and it is not" >&2
+    echo "  asking 'Trust This Computer'. No driver restart can help until it is connected." >&2
+    return 3
+  fi
   # A locked phone is the cheapest, commonest and most actionable cause: XCUITest
   # cannot attach to a locked springboard, and it surfaces as this same relay /
   # connection failure rather than as a lock. Measured — unlocked, the
@@ -130,17 +147,33 @@ _devdrv_hint() {
   # The verb self-gates: exit 2 means the question does not apply to this kind of
   # device, which is what a simulator udid gets, so nothing here needs to know
   # which kind it has.
-  if _ssh "sh '$PLATFORM_SH' locked '$DEV'" >/dev/null 2>&1; then
+  if _ssh "sh '$pl' locked '$DEV'" >/dev/null 2>&1; then
     echo "  the device is LOCKED — unlock it and retry." >&2
     echo "  XCUITest cannot attach to a locked screen; it fails as a relay/connection" >&2
     echo "  error, not as a lock (item 46)." >&2
   fi
   t=$(_ssh 'f=$HOME/devdrv-'"$DEV"'.log; [ -f "$f" ] || exit 0
 now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
-[ $((now - m)) -lt 600 ] && tail -6 "$f"' 2>/dev/null)
+[ $((now - m)) -lt 600 ] || exit 0
+tail -6 "$f"
+grep -qE "Developer App Certificate is not trusted|has not been explicitly trusted by the user" "$f" && echo MD_UNTRUSTED
+grep -qE "ScreenSizeHelper|Not implemented yet" "$f" && echo MD_FACEUP
+exit 0' 2>/dev/null)
   [ -n "$t" ] || return 0
   echo "  ~/devdrv-$DEV.log on the Mac (the on-device driver) ends:" >&2
-  printf '%s\n' "$t" | sed 's/^/    /' >&2
+  printf '%s\n' "$t" | grep -v '^MD_[A-Z]*$' | sed 's/^/    /' >&2
+  # The whole log is searched on the Mac and the result comes back as a marker
+  # line, because the six lines shown can miss the one that names the cause
+  # (item 165: a flat phone's crash went unnamed).
+  case "$t" in
+    *MD_UNTRUSTED*)
+      echo "  the phone does not TRUST the developer certificate the driver is signed with, so" >&2
+      echo "  iOS refuses to launch it. On the phone: Settings > General > VPN & Device Management," >&2
+      echo "  pick the developer app under 'Developer App', tap Trust. A restart does nothing" >&2
+      echo "  until then. A Flutter debug install signed by another account can leave the phone" >&2
+      echo "  in this state (item 165)." >&2
+      return 0 ;;
+  esac
   # The face-up crash (item 50) has a distinct cause and a distinct fix, so name
   # it before the generic XCTest-death message below — a restart alone does not
   # help while the phone stays flat. Reproduced live: a raw /touch on a
@@ -149,7 +182,7 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
   # own ScreenSizeHelper.swift handles .faceUp — the runner is built from older
   # source (item 55).
   case "$t" in
-    *ScreenSizeHelper*|*"Not implemented yet"*)
+    *MD_FACEUP*|*ScreenSizeHelper*|*"Not implemented yet"*)
       echo "  this is the FACE-UP crash (item 50): the phone is lying flat, reports" >&2
       echo "  .faceUp, and the runner kills itself on the first /touch. STAND THE" >&2
       echo "  PHONE UPRIGHT, then retry — a driver restart alone does not fix it" >&2
@@ -171,7 +204,9 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
 
 # Is DEV a physical device this session brought up (bin/device.sh), rather than a
 # simulator? Devices are in the registry; simulators are found by the process scan.
-_is_device() { [ -n "${DEV:-}" ] && grep -q "^$DEV " "$DEVICE_MAP" 2>/dev/null; }
+# ${DEVICE_MAP:-}: _ensure_screen asks this on every run now (the landscape
+# note, item 165), and under set -u an unset map would end the script there.
+_is_device() { [ -n "${DEV:-}" ] && [ -n "${DEVICE_MAP:-}" ] && grep -q "^$DEV " "$DEVICE_MAP" 2>/dev/null; }
 
 # Count this phone's automatic restarts, and on the third within ten minutes
 # say what fixes it: restarting CoreDevice on the Mac. Retrying,
@@ -206,7 +241,7 @@ _ensure_device() {
   # reaches the hint in _start. Without this, a phone lying flat crashed on
   # every tap and came back silently, and the face-up crash was never named
   # (items 50, 46).
-  _devdrv_hint
+  _devdrv_hint; [ $? = 3 ] && return 1
   _restarts_note
   # bash <script>, not the path alone. device.sh used to ship without an execute
   # bit — the old rsync-to-build/ publish did not chmod and ~/.claude refuses
@@ -334,6 +369,20 @@ $(printf '%s' "$d" | python3 -c 'import json,sys
 d=json.load(sys.stdin); print(d["widthPoints"], d["heightPoints"])')
 EOF
   [ -n "${SCREEN_W:-}" ] || { echo "could not read screen size from /deviceInfo" >&2; return 1; }
+  _landscape_note
+}
+
+# A phone on its side answers /deviceInfo wider than tall (812x375 on an
+# iPhone 11 Pro), and a portrait-only app's nodes then read as off screen, with
+# nothing saying why (item 165). Only for a physical device and only at phone
+# size: an iPad in landscape is a normal way to hold one, and a simulator does
+# not turn by itself. The short side below 600 points is every iPhone and no iPad.
+_landscape_note() {
+  _is_device || return 0
+  [ "$(_gt "$SCREEN_W" "$SCREEN_H")" = 1 ] && [ "$(_gt 600 "$SCREEN_H")" = 1 ] || return 0
+  echo "note: the phone is on its side — /deviceInfo is ${SCREEN_W}x${SCREEN_H}, wider than tall." >&2
+  echo "  A portrait app's nodes read as off screen like this. Turn the phone portrait," >&2
+  echo "  or lock rotation in Control Centre, then rerun (item 165)." >&2
 }
 
 # Float comparison, for asking whether a picture is landscape the same way the

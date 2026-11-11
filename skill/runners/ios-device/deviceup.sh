@@ -42,6 +42,30 @@ try:
 except Exception:
     print("?")' "$WORK/details-$UDID.json"
 }
+# The phone's state as the Mac sees it, from the State column of
+# `devicectl list devices`: connected, available (paired), unavailable, or
+# empty when it is not listed at all.
+_state() {
+  xcrun devicectl list devices 2>/dev/null | awk -v u="$UDID" 'index($0, u) {
+    for (i = 1; i <= NF; i++) if ($i == "(UDID)") { s = $(i + 1); if ($(i + 2) ~ /^\(/) s = s " " $(i + 2); print s; exit } }'
+}
+
+# A phone the Mac cannot reach. Before this check it went on to xcodebuild,
+# which listed every simulator ("Unable to find a destination") and ended in
+# the item 46 message, which claims the phone shows 'connected' (item 165,
+# seen 11 Nov 2026 with the cable out).
+STATE=$(_state)
+case "$STATE" in
+  connected|"available (paired)") ;;
+  "") echo "the phone $UDID is not in devicectl's list on this Mac — it has never been paired here," >&2
+      echo "or the udid is wrong. Connect it by cable and answer 'Trust This Computer' on the phone." >&2
+      exit 1 ;;
+  *)  echo "the phone $UDID is '$STATE' to this Mac, not connected. Check the cable is in (and in" >&2
+      echo "this Mac, not a hub that has gone to sleep), that the phone is unlocked, and that it is" >&2
+      echo "not showing 'Trust This Computer'. Nothing on the phone can start until it is connected." >&2
+      exit 1 ;;
+esac
+
 set -- $(_link); LINK=${1:-?}; TUNNEL=${2:-}
 
 # Which driver. The one built from source (driver/build.sh, signed by
@@ -144,7 +168,15 @@ env ${BIND:+TEST_RUNNER_BIND=$BIND} TEST_RUNNER_PORT=$PORT \
 # Say what the log says, not one cause for every failure (BACKLOG item 103).
 # Each branch is a failure seen on this Mac, in the order they can overlap.
 _why() {  # _why <log>
-  if grep -qE "Installing built products.*Finished with error|Failed to install the app" "$1" 2>/dev/null; then
+  # First: nothing else can succeed until the phone trusts the signer, and the
+  # log also carries TEST EXECUTE FAILED, which the last branch would claim.
+  if grep -qE "Developer App Certificate is not trusted|has not been explicitly trusted by the user" "$1" 2>/dev/null; then
+    echo "the phone does not TRUST the developer certificate the driver is signed with, so" >&2
+    echo "iOS refuses to launch it. On the phone: Settings > General > VPN & Device Management," >&2
+    echo "pick the developer app under 'Developer App', tap Trust. A restart does nothing" >&2
+    echo "until then. A Flutter debug install signed by another account can leave the phone" >&2
+    echo "in this state (item 165)." >&2
+  elif grep -qE "Installing built products.*Finished with error|Failed to install the app" "$1" 2>/dev/null; then
     echo "the driver could not be INSTALLED on the phone — it never ran." >&2
     grep -oE "CoreDeviceError error [0-9]+|IXRemoteErrorDomain error [0-9]+|Connection interrupted|disconnected immediately after connecting" "$1" | sort -u | sed 's/^/  /' >&2
     echo "CoreDeviceError 3002 (IXRemote 6, 'Connection interrupted') repeating is" >&2

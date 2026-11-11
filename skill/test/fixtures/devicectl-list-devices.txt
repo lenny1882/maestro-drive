@@ -1,0 +1,7 @@
+Name                         Hostname   Identifier                                    State         Model                                   Reality  
+--------------------------   --------   -------------------------------------------   -----------   -------------------------------------   ---------
+iPad Air (3rd generation)               59FE63FF-A300-4C71-B83C-D443FE778133 (UDID)   shutdown      iPad Air (3rd generation) (iPad11,3)    simulated
+iPad Air (4th generation)               73D41C8A-08CB-4B11-BD39-F175A166313D (UDID)   shutdown      iPad Air (4th generation) (iPad13,2)    simulated
+Example iPhone A                        00008020-000A11B22C33D44E (UDID)              unavailable   iPhone XS Max (iPhone11,6)              physical 
+Example iPhone B                        00008030-000B11B22C33D44E (UDID)              connected     iPhone 11 Pro (iPhone12,3)              physical 
+Example iPhone C                        00008030-000C11B22C33D44E (UDID)              available (paired)   iPhone 15 (iPhone15,4)           physical 

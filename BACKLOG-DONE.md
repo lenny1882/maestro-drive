@@ -3548,48 +3548,6 @@ wall failure that started this branch came from an old capture binary.
 version when any phone driver exists, naming the step in "Upgrading Maestro". Live on the Mac it reported a
 match. The missed-step messages are tested with stubs only. It checks version, not signing.
 
-## 163. Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one — **DONE**
-
-**What.** Item 50 made `deviceup.sh` pick the driver built from source whenever a signed one exists, and that
-driver survives a phone lying flat. Making one is still two hand steps (`reference/setup.md` step 3):
-`runners/ios-device/driver/build.sh`, then `driver/sign.sh '<identity>' <profile> <build-dir>` typed into
-Terminal on the Mac. With no signed build, `deviceup.sh` falls back to the prebuilt driver with a one-line note,
-and every touch on a flat phone kills it until the phone is stood upright.
-
-**Why.** Signing was left manual because codesign fails over SSH (`errSecInternalComponent`). The skill already
-gets round that for app builds: `runners/flutter/build.sh:269` hands the job to the Mac's GUI Terminal with
-`osascript … do script` and polls a log, with no password. Both of `sign.sh`'s arguments can be found too:
-`security find-identity -v -p codesigning` with the login keychain named, and the wildcard profile in either
-profile folder `physical-device.md` §1 lists.
-
-**To do.** A subcommand that builds the driver for the installed Maestro version and signs it through the GUI
-Terminal, finding the identity and profile itself and refusing by name when either is missing. Run only when
-asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
-Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
-
-**Done 11 Nov 2026.** `bin/device.sh driver [udid]` pushes the ios-device module and runs
-`runners/ios-device/driver/make.sh` on the Mac. `make.sh` finds the identity and the profile first
-(`driver/pick.py`), so a Mac that cannot sign is refused before it builds. It then runs `build.sh` over ssh,
-hands `sign.sh` to the GUI Terminal with `osascript … do script`, and waits for `MMDONE` in
-`~/maestro-drive-driver/sign-<version>.log`.
-
-- `pick.py` takes identities from `security find-identity -v -p codesigning` with the login keychain named, and
-  profiles from both folders. A profile qualifies when it has `get-task-allow` true, has not expired, has an app
-  id covering both driver bundle ids (`*` or a prefix such as `dev.mobile.*`), and includes a certificate whose
-  SHA-1 is an identity's. The identity goes to codesign by hash. With a udid, the profile must list the phone.
-  When several qualify, the one expiring last wins. With none, it says which requirement each near miss failed.
-- `deviceup.sh`'s prebuilt-driver note and its wifi and no-driver refusals name `bin/device.sh driver`, as do
-  `upgradecheck.sh`, `reference/setup.md` step 3 and `physical-device.md` §3.
-- Tests: 7 offline cases in `skill/test/run-tests.sh` (695 of 695 pass), and 161 of 161 in `test/run-tests.sh`.
-- Measured on the Mac on 11 Nov 2026, Maestro 2.12.1, Xcode 27.2. It picked "Maestro Driver Host DEV"
-  (`38RS7YKR5P.dev.mobile.*`) and the Apple Development identity the hand-signed build used. It built and
-  signed in 51 s into a scratch folder and in 41 s for real, with no password.
-- On the iPhone 11 Pro lying flat (`faceUp`), iOS 26.5.2, the source build took 3 touches of 3 with no
-  `ScreenSizeHelper` fatal, in each of two sessions. Both sessions then died with `The connection was
-  invalidated` 33 s after starting, and an untouched session died after 39 s. That is item 46, not item 50,
-  and it happened after `sudo killall -9 remoted`. The XS Max was not connected, so it was not measured.
-
-
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

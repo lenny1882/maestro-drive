@@ -876,6 +876,52 @@ never went true. The false path is measured asleep and awake.
 
 **To do.** Run it on a setup where the address really changes.
 
+## 163. Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one — **OPEN, raised 11 Nov 2026**
+
+**What.** Item 50 made `deviceup.sh` pick the driver built from source whenever a signed one exists, and that
+driver survives a phone lying flat. Making one is still two hand steps (`reference/setup.md` step 3):
+`runners/ios-device/driver/build.sh`, then `driver/sign.sh '<identity>' <profile> <build-dir>` typed into
+Terminal on the Mac. With no signed build, `deviceup.sh` falls back to the prebuilt driver with a one-line note,
+and every touch on a flat phone kills it until the phone is stood upright.
+
+**Why.** Signing was left manual because codesign fails over SSH (`errSecInternalComponent`). The skill already
+gets round that for app builds: `runners/flutter/build.sh:269` hands the job to the Mac's GUI Terminal with
+`osascript … do script` and polls a log, with no password. Both of `sign.sh`'s arguments can be found too:
+`security find-identity -v -p codesigning` with the login keychain named, and the wildcard profile in either
+profile folder `physical-device.md` §1 lists.
+
+**To do.** A subcommand that builds the driver for the installed Maestro version and signs it through the GUI
+Terminal, finding the identity and profile itself and refusing by name when either is missing. Run only when
+asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
+Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
+
+**Built 11 Nov 2026, not finished.** `bin/device.sh driver [udid]` pushes the ios-device module and runs
+`runners/ios-device/driver/make.sh` on the Mac. `make.sh` finds the identity and the profile first
+(`driver/pick.py`), so a Mac that cannot sign is refused before it builds. It then runs `build.sh` over ssh,
+hands `sign.sh` to the GUI Terminal with `osascript … do script`, and waits for `MMDONE` in
+`~/maestro-drive-driver/sign-<version>.log`.
+
+- `pick.py` takes identities from `security find-identity -v -p codesigning` with the login keychain named, and
+  profiles from both folders. A profile qualifies when it has `get-task-allow` true, has not expired, has an app
+  id covering both driver bundle ids (`*` or a prefix such as `dev.mobile.*`), and includes a certificate whose
+  SHA-1 is an identity's. The identity goes to codesign by hash. With a udid, the profile must list the phone.
+  When several qualify, the one expiring last wins. With none, it says which requirement each near miss failed.
+- `deviceup.sh`'s prebuilt-driver note and its wifi and no-driver refusals name `bin/device.sh driver`, as do
+  `upgradecheck.sh`, `reference/setup.md` step 3 and `physical-device.md` §3.
+- Tests: 7 offline cases in `skill/test/run-tests.sh` (695 of 695 pass), and 161 of 161 in `test/run-tests.sh`.
+- Measured on the Mac on 11 Nov 2026, Maestro 2.12.1, Xcode 27.2. It picked "Maestro Driver Host DEV"
+  (`38RS7YKR5P.dev.mobile.*`) and the Apple Development identity the hand-signed build used. It built and
+  signed in 51 s into a scratch folder and in 41 s for real, with no password.
+- On the iPhone 11 Pro lying flat (`faceUp`), iOS 26.5.2, the source build took 3 touches of 3 with no
+  `ScreenSizeHelper` fatal, in each of two sessions. Both sessions then died with `The connection was
+  invalidated` 33 s after starting, and an untouched session died after 39 s. That is item 46, not item 50,
+  and it happened after `sudo killall -9 remoted`. The XS Max was not connected, so it was not measured.
+
+**Still to do.** Measure the flat XS Max, as this item asked: it was not connected on 11 Nov. Take more than
+3 touches in one session. On the iPhone 11 Pro every session died after 33-39 s (item 167), so 3 was the most
+one session allowed. The refusals for a missing identity or profile are tested offline only. No Mac
+without either has run them.
+
 ## 164. Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2 — **OPEN, raised 11 Nov 2026**
 
 **What.** Reported from `hugoboss-flutter-runner` on 11 Nov 2026: Mac `oi-jamesl-mac`, iPhone 11 Pro
@@ -913,16 +959,49 @@ on each Maestro upgrade whether `listIOSConnectedDevices` has a caller.
   flat, so a live check needs the prebuilt driver forced. Forced later the same day: the prebuilt driver's
   session died at bring-up (item 46) before any touch, so `driver.sh tap` named the item 46 death, correctly for
   that log, and restarted onto the source build. On this phone the face-up message still has not been seen live.
+  **Fixed 11 Nov 2026.** `_devdrv_hint` now searches the whole log on the Mac and returns `MD_FACEUP` or
+  `MD_UNTRUSTED` marker lines with the six it shows, so a fatal that has scrolled out of the last six is still
+  named. Offline test: "a face-up fatal earlier than the last six log lines is still named". Not seen live: on
+  the iPhone 11 Pro the prebuilt driver's session never came up, in two tries after `sudo killall -9 remoted`.
 - **Landscape** (orientation 3). `deviceInfo` answered 812x375, and `rows` marked the portrait nodes `off`. Nothing
   warned that the phone was on its side.
+  **Fixed 11 Nov 2026.** `_ensure_screen` calls `_landscape_note`. For a registered physical device whose
+  `deviceInfo` is wider than tall with a short side under 600 points (every iPhone, no iPad), it prints "the
+  phone is on its side" with the size and says to turn it portrait. Offline tests cover 812x375 (note), a
+  portrait phone, a landscape iPad and a simulator (none). Not seen live: it needs the phone on its side in an
+  app that rotates.
 - **Untrusted certificate.** After a `flutter run --debug` install, the runner would not launch: `the Developer App
   Certificate is not trusted ... Unable to launch dev.mobile.maestro-driver-iosUITests.xctrunner because it has an
   invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user`.
   `device.sh` printed only the `TEST EXECUTE FAILED` / item 46 message, whose fix (restart the driver) does nothing
   here.
+  **Fixed 11 Nov 2026.** `deviceup.sh`'s `_why` and `_devdrv_hint` both match `Developer App Certificate is not
+  trusted` or `has not been explicitly trusted by the user` ahead of the item 46 message, and name Settings >
+  General > VPN & Device Management. Fixture `test/fixtures/devdrv-untrusted-certificate.log`, from the
+  13:45 run with the phone name and home path replaced. `_devdrv_hint` also gave the message through the real
+  `_ssh` against that run's log on the Mac.
 
 **Why.** Each has its own fix (stand the phone up, turn it portrait, trust the developer in Settings → General →
 VPN & Device Management), and the messages point at none of them.
+
+- **Not connected** (found 11 Nov 2026, while setting up the landscape check). With the phone
+  `unavailable` in `devicectl list devices` and absent from `system_profiler SPUSBDataType`, `deviceup.sh`
+  ran xcodebuild, which listed every simulator ("Unable to find a destination"), and then printed the item 46
+  message, which claims `devicectl` shows the phone `connected`. **Fixed:** `deviceup.sh` reads the phone's
+  State column first and refuses anything but `connected` or `available (paired)`, naming the state and the
+  cable, the hub and the Trust prompt. Offline tests use `test/fixtures/devicectl-list-devices.txt`. `driver.sh`'s
+  recovery also asks first, through a new `platform.sh state` verb, and stops at "the phone is NOT CONNECTED"
+  without restarting. Seen live on the iPhone 11 Pro with the cable out. Found on the way: `_devdrv_hint`
+  asked `PLATFORM_SH`, the project's platform module (`runners/ios/platform.sh`, not installed on this
+  Mac), so its "the device is LOCKED" check had never reached a phone either. A registered phone now goes to
+  `runners/ios-device/platform.sh`.
+
+**Still to do.** See the landscape note live with the phone on its side. Tried 11 Nov 2026 at 15:06 and
+15:10: the phone was `connected` and `devicectl` read `landscapeLeft`, and the driver logged "Interface
+orientation changed to Landscape Right". Both sessions died before `device.sh up` registered them, so no
+`deviceInfo` was read (item 167). Replace the v2.1.0 copy at
+`~/.claude/skills/maestro-drive`, which the hugoboss session runs and which has none of this, with a release
+that has it. v2.1.1 has only the item 46 fix, so this needs a new release.
 
 **To do.** Get the flat run's `devdrv` log and find why the hint missed. Warn when `deviceInfo` is wider than it
 is tall on a phone. Match the untrusted-certificate text in the driver log in `deviceup.sh` and `_devdrv_hint`,
@@ -939,4 +1018,60 @@ and in portrait.
 **To do.** Reproduce it on that screen, and dump what `scrollto` matched against each pass: whether the chips'
 text reaches the tree in that form (spaces, a non-breaking space, separate nodes for each number), whether the
 pattern is anchored against a longer label, and whether the swipes went past the chips.
+
+## 167. iPhone 11 Pro driver sessions die after 33-39 s, and restarting CoreDevice does not help — **OPEN, raised 11 Nov 2026**
+
+**What.** iPhone 11 Pro `00008030-000A199A3E98402E`, iOS 26.5.2, on Mac `oi-jamesl-mac`, Xcode 27.2,
+Maestro 2.12.1, by cable. Every driver session on 11 Nov ended with `The connection was invalidated`
+(CoreDeviceError 3 / Mercury 1001). Measured: 33 s after start with 3 touches (two sessions), 39 s with no
+touches. `sudo killall -9 remoted` at 14:30:07 did not lengthen them. Sessions at 15:06 and 15:10 died
+before `bin/device.sh up` could register them. The prebuilt driver's sessions never came up at all, in two
+tries. The source build (`~/maestro-drive-driver/build-2.12.1`) and a scratch build of it behaved the same.
+
+**Why.** Item 46 recorded the `remoted` restart taking sessions from under 2 minutes to over 10 on the XS Max.
+On this phone it did not, so the advice the skill prints after a third restart does not hold here. A session
+shorter than a bring-up blocks every live check on the phone, including items 163 and 165.
+
+**To do.** Find what differs from the XS Max: the iOS version (26.5.2 against 18.7.9), the cable or port, a
+second process using the phone's tunnel (item 103 names a `devicectl` loop as one cause), and whether the
+hugoboss session's `fwdsup.sh` and its `lockState` loop in `run.sh` were running. Then time a session with
+each removed. Until then, stop `_restarts_note` claiming the restart fixes it.
+
+## 168. `deviceup.sh` reuses a forwarder that no longer reaches the phone — **OPEN, raised 11 Nov 2026**
+
+**What.** On 11 Nov a forwarder started at 13:44 by the hugoboss session's v2.1.0 run
+(`iproxy.py 00008030-000A199A3E98402E 22187`, pid 3858) was still listening on 22187. The driver was running on
+the phone ("starting server 127.0.0.1:22187") and `/status` through the forwarder answered nothing.
+`deviceup.sh` keeps any running forwarder whose command line matches `iproxy.py <udid> <port>$`, so every
+bring-up reused it. Killing it and letting `deviceup.sh` start a new one gave `{"status":"ok"}` at once.
+
+**Why.** The bring-up then reports the item 46 message for a forwarder fault, and nothing in its output points
+at the forwarder.
+
+**To do.** When `/status` does not answer through a kept forwarder, replace the forwarder once and ask again
+before launching or blaming the driver. Read `iproxy-<port>.log` for its last connection. Offline test with a
+forwarder stub that accepts and never relays.
+
+## 169. The packaging tree checks fail when the session's working directory is `skill/` — **OPEN, raised 11 Nov 2026**
+
+**What.** `test/run-tests.sh` failed "a clean install matches" and "`__pycache__` and reference/staging are not
+strays" three times on 11 Nov. Each failing run started while the Claude Code session's primary working
+directory was `skill/`. Each passed when rerun with it at the repo root (161 of 161). The sandbox mounts
+`.bashrc`, `.claude/` and the other dotfiles over the session's working directory, so they sat inside
+`skill/` while the tarball was built from it.
+
+**Why.** A false failure in the item 17 check looks like a real stray file in the release.
+
+**To do.** Confirm by listing `skill/` during a failing run. Then either have `belongs` in `manifest.sh` leave
+out those names, or have the suite refuse to run, naming the cause, when `skill/` holds them.
+
+## 170. "the phone is NOT CONNECTED" prints twice per `driver.sh` call — **OPEN, raised 11 Nov 2026**
+
+**What.** With the phone `unavailable`, `driver.sh rows` printed the three-line message from `_ensure_device`'s
+`_devdrv_hint`, then again from `_start`'s own call after "relay started but … did not answer".
+
+**Why.** It is the same fact twice, between lines that look like a second failure.
+
+**To do.** Have `_start` skip its `_devdrv_hint` when `_ensure_device` has already named the phone as not
+connected, and assert one copy in the item 165 test.
 
