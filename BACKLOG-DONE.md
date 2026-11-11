@@ -3548,6 +3548,58 @@ wall failure that started this branch came from an old capture binary.
 version when any phone driver exists, naming the step in "Upgrading Maestro". Live on the Mac it reported a
 match. The missed-step messages are tested with stubs only. It checks version, not signing.
 
+## 171. `skill/bin/lib.sh` has no version a dependent can check — **DONE**
+
+**What.** `flutter-hot-reload-mac` 2.0 (item 93) will source `skill/bin/lib.sh`. Nothing in it says which
+set of functions, arguments and behaviour a caller is getting.
+
+**Why.** A maestro-drive update that changes what a function takes or does breaks the dependent silently,
+at the point it calls that function.
+
+**To do.** Add `MAESTRO_DRIVE_LIB_VERSION=1` to `skill/bin/lib.sh`, with `rrc-lib.sh`'s rule written next to
+it: adding a function leaves the number alone; changing what one takes or does, or removing one, increments
+it. The dependent refuses any other value. A test that fails when a function in `lib.sh` is removed without
+the number moving would hold the rule.
+
+**Done, 11 Nov 2026.** `MAESTRO_DRIVE_LIB_VERSION=1` near the top of `skill/bin/lib.sh`, with the rule
+beside it. `skill/test/run-tests.sh` holds `LIB_API_1`, the 31 functions version 1 offers, and fails when one
+is missing while the number has not moved.
+
+## 172. `framework.sh describe` prints a report for people, not values a script can read — **DONE**
+
+**What.** `runners/flutter/framework.sh describe` runs `build.sh --detect`, which prints aligned prose:
+`flutter    <path>` plus a version line, `cocoapods  not on PATH; using GEM_HOME=<dir>`,
+`flavour    dev — the only one whose bundle id is <id>`, `target     lib/main_dev.dart`,
+`last build <path> (<date>)`. `flutter-hot-reload-mac` 2.0 (item 93) needs the SDK, flavour, entrypoint
+and gem home as values.
+
+**Why.** Parsing the prose ties the dependent to wording that is written to be changed.
+
+**To do.** Add `describe --env`, printing `FLUTTER=`, `FLAVOR=`, `TARGET=` and `GEM_HOME=` one per line,
+`GEM_HOME=` empty when `pod` is on `PATH`. It exits non-zero, with the reason on stderr, where the report
+refuses today (flavour not decided). Cover it in `skill/test/run-tests.sh`.
+
+**Done, 11 Nov 2026.** `framework.sh describe <repo> [<app-id>] --env`, through a new `build.sh --detect
+--env`, prints the four lines and nothing else. It exits 1 with the NOT DECIDED report on stderr when the
+flavour is undecided, gives `TARGET=lib/main.dart` for an unflavoured project, and skips `flutter --version`.
+`skill/runners/README.md`'s verb table says so.
+
+## 173. `vmservice.sh` reads one shared `/tmp/frun.log`, so two hot-reload runs share it — **DONE**
+
+**What.** `skill/runners/flutter/vmservice.sh:16` defaults `FRUN_LOG` to `/tmp/frun.log`, the hot-reload
+skill's single log. `flutter-hot-reload-mac` 2.0 (item 93) keys its pipe, log and PID file by UDID and
+writes `$RDIR/frun-$DEV.log`.
+
+**Why.** With 2.0, `/tmp/frun.log` is never written, so the VM Service URI is not found there; with two runs
+on one Mac, one log would give the other device's URI.
+
+**To do.** Read `$RDIR/frun-$DEV.log` instead, and update `skill/reference/connection.md:253` and the
+`vmservice.sh` tests in `skill/test/run-tests.sh` (around line 2222) to match.
+
+**Done, 11 Nov 2026.** `FRUN_LOG` defaults to `${RDIR:-/tmp/maestro-mac}/frun-$DEV.log`; `/tmp/frun.log`
+is no longer read, so hot-reload 1.x falls back to the simulator log's last five minutes. All three callers
+already pass `RDIR`. Tests cover the per-device log and that another device's is not read.
+
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

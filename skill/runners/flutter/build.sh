@@ -6,6 +6,7 @@
 # the only thing that should call it. It lived in remote/ before the seam existed (BACKLOG item 87, 5.4).
 #
 #   build.sh --repo <dir> --detect
+#   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] --detect --env
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] [--target <file>]
 #            [--install <udid>] [--release] [--build-only]
 #
@@ -35,11 +36,15 @@
 # testable from Linux without a Mac.
 set -u
 
-REPO=; DETECT=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0; LIST=
+REPO=; DETECT=0; ENV=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0; LIST=
 while [ $# -gt 0 ]; do
   case $1 in
     --repo)    REPO=$2; shift 2 ;;
     --detect)  DETECT=1; shift ;;
+    # The same answers as --detect, as KEY=value lines a script reads, for a
+    # dependent that sources this package rather than reading its report
+    # (item 172). The report's wording is written for people and changes.
+    --env)     ENV=1; DETECT=1; shift ;;
     # Report-only modes, so framework.sh's `variants` and `variant-for-appid`
     # ask this file rather than reproducing the rule. Two copies of "what counts
     # as a flavour" is one copy too many: the pair test below is subtle, and a
@@ -170,12 +175,17 @@ case "$LIST" in
 esac
 
 # --- report -----------------------------------------------------------------
+# --env keeps the report off stdout and prints only the values at the end, on
+# the stdout it saved as fd 3. Refusals and warnings stay on stderr either way.
+[ "$ENV" = 1 ] && exec 3>&1 >/dev/null
 FL=$(_flutter) || { echo "build: no Flutter SDK found." >&2
   echo "  looked for a pinned SDK first ($REPO/.fvm/flutter), then PATH, then the" >&2
   echo "  usual install locations. A repo that pins with fvm needs 'fvm install'" >&2
   echo "  on the Mac before anything here can build it." >&2; exit 1; }
 echo "flutter    $FL"
-echo "           $("$FL" --version 2>/dev/null | head -1)"
+# Skipped for --env: it prints nothing a script needs, and `flutter --version`
+# is seconds on a cold SDK.
+[ "$ENV" = 1 ] || echo "           $("$FL" --version 2>/dev/null | head -1)"
 
 GEM=$(_gem_home) && echo "cocoapods  not on PATH; using GEM_HOME=$GEM" \
                  || echo "cocoapods  $(command -v pod 2>/dev/null || echo 'not found, and no gem dir either')"
@@ -202,13 +212,24 @@ elif [ -z "$FLAVOR" ]; then
       echo "           pass --flavor, or set BUILD_FLAVOR in .maestro-drive.conf." >&2
       echo "           Building the wrong one installs a different bundle id and" >&2
       echo "           leaves the app under test untouched, which is silent." >&2
-      [ "$DETECT" = 1 ] || exit 1
+      # --detect reports and carries on; --env has no value to give for
+      # FLAVOR, and an empty one would read as "unflavoured".
+      [ "$DETECT" = 1 ] && [ "$ENV" = 0 ] || exit 1
     fi
   fi
 fi
 [ -n "$FLAVOR" ] && [ -z "$TARGET" ] && TARGET="lib/main_$FLAVOR.dart"
 [ -n "$TARGET" ] && echo "target     $TARGET"
 APP=$(_built_app) && echo "last build $APP ($(date -r "$APP" '+%Y-%m-%d %H:%M' 2>/dev/null))"
+
+# The values, one per line. TARGET is never empty: an unflavoured build runs
+# with no -t, and flutter's default for that is lib/main.dart. GEM_HOME is empty
+# when pod is on PATH, which is the case where setting it does harm.
+if [ "$ENV" = 1 ]; then
+  printf 'FLUTTER=%s\nFLAVOR=%s\nTARGET=%s\nGEM_HOME=%s\n' \
+    "$FL" "$FLAVOR" "${TARGET:-lib/main.dart}" "${GEM:-}" >&3
+  exit 0
+fi
 
 [ "$DETECT" = 1 ] && exit 0
 

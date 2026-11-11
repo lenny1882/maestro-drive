@@ -105,6 +105,20 @@ if [ "$detect" = 0 ] && [ "$no_install" = 0 ]; then
   --no-install builds without installing." >&2
     exit 2
   fi
+
+  # Before the build, not after it: a device another session labelled today is
+  # one whose app this install would replace mid-journey (item 112), and finding
+  # that out costs one round trip per device rather than a build. --all skips
+  # those devices and installs on the rest; a named DEV refuses.
+  kept=()
+  for u in "${targets[@]}"; do
+    if _label_guard "$u"; then kept+=("$u")
+    elif [ "$install_all" = 0 ]; then exit 2
+    else echo "build: --all skips $u." >&2
+    fi
+  done
+  targets=("${kept[@]}")
+  [ ${#targets[@]} -gt 0 ] || { echo "build: --all, and every booted device is labelled by another session today" >&2; exit 2; }
 fi
 
 # The framework module's own build script, refreshed beside the module rather

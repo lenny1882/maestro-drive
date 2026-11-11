@@ -51,8 +51,14 @@ describe)
   # remote/build.sh --detect, unchanged. It reports the fvm-pinned SDK, the
   # CocoaPods GEM_HOME, the flavour derived from the app id, the entrypoint and
   # the last build, and writes nothing.
-  _repo=${1:?describe <repo>}; _appid=${2:-}
-  sh "$HERE/build.sh" --repo "$_repo" ${_appid:+--app-id "$_appid"} --detect
+  #
+  # --env prints FLUTTER=, FLAVOR=, TARGET= and GEM_HOME= instead, one per line,
+  # for a dependent that reads values rather than the report (item 172). It
+  # exits 1 where the report says NOT DECIDED.
+  _repo=${1:?describe <repo> [<app-id>] [--env]}; _appid=${2:-}; _env=
+  [ "$_appid" = --env ] && { _appid=; _env=--env; }
+  [ "${3:-}" = --env ] && _env=--env
+  sh "$HERE/build.sh" --repo "$_repo" ${_appid:+--app-id "$_appid"} --detect $_env
   ;;
 
 variants)

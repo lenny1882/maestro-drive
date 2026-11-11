@@ -1,5 +1,16 @@
 #!/bin/bash
 # Shared SSH plumbing. Source this, do not run it.
+
+# The version of what this file offers to a script that sources it from outside
+# this package — flutter-hot-reload-mac 2.0 does (item 93) — on the same rule as
+# rrc's RRC_LIB_VERSION. Adding a function leaves it. Changing what one takes,
+# prints or does, or removing or renaming one, increments it. The dependent
+# refuses any value but the one it was written against, so a change that is not
+# counted here breaks it at the call, not at the check (item 171).
+#
+# test/run-tests.sh holds the function list for each version and fails when one
+# is missing and this has not moved.
+MAESTRO_DRIVE_LIB_VERSION=1
 # shellcheck disable=SC1090
 # config.sh returns non-zero when the project is not configured. Without the
 # guard the caller carries on with an empty MAC_HOST and fails obscurely inside
@@ -484,6 +495,42 @@ _label_by() {
   elif [ -n "$s" ]; then printf '%s' "$(printf '%s' "$s" | cut -c1-7)"
   else printf '%s@%s' "${USER:-unknown}" "$(hostname -s 2>/dev/null || echo host)"
   fi
+}
+
+# Refuse a launch onto a device another session has labelled today (item 112).
+# A second session running `flutter run` onto a device this one was driving
+# terminates the app under it and installs another branch's build, and the
+# first symptom is the tree turning into the home screen mid-journey.
+#
+# The label is the wall's: $RDIR/labels/<udid>, whose by= line is _label_by of
+# the session that named it. "Live" is "written today", the wall's own rule for
+# a name and the one rig reap uses for a boot (item 67, piece 4): a session can
+# hold a device all day with no driver up, so a live driver is not the test,
+# and a label from a previous day belongs to work that has ended.
+#
+# Prints the refusal on stderr and returns 1; returns 0 on no label, an
+# unreadable one, our own, or one from a previous day. LABEL_GUARD=off skips it,
+# for the person who has checked with the other session. Callable by a
+# dependent that sources this file: flutter-hot-reload-mac 2.0's start.sh calls
+# it before launching.
+_label_guard() {  # _label_guard <udid>
+  local udid=${1:?_label_guard <udid>} mine row day today by name
+  [ "${LABEL_GUARD:-on}" = off ] && return 0
+  mine=$(_label_by)
+  # One round trip: the label's date, the Mac's date, and the two lines. The
+  # Mac's date, not this machine's, because the label's mtime is the Mac's.
+  row=$(_ssh "L='$RDIR/labels/$udid'; [ -s \"\$L\" ] || exit 0
+printf '%s|%s|%s|%s\n' \"\$(date -r \"\$L\" +%Y-%m-%d 2>/dev/null)\" \"\$(date +%Y-%m-%d)\" \\
+  \"\$(sed -n 's/^by=//p' \"\$L\" | head -1)\" \"\$(sed -n 's/^name=//p' \"\$L\" | head -1)\"" 2>/dev/null) || return 0
+  [ -n "$row" ] || return 0
+  IFS='|' read -r day today by name <<< "$row"
+  [ -n "$by" ] && [ "$by" != "$mine" ] || return 0
+  [ -n "$day" ] && [ "$day" = "$today" ] || return 0
+  echo "$udid is labelled by another session today: $by${name:+ (named $name)}." >&2
+  echo "  Launching onto it terminates the app that session is driving and replaces" >&2
+  echo "  its build. Use another device, or ask that session to let it go." >&2
+  echo "  LABEL_GUARD=off launches anyway, once you have checked with it." >&2
+  return 1
 }
 
 # The Mac's current LAN address. It moves between networks — its name resolves

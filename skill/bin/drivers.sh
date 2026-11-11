@@ -423,6 +423,12 @@ _up_one() {  # _up_one <udid> <live-map> <ports-map>
 case "${1:-list}" in
   list|"") _list ;;
   up)
+    # A named device another session labelled today is refused (item 112):
+    # starting a driver restarts theirs, and their journey dies with it. First,
+    # so a refusal is not preceded by a load warning about starting a driver,
+    # and costs one round trip rather than three. Bare `up` below warns instead,
+    # because it was not asked for any one device.
+    if [ -n "${2:-}" ]; then _label_guard "$2" || exit 1; fi
     # A driver start is a ~30s xcodebuild per device, and doing it while a
     # simulator is still booting makes the machine read as thrashing, which
     # leads to killing things that are fine. Say what

@@ -70,7 +70,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | verb | runs | answers | today |
 | --- | --- | --- | --- |
 | `claim <repo>` | Mac | is this checkout mine? exit 0 and print the evidence | nothing — the framework is assumed |
-| `describe <repo> [app-id]` | Mac | the `build.sh --detect` report: toolchain, version, variant, entrypoint, last build | `remote/build.sh` lines 144-182 |
+| `describe <repo> [app-id] [--env]` | Mac | the `build.sh --detect` report: toolchain, version, variant, entrypoint, last build. `--env` prints `FLUTTER=`, `FLAVOR=`, `TARGET=`, `GEM_HOME=` instead, and exits 1 where the variant is undecided (item 172) | `remote/build.sh` lines 144-182 |
 | `variants <repo> [--platform <p>]` | Mac | one buildable variant name per line; `--platform` is optional and ignored by a framework whose variants span both | `_flavours` |
 | `variant-for-appid <repo> <app-id> [--platform <p>]` | Mac | the variants that produce that app id, one per line | `_flavour_for_appid` |
 | `build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]` | Mac | builds, and prints `artifact <path>` as its last line | `remote/build.sh` lines 264-292 |

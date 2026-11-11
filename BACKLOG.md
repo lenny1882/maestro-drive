@@ -243,6 +243,17 @@ builds.
 
 **Gated on.** Item 87 landing, so the contract is stable.
 
+**2.0 plan, 11 Nov 2026.** `flutter-hot-reload-mac` is being rebuilt as 2.0 on
+this package: it will source `skill/bin/lib.sh` and call
+`runners/flutter/framework.sh`, as rrcd sources rrc's `rrc-lib.sh`. Plan:
+claude-skills branch `flutter-hot-reload-mac-v2-plan`,
+`packages/flutter-hot-reload-mac/V2-PLAN.md` (commit e148cc3). It needs four
+changes here first: items 171 (library version constant), 172 (`describe
+--env`), 173 (`vmservice.sh` reads the per-device log) and the 2.0 addition to
+item 112 (label check as a callable function). All four are in, 11 Nov 2026,
+on branch `item-93-hot-reload-v2-seams`; the same-`REPO` refusal is the
+hot-reload skill's.
+
 ## 90. The wall shows simulators only, and a phone is a device too — **OPEN**
 
 **What.** `bin/wall.sh` puts every booted simulator on one live page. A
@@ -626,6 +637,22 @@ and the hot-reload skill's `start.sh` — that refuses when the device carries
 today's label from a different live session, naming that session. Cheap: the
 label file is already on the Mac. A `PreToolUse` hook on `flutter run -d
 <udid>` over `mac.sh`/`ssh` would catch the hand-launched case too.
+
+**2.0 addition, 11 Nov 2026 (item 93).** Ship the check as a function a
+launch path can call, not only as a step inside `build.sh` and `drivers.sh up`.
+`flutter-hot-reload-mac` 2.0's `start.sh` calls it before launching; it
+refuses when the device carries today's label from a different live session,
+naming that session. `start.sh` also refuses when another run uses the same
+`REPO` (the shared-checkout case in item 24); that half lives in the
+hot-reload skill.
+
+**Done, 11 Nov 2026.** `_label_guard <udid>` in `skill/bin/lib.sh`: refuses
+when `$RDIR/labels/<udid>` carries another session's `by=` and was written today
+by the Mac's clock, naming the session; `LABEL_GUARD=off` overrides it.
+`bin/build.sh` calls it before building (a named `DEV` refuses, `--all` skips
+the device), and `drivers.sh up <udid>` before anything else. Still open: the
+`start.sh` call (the hot-reload skill's), the `PreToolUse` hook for a
+hand-launched `flutter run`, and phones, which carry no label (item 174).
 
 ## 113. The ssh transport only reaches a Mac; a remote Linux box with an Android emulator cannot be driven — **OPEN**
 
@@ -1074,4 +1101,19 @@ out those names, or have the suite refuse to run, naming the cause, when `skill/
 
 **To do.** Have `_start` skip its `_devdrv_hint` when `_ensure_device` has already named the phone as not
 connected, and assert one copy in the item 165 test.
+
+## 174. A phone has no wall label, so the item 112 check cannot protect it — **OPEN, raised 11 Nov 2026**
+
+**What.** `_label_guard` in `skill/bin/lib.sh` refuses a launch onto a device another session labelled
+today, and `bin/build.sh` and `bin/drivers.sh up <udid>` call it. `bin/device.sh up`, which starts the
+driver on a physical iPhone, does not, and calling it there would always pass: `device.sh` never writes
+`$RDIR/labels/<udid>`, so a phone never carries a label to check.
+
+**Why.** Two sessions on one phone collide as item 112 describes for a simulator: the second driver start or
+install ends the first session's journey, and nothing reads who was there.
+
+**To do.** Decide who writes a phone's label and when — `device.sh up`, as `_label_default` does for a
+simulator in `drivers.sh up` — then call `_label_guard` from `device.sh up` and cover both in
+`skill/test/run-tests.sh`. Labels exist for the wall, and the wall shows no phone yet (item 90), so settle
+this with item 90 or alongside it.
 

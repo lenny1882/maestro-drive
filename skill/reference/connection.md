@@ -250,7 +250,8 @@ through — had scrolled out of it, and the message wrongly blamed the build mod
 first — a file keeps the URI however long ago the app started — and falls back to
 the simulator system log only for an app started without a redirected log. It
 reads `$FLUTTER_RUN_LOG` (default `/tmp/flutter-run.log`, this skill's own recipe)
-and `$FRUN_LOG` (default `/tmp/frun.log`, the hot-reload skill's), tries the most
+and `$FRUN_LOG` (default `$RDIR/frun-<udid>.log`, the per-device log the
+hot-reload skill writes from 2.0; item 173), tries the most
 recent candidate first, and takes the first that answers with a live isolate. The
 failure message now distinguishes two things it used to conflate:
 
