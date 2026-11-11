@@ -28,6 +28,9 @@
 - **161.** `uninstall` on `runners/ios-device` has never been measured.
 - **162.** Phase C of `wizard.sh` has not applied a new static address.
 - **163.** Building and signing the phone driver from source is manual, so a flat phone crashes the prebuilt one.
+- **164.** Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2.
+- **165.** Three phone states get a generic message or none: flat, landscape, untrusted certificate.
+- **166.** `scrollto` reported not found while the matching chips were on screen.
 
 Items 116–125 are on `item-87-react-native-android`, not yet merged. Tried against the
 upgrade branch on 5 Nov 2026: `BACKLOG.md` is the only conflict, the merged tree passes 695
@@ -891,3 +894,58 @@ profile folder `physical-device.md` §1 lists.
 Terminal, finding the identity and profile itself and refusing by name when either is missing. Run only when
 asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
 Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
+
+## 164. Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2 — **OPEN, raised 11 Nov 2026**
+
+**What.** Reported from `hugoboss-flutter-runner` on 11 Nov 2026: Mac `oi-jamesl-mac`, iPhone 11 Pro
+`00008030-000A199A3E98402E` on iOS 26.5.2, Xcode 27.2, Maestro 2.12.1. `maestro list-devices` showed no iOS
+device. `maestro test` and `maestro --device <udid> hierarchy --apple-team-id 38RS7YKR5P` answered `Device <udid>
+was requested, but it is not connected`, while `devicectl` read `connected`, `wired`. In `maestro-client.jar`
+2.12.1, `DeviceService.listConnectedDevices` → `listDevices` → `listIOSDevices` lists simulators only.
+`listIOSConnectedDevices`, which calls `LocalIOSDevice.listDeviceViaDeviceCtl` and keeps devices with
+`tunnelState == "connected"`, has no callers. `physical-device.md` §3 already records this from the XS Max on
+5 Nov 2026; the rest of that section is the 2.8.0 record, and the report read it as describing 2.8.0.
+
+**Why.** A session read the 2.8.0 steps, tried `maestro test` on a phone, and spent time on an error the skill
+already knew the cause of.
+
+**To do.** Put the 2.12.1 limit where a session meets it first: `SKILL.md` and the top of `physical-device.md`,
+saying that flows on a phone go through `device.sh` and `driver.sh`, and that `maestro test` will refuse. Recheck
+on each Maestro upgrade whether `listIOSConnectedDevices` has a caller.
+
+## 165. Three phone states get a generic message or none: flat, landscape, untrusted certificate — **OPEN, raised 11 Nov 2026**
+
+**What.** Reported from the same run as item 164 (iPhone 11 Pro, iOS 26.5.2, Xcode 27.2, Maestro 2.12.1).
+
+- **Flat.** Every `/touch` crashed the runner with `ScreenSizeHelper.swift:99: Fatal error: Not implemented yet`,
+  after `Device orientation is 5`. `driver.sh` printed only `the device driver for <udid> is not answering —
+  restarting it (item 46)`, and not the STAND THE PHONE UPRIGHT message. `_devdrv_hint` in `bin/driver.sh` prints
+  that message only when the last 6 lines of `~/devdrv-<udid>.log`, written in the last 600 s, contain
+  `ScreenSizeHelper` or `Not implemented yet`. Which of those failed here is not known.
+- **Landscape** (orientation 3). `deviceInfo` answered 812x375, and `rows` marked the portrait nodes `off`. Nothing
+  warned that the phone was on its side.
+- **Untrusted certificate.** After a `flutter run --debug` install, the runner would not launch: `the Developer App
+  Certificate is not trusted ... Unable to launch dev.mobile.maestro-driver-iosUITests.xctrunner because it has an
+  invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user`.
+  `device.sh` printed only the `TEST EXECUTE FAILED` / item 46 message, whose fix (restart the driver) does nothing
+  here.
+
+**Why.** Each has its own fix (stand the phone up, turn it portrait, trust the developer in Settings → General →
+VPN & Device Management), and the messages point at none of them.
+
+**To do.** Get the flat run's `devdrv` log and find why the hint missed. Warn when `deviceInfo` is wider than it
+is tall on a phone. Match the untrusted-certificate text in the driver log in `deviceup.sh` and `_devdrv_hint`,
+ahead of the item 46 message, and name the Settings path.
+
+## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
+
+**What.** Reported from the same run as item 164. `driver.sh scrollto "^[0-9]+ / [0-9]+$"` reported `not found
+after 20 swipes down`, and afterwards the size chips matching that pattern were on screen. The phone was upright
+and in portrait.
+
+**Why.** A false not-found ends a journey at a step that should pass.
+
+**To do.** Reproduce it on that screen, and dump what `scrollto` matched against each pass: whether the chips'
+text reaches the tree in that form (spaces, a non-breaking space, separate nodes for each number), whether the
+pattern is anchored against a longer label, and whether the swipes went past the chips.
+
