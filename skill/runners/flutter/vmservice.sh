@@ -44,9 +44,12 @@ candidates() {
   for f in "$FLUTTER_RUN_LOG" "$FRUN_LOG"; do
     [ -f "$f" ] && grep -oE 'http://127\.0\.0\.1:[0-9]+/[A-Za-z0-9_=+/-]+' "$f"
   done
+  # A phone has no simulator log: simctl answers nothing for its udid (item 176).
+  _is_sim || return 0
   xcrun simctl spawn "$DEV" log show --last "$VM_LOG_WINDOW" --style compact 2>/dev/null \
     | grep -oE 'http://127\.0\.0\.1:[0-9]+/[A-Za-z0-9_=+/-]+'
 }
+_is_sim() { xcrun simctl list devices 2>/dev/null | grep -q "$DEV"; }
 
 # Dedupe preserving order, then reverse so the most recent is tried first — a
 # stale URI from an earlier run is still listed, and only the live one answers
@@ -76,6 +79,13 @@ if [ -z "$B" ]; then
   # a statement about the app's build mode.
   if [ -n "$cands" ]; then
     echo "found a Dart VM Service URI but it has no live isolate — the app has stopped or restarted since it was logged; relaunch it under 'flutter run' and retry" >&2
+  elif ! _is_sim; then
+    # A phone: no simulator log to fall back on, and the usual reason is that
+    # flutter run never found the VM Service itself, which its log says (item 176).
+    echo "no Dart VM Service URI in $FLUTTER_RUN_LOG or $FRUN_LOG, and a phone has no simulator log to fall back on" >&2
+    for f in "$FRUN_LOG" "$FLUTTER_RUN_LOG"; do
+      [ -f "$f" ] && sh "$(dirname "$0")/framework.sh" run-diagnose "$f" >&2 && break
+    done
   else
     echo "no Dart VM Service URI in $FLUTTER_RUN_LOG, $FRUN_LOG, or the last $VM_LOG_WINDOW of the simulator log" >&2
     echo "  the app is almost certainly not running under 'flutter run' — a launchApp or a plain install has no VM service at all. This is NOT the same as 'the app is not in debug'." >&2

@@ -77,6 +77,9 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `version <repo>` | Mac | `<version>+<build>` a build from this checkout would produce — what a device is compared against, having no install time | nothing; the check did not exist |
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
 | `devsession` | Mac | is a hot-reload session live? print the processes, exit 0; exit 1 with the consequence when not | `pgrep -fl flutter_tools` in `bin/preflight.sh` |
+| `device-check <flutter-bin>` | Mac | before `flutter run` on a phone: does this Mac run Flutter's bundled `iproxy`? Exit 1 naming the missing Rosetta and its install command (item 176) | nothing; the run died after the install |
+| `run-diagnose <flutter-run-log>` | Mac | name the phone failures a `flutter run` log shows — missing Rosetta, the LLDB stall, mDNS on 5353 (errno 65), the VM Service not discovered; exit 1 when none (item 176) | nothing |
+| `logs <udid> <flutter-bin>` | Mac | stream the app's `print`/`debugPrint` output from a phone through `flutter logs -d`, after `device-check` (item 176) | nothing |
 | `inspect <device> <cache>` | Mac | print `<base-uri> <session-id>` for the app's live debug endpoint, or exit 1 with the reason | `remote/vmservice.sh` |
 | `traffic-arm <base> <session>` | either | turn HTTP capture on; print `<was> <now>`, each `on`, `off` or `unknown` | `ext.dart.io.httpEnableTimelineLogging` in `bin/publish.sh` |
 | `traffic-list <base> <session>` | either | one request per line: id, method, status, uri | `bin/net.sh` + `remote/net.py list` |

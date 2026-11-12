@@ -2216,7 +2216,9 @@ echo "vmservice: the flutter run log fallback, and the two failures kept apart (
 mkdir -p "$TMP/vmstub"
 # xcrun stub: the simulator system log yields no URI — the app scrolled out of
 # the 5-minute window — which is exactly what forces the flutter-run-log fallback.
-printf '#!/bin/sh\nexit 0\n' > "$TMP/vmstub/xcrun"; chmod +x "$TMP/vmstub/xcrun"
+# `simctl list devices` names SIMUDID, so it reads as a simulator; any other udid
+# reads as a phone (item 176).
+printf '#!/bin/sh\ncase "$*" in *"simctl list"*) echo "    iPhone 16 Pro (SIMUDID) (Booted)" ;; esac\nexit 0\n' > "$TMP/vmstub/xcrun"; chmod +x "$TMP/vmstub/xcrun"
 # curl stub: /getVM answers with one live isolate. No cache file, so the
 # getVersion/getIsolate validation path is not reached.
 cat > "$TMP/vmstub/curl" <<'CURLV'
@@ -2262,6 +2264,51 @@ out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" RDIR="$TMP/vmrdir
 [ "$rc" != 0 ] && ok "and another device's log is not read for this one" \
   || no "and another device's log is not read for this one" "rc=$rc: $out"
 
+
+# A phone (item 176): no simulator log, and the run log's own failure is named.
+printf 'Flutter could not access the local network.\nSocketException: Send failed (OS Error: No route to host, errno = 65), address = 0.0.0.0, port = 5353\nThe Dart VM Service was not discovered after 60 seconds.\n' > "$TMP/vmrdir/frun-PHONEUDID.log"
+out=$(PATH="$TMP/vmstub:$PATH" FLUTTER_RUN_LOG="$TMP/none.log" RDIR="$TMP/vmrdir" \
+      $VMS PHONEUDID "$TMP/vmcache5" 2>&1); rc=$?
+case "$rc:$out" in
+  [1-9]*"a phone has no simulator log"*"MDNS BLOCKED"*"NO VM SERVICE"*) ok "on a phone vmservice says there is no simulator log, and names the run log's failure (item 176)" ;;
+  *) no "on a phone vmservice says there is no simulator log, and names the run log's failure (item 176)" "rc=$rc: $out" ;;
+esac
+
+echo
+echo "flutter on a phone: Rosetta, the LLDB stall, mDNS, and the logs fallback (item 176)"
+FW="$REPO/runners/flutter/framework.sh"
+rd() { printf '%b' "$1" > "$TMP/rd.log"; sh "$FW" run-diagnose "$TMP/rd.log" 2>&1; echo "rc=$?"; }
+case "$(rd 'Installing and launching...\nFlutter failed to run "/x/bin/cache/artifacts/libusbmuxd/iproxy". The binary was built with the incorrect architecture to run on this machine.\n')" in
+  *"ROSETTA"*"softwareupdate --install-rosetta"*"rc=0"*) ok "run-diagnose names the missing Rosetta from the iproxy error" ;;
+  *) no "run-diagnose names the missing Rosetta from the iproxy error" "$(rd x)" ;; esac
+case "$(rd 'Installing and launching...\nLLDB is taking longer than expected to start debugging the app.\n')" in
+  *"LLDB STALL"*"rc=0"*) ok "run-diagnose names the LLDB stall" ;; *) no "run-diagnose names the LLDB stall" "missed" ;; esac
+case "$(rd 'LLDB is taking longer than expected to start debugging the app.\nA Dart VM Service on iPhone is available at: http://127.0.0.1:5/a=/\n')" in
+  *"LLDB STALL"*) no "a run that reached its VM Service is not called stalled" "named" ;;
+  *"rc=1"*) ok "a run that reached its VM Service is not called stalled" ;; *) no "a run that reached its VM Service is not called stalled" "rc" ;; esac
+case "$(rd 'Flutter could not access the local network.\nSocketException: Send failed (OS Error: No route to host, errno = 65), address = 0.0.0.0, port = 5353\nThe Dart VM Service was not discovered after 60 seconds.\n')" in
+  *"MDNS BLOCKED"*"NO VM SERVICE"*"rc=0"*) ok "run-diagnose names the port 5353 errno 65 failure and the undiscovered VM Service" ;;
+  *) no "run-diagnose names the port 5353 errno 65 failure and the undiscovered VM Service" "missed" ;; esac
+case "$(rd 'Launching lib/main.dart\nSyncing files\n')" in
+  *"no known phone failure"*"rc=1"*) ok "a log with none of them says so and exits 1" ;; *) no "a log with none of them says so and exits 1" "wrong" ;; esac
+
+# device-check: a fake SDK and stub uname/lipo/arch, so no Mac is needed.
+FR="$TMP/fsdk"; mkdir -p "$FR/bin/cache/artifacts/libusbmuxd" "$TMP/dcstub"
+printf '#!/bin/sh\necho "flutter $*"\n' > "$FR/bin/flutter"; : > "$FR/bin/cache/artifacts/libusbmuxd/iproxy"; chmod +x "$FR/bin/flutter"
+printf '#!/bin/sh\necho "${DC_M:-arm64}"\n' > "$TMP/dcstub/uname"
+printf '#!/bin/sh\necho "${DC_ARCHS:-x86_64}"\n' > "$TMP/dcstub/lipo"
+printf '#!/bin/sh\n[ "${DC_ROSETTA:-0}" = 1 ]\n' > "$TMP/dcstub/arch"
+chmod +x "$TMP/dcstub/"*
+dc() { env PATH="$TMP/dcstub:$PATH" "$@" sh "$FW" device-check "$FR/bin/flutter" 2>&1; echo "rc=$?"; }
+case "$(dc DC_ROSETTA=0)" in *"ROSETTA IS NOT INSTALLED"*"sudo softwareupdate"*"rc=1"*) ok "device-check refuses on an arm64 Mac without Rosetta, before the build" ;;
+  *) no "device-check refuses on an arm64 Mac without Rosetta, before the build" "$(dc DC_ROSETTA=0)" ;; esac
+case "$(dc DC_ROSETTA=1)" in *"rosetta: installed"*"rc=0"*) ok "and passes once Rosetta is in" ;; *) no "and passes once Rosetta is in" "wrong" ;; esac
+case "$(dc DC_ARCHS='x86_64 arm64')" in *"not needed"*"rc=0"*) ok "an iproxy with an arm64 slice needs no Rosetta" ;; *) no "an iproxy with an arm64 slice needs no Rosetta" "wrong" ;; esac
+case "$(dc DC_M=x86_64)" in *"not needed on x86_64"*"rc=0"*) ok "an Intel Mac needs no Rosetta" ;; *) no "an Intel Mac needs no Rosetta" "wrong" ;; esac
+out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1)
+[ "$out" = "flutter logs -d PHONEUDID" ] && ok "logs runs flutter logs -d <udid> once Rosetta is in" || no "logs runs flutter logs -d <udid> once Rosetta is in" "got: $out"
+out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=0 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1); rc=$?
+case "$rc:$out" in 1:*"ROSETTA IS NOT INSTALLED"*) ok "and refuses without it, naming Rosetta" ;; *) no "and refuses without it, naming Rosetta" "rc=$rc: $out" ;; esac
 
 echo
 echo "device build: exact app path, installed-bundle check, and the profile gate (item 45)"

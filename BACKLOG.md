@@ -996,3 +996,27 @@ the LLDB or mDNS stall, and the app's output is then lost.
 - `skill/runners/flutter/vmservice.sh` reads the `flutter run` log first, then falls back to `xcrun simctl
   spawn <udid> log show`, which reads a simulator only. When mDNS fails on a phone, no VM Service address
   reaches the log either, so it comes back empty. It needs a phone fallback, or to say it has none.
+
+**Done so far, 12 Nov 2026.** Through the seam fhrm 2.0 already uses: Mac-side verbs in
+`skill/runners/flutter/framework.sh` that fhrm's `start.sh` calls around its own `flutter run`, rather than a
+second launch path here. Listed in `skill/runners/README.md`; 12 offline tests in `skill/test/run-tests.sh`.
+1. `device-check <flutter-bin>`: on an arm64 Mac, when Flutter's `bin/cache/artifacts/libusbmuxd/iproxy` has
+   no arm64 slice, `arch -x86_64 /usr/bin/true` must work; otherwise exit 1 naming Rosetta and
+   `sudo softwareupdate --install-rosetta --agree-to-license`. **Run live on oi-jamesl-mac:** it refused.
+   Flutter 3.41.9's iproxy is `x86_64` only, and `arch -x86_64 /usr/bin/true` answers `Bad CPU type in
+   executable`, with no `oahd` and no Rosetta package receipt, on macOS 27.2.1. The Rosetta installed on
+   11 Nov (macOS 27.2) is not there now.
+2. and 3. `run-diagnose <flutter-run-log>`: names ROSETTA (`incorrect architecture`), LLDB STALL (`LLDB is
+   taking longer than expected`), MDNS BLOCKED (`errno = 65` / `port = 5353` / `could not access the local
+   network`) and NO VM SERVICE (`was not discovered`); the stall and discovery causes only when the run never
+   reached its VM Service. Exit 1 when none. Offline only; no fix is known for the mDNS failure.
+4. `logs <udid> <flutter-bin>`: `device-check`, then `flutter logs -d <udid>`. Run live: it refused on the
+   missing Rosetta, as it should.
+- `skill/runners/flutter/vmservice.sh` skips the `simctl` fallback for a udid `simctl list devices` does not
+  name, says a phone has no simulator log, and runs `run-diagnose` on the run log.
+
+**Left.**
+- Rosetta back on oi-jamesl-mac (an administrator's `sudo`), then `logs` live against a running app.
+- fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
+  is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
+- The LLDB stall and the mDNS failure have names, not fixes.

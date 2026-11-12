@@ -161,6 +161,83 @@ devsession)
   exit 1
   ;;
 
+device-check)
+  # Before `flutter run` on a physical iPhone (item 176). Flutter's bundled
+  # artifacts/libusbmuxd/iproxy has been x86_64 only: on an Apple-silicon Mac
+  # without Rosetta the app builds, installs and launches, and only then does the
+  # run die with "Flutter failed to run .../iproxy ... built with the incorrect
+  # architecture" (iPhone 11 Pro, Flutter 3.41.9, Mac oi-jamesl-mac, 11 Nov 2026).
+  # Asked before the build, not after it.
+  _fl=${1:?device-check <flutter-bin>}
+  _root=$(cd "$(dirname "$_fl")/.." 2>/dev/null && pwd -P)
+  _ip="$_root/bin/cache/artifacts/libusbmuxd/iproxy"
+  _m=$(uname -m)
+  [ "$_m" = arm64 ] || { echo "rosetta: not needed on $_m"; exit 0; }
+  if [ -e "$_ip" ]; then
+    _a=$(lipo -archs "$_ip" 2>/dev/null)
+    case " $_a " in *" arm64 "*) echo "rosetta: not needed, Flutter's iproxy is $_a"; exit 0 ;; esac
+  fi
+  if arch -x86_64 /usr/bin/true 2>/dev/null; then echo "rosetta: installed"; exit 0; fi
+  echo "ROSETTA IS NOT INSTALLED on this Mac, and flutter run on a phone needs it:" >&2
+  echo "  Flutter's iproxy (${_ip}) is ${_a:-x86_64 once downloaded}, and without Rosetta" >&2
+  echo "  the run dies after the install with 'built with the incorrect architecture'." >&2
+  echo "  Install it on the Mac, which needs an administrator:" >&2
+  echo "    sudo softwareupdate --install-rosetta --agree-to-license" >&2
+  exit 1
+  ;;
+
+run-diagnose)
+  # Name the phone failure a `flutter run` log shows (item 176). Exit 0 with each
+  # cause named, 1 when the log shows none of them. A run that reached its VM
+  # Service recovered from whatever it warned about first, so the stall and
+  # discovery causes are only named when it did not.
+  _log=${1:?run-diagnose <flutter-run-log>}
+  [ -r "$_log" ] || { echo "run-diagnose: cannot read $_log" >&2; exit 2; }
+  _n=0
+  if grep -q "incorrect architecture" "$_log"; then
+    _n=1
+    echo "ROSETTA: Flutter's bundled iproxy is x86_64 and this Mac has no Rosetta. The app is"
+    echo "  installed; the run cannot reach it. On the Mac, as an administrator:"
+    echo "    sudo softwareupdate --install-rosetta --agree-to-license"
+  fi
+  if ! grep -qE "A Dart VM Service on|Dart VM Service .* is available at" "$_log"; then
+    if grep -q "LLDB is taking longer than expected" "$_log"; then
+      _n=1
+      echo "LLDB STALL: lldb attached but never handed the app on. Measured on an iPhone 11 Pro"
+      echo "  (iOS 26.5.2, Xcode 27.2) this went silent for 11 minutes, with device support for"
+      echo "  the phone present. Stop the run rather than wait. Turning LLDB off"
+      echo "  (flutter config --no-enable-lldb-debugging) moves VM Service discovery to mDNS,"
+      echo "  which failed on the same Mac (below). The app's output still streams through"
+      echo "  framework.sh logs <udid> <flutter-bin>."
+    fi
+    if grep -qE "errno = 65.*5353|port = 5353|could not access the local network" "$_log"; then
+      _n=1
+      echo "MDNS BLOCKED: Flutter's VM Service discovery on UDP 5353 failed (errno 65, No route to"
+      echo "  host). Granting Local Network and Automation > Xcode to Terminal did not clear it"
+      echo "  (11 Nov 2026), so no fix is known yet. Without discovery there is no hot reload."
+    fi
+    if grep -q "Dart VM Service was not discovered" "$_log"; then
+      _n=1
+      echo "NO VM SERVICE: flutter run gave up finding the app's Dart VM Service, so hot reload,"
+      echo "  inspect and traffic have nothing to talk to. The causes above say why, if named."
+    fi
+  fi
+  [ "$_n" = 1 ] && exit 0
+  echo "run-diagnose: no known phone failure in $_log"
+  exit 1
+  ;;
+
+logs)
+  # The app's print/debugPrint output from a phone (item 176). Release-mode
+  # flutter run and `devicectl device process launch --console` show none, `log
+  # stream` has no device option and devicectl has no syslog subcommand;
+  # `flutter logs -d <udid>` (idevicesyslog underneath) was the only route that
+  # streamed it. It needs Rosetta the same way, so that is checked first.
+  _udid=${1:?logs <udid> <flutter-bin>}; _fl=${2:?flutter-bin}
+  sh "$0" device-check "$_fl" >/dev/null || exit 1
+  exec "$_fl" logs -d "$_udid"
+  ;;
+
 inspect)
   # remote/vmservice.sh, unchanged: the flutter run logs first because a file
   # survives however long the build took, then the last VM_LOG_WINDOW of the
