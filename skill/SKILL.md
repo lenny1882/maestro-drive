@@ -503,7 +503,7 @@ is not connected` while `devicectl` reads the phone `connected` (item 164).
 `bin/device.sh up <udid>` starts the phone's driver and registers it; after that
 `DEV=<udid> bin/driver.sh …` drives it like a simulator. Read
 `physical-device.md` before the first phone run: the phone must be unlocked and
-upright, and portrait.
+upright, and portrait. Its section 7 is `flutter run` and hot reload on a phone.
 
 ## Watching for a change nobody causes
 

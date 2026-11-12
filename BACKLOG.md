@@ -866,3 +866,19 @@ and in portrait.
 **To do.** Reproduce it on that screen, and dump what `scrollto` matched against each pass: whether the chips'
 text reaches the tree in that form (spaces, a non-breaking space, separate nodes for each number), whether the
 pattern is anchored against a longer label, and whether the swipes went past the chips.
+
+## 177. `_push` before any `_ssh` sends all three host aliases to `scp` — **OPEN, raised 12 Nov 2026**
+
+**What.** `MAC_HOST` is `mac-home mac-senseguest mac-office` until `_pick_host` narrows it to the alias that
+answers, and only `_ssh` calls `_pick_host`. `_push` and `_pull` in `skill/bin/lib.sh` pass `$MAC_HOST` to
+`scp` as it is, so a script whose first remote call is `_push` fails: `hostname contains invalid characters`,
+`lost connection`. Hit three times on 12 Nov 2026 by one-off scripts that sourced `lib.sh` and pushed first;
+the package's own callers (`device.sh`, `build.sh`, `install.sh`) all `_ssh` before they push, so none has
+failed this way.
+
+**Why.** A dependent that sources `lib.sh` (flutter-hot-reload-mac 2.0) and pushes first gets an error that
+names neither the cause nor the fix.
+
+**To do.** Call `_pick_host` at the top of `_push` and `_pull`, as `_ssh` does, and add a test that pushes
+with three aliases and no prior `_ssh`.
+

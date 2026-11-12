@@ -144,6 +144,14 @@ Search both. The second is the one Xcode 16 writes and reads.
 > the reference for what it does and for debugging it.
 
 
+**Debug builds, for hot reload (item 176).** `runners/flutter/framework.sh build
+<repo> --platform ios-device --device <udid> --mode debug` (or `build.sh --device
+<udid> --debug`) builds debug instead, in the same GUI session, and prints the
+artefact; section 7 is what to run it with. Measured 12 Nov 2026: a debug build
+launched with `devicectl` alone ran on an XS Max on iOS 18.7.9, and refused on an
+iPhone 11 on iOS 26.5.2 (`Cannot create a FlutterEngine instance in debug mode
+without Flutter tooling or Xcode`). On iOS 26 the statement below holds:
+
 A debug Flutter build cannot be launched on the device by anything but the
 Flutter tooling:
 
@@ -543,12 +551,62 @@ transcript with job-control noise for no benefit.
 
 `/tmp` is cleaned aggressively — scripts written there disappeared mid-session,
 twice, and a `do script` then silently did nothing because its target was gone.
-Write helper scripts to `$HOME`.
+Write helper scripts to `$HOME`. One cause is known: macOS empties `/private/tmp`
+when it boots, and on 12 Nov 2026 a reboot at 17:04 took all of `/tmp/maestro-mac`
+(`last reboot`, `sysctl -n kern.boottime`). `bin/preflight.sh` now notices and
+pushes the helpers back (`_helpers_ensure`, item 144). The 5 Nov removal had no
+reboot and this macOS has no `/etc/periodic/daily`; that one is unexplained.
+
+**Provisioning profiles go in by copying, not double-clicking.** On 12 Nov 2026
+double-clicking `.mobileprovision` files on this Mac (Xcode 27.2) installed
+nothing into either profile directory. Copying each to
+`~/Library/Developer/Xcode/UserData/Provisioning Profiles/<UUID>.mobileprovision`
+worked, with no Apple account: the next build embedded it. The UUID is the
+profile's own `UUID` key (`security cms -D -i <file>`). A build embeds the newest
+profile of the name it asks for, so a phone missing from that profile fails to
+install with `0xe8008012 (This provisioning profile cannot be installed on this
+device.)` until the updated one is copied in and the app rebuilt.
 
 There is a file literally named `-` in
 `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`. Every `xcodebuild`
 run logs `DVTProvisioningProfileManager: Failed to load profile "…/-"` because
 of it. Harmless, and it is in every log you will read.
+
+## 7. `flutter run` and hot reload on a phone
+
+Measured 12 Nov 2026 on oi-jamesl-mac (macOS 27.2.1, Xcode 27.2, Flutter
+3.41.9), item 176. The checks are `runners/flutter/framework.sh` verbs, run on
+the Mac:
+
+- **Rosetta first.** Flutter's bundled `bin/cache/artifacts/libusbmuxd/iproxy` is
+  x86_64 only. Without Rosetta the app builds, installs and launches, and the run
+  dies with `built with the incorrect architecture`. `framework.sh device-check
+  <flutter-bin>` says so before the build. Rosetta was installed on 11 Nov (macOS
+  27.2) and missing on 12 Nov with the Mac on 27.2.1 (`arch -x86_64
+  /usr/bin/true`: `Bad CPU type in executable`); what removed it was not checked.
+  `sudo softwareupdate --install-rosetta --agree-to-license` puts it back.
+- **iOS 26 (iPhone 11, 26.5.2):** build with `--mode debug`, install with
+  `devicectl device install app`, then `flutter run -d <udid> --debug -t
+  <entry> --use-application-binary build/ios/iphoneos/Runner.app`. With LLDB on
+  and over SSH it reached its VM Service in 71 s, and `r` hot-reloaded in 301 ms.
+  The first XCUITest start after a reboot shows "Enter iPhone Password for
+  'xctest'" on the phone; `deviceup.sh` says LOOK AT THE PHONE NOW 10 s in.
+- **iOS 18 (XS Max, 18.7.9), and when LLDB or mDNS fails:** launch the installed
+  debug build with `devicectl device process launch`, read its URI with
+  `framework.sh vm-url <udid> <flutter-bin>`, then `flutter attach -d <udid> -t
+  <entry> --debug-url=<uri>` from the checkout. No LLDB, no mDNS; attach came up
+  and hot-reloaded. On iOS 26 `vm-url` exits 3 instead, naming the refusal.
+- **A failed run:** `framework.sh run-diagnose <flutter-run-log>` names a missing
+  Rosetta, the LLDB stall (`LLDB is taking longer than expected`, 11 minutes of
+  silence on an iPhone 11 Pro on 11 Nov, not seen since), mDNS on UDP 5353 (errno
+  65) and an undiscovered VM Service.
+- **The app's output:** `framework.sh logs <udid> <flutter-bin>` streams its
+  `flutter:` lines through the SDK's own `idevicesyslog`. `flutter logs -d`
+  printed only its header, from the checkout or not; `devicectl ... --console` and
+  a release build show nothing.
+- **Checkout shared with another session:** `flutter attach` has no `--no-pub`.
+  Back up `pubspec.lock` and `ios/Podfile.lock` outside `/tmp` first; on 12 Nov
+  neither changed across two builds, two runs and two attaches.
 
 ## What goes outward
 
