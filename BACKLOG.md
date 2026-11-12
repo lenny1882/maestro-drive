@@ -988,7 +988,9 @@ had nothing to fire on. What held the first bring-up at `enabling automation mod
 16:12:46 sat with the phone showing a prompt, and the note stayed silent: `_waiting_note` waited for `Testing
 started` in the driver log, and xcodebuild writes that line only at the end (the log read `Running tests...`
 from 16:13:08). The bring-up failed at 16:14:10 with `Timed out while enabling automation mode`. With the
-prompt answered, the next `device.sh up` came up in 6 s. The note now fires on time alone, 10 s in.
+prompt answered, the next `device.sh up` came up in 6 s. The note now fires on time alone, 10 s in. The
+prompt read, in the user's words, "something along the lines of unlock phone to allow XCUITest to run"; the
+note now names it and the passcode.
 
 **Left.** Restart the phone and see `LOOK AT THE PHONE NOW` arrive at about 10 s, then answer the prompt
 inside xcodebuild's timeout and see the same bring-up come up. Untrust the developer and check both

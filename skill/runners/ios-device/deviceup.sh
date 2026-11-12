@@ -187,9 +187,10 @@ _why() {  # _why <log>
 # "Testing started" late, so gating on it kept the note silent while a
 # restarted XS Max sat waiting for input (12 Nov 2026).
 _waiting_note() {  # _waiting_note <log>
-  echo "LOOK AT THE PHONE NOW: the driver is not up after 10 s. If the" >&2
-  echo "  phone shows a prompt (passcode, Trust, Enable UI Automation), answer it — the" >&2
-  echo "  bring-up is still waiting and comes up as soon as it is answered." >&2
+  echo "LOOK AT THE PHONE NOW: the driver is not up after 10 s. After a restart the phone" >&2
+  echo "  asks to be unlocked to allow XCUITest to run: enter its passcode. Answer any other" >&2
+  echo "  prompt (Trust, Enable UI Automation) too. The bring-up is still waiting and comes" >&2
+  echo "  up once it is answered; xcodebuild gives up after about a minute." >&2
 }
 
 # Cold start measured at ~10-30s on the XS Max: xcodebuild launches the runner,
