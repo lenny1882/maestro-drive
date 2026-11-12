@@ -211,7 +211,8 @@ run-diagnose)
       echo "  the phone present. Stop the run rather than wait. The app is installed: launch it"
       echo "  (xcrun devicectl device process launch --device <udid> <bundle-id>), read its URI"
       echo "  with framework.sh vm-url <udid> <flutter-bin>, and flutter attach -d <udid>"
-      echo "  --debug-url=<uri>, which needs neither LLDB nor mDNS."
+      echo "  --debug-url=<uri>, which needs neither LLDB nor mDNS. That works on iOS 18; on iOS 26"
+      echo "  a debug build will not start without a debugger, and vm-url says so."
     fi
     if grep -qE "errno = 65.*5353|port = 5353|could not access the local network" "$_log"; then
       _n=1
@@ -241,18 +242,37 @@ vm-url)
   # 3.41.9, 12 Nov 2026): attach came up and a hot reload went through.
   _udid=${1:?vm-url <udid> <flutter-bin> [seconds]}; _fl=${2:?flutter-bin}; _w=${3:-30}
   _t=${TMPDIR:-/tmp}/vm-url-$_udid.$$
-  sh "$0" logs "$_udid" "$_fl" > "$_t" 2>&1 &
+  # logs keeps flutter: lines only; the engine's refusal on iOS 26 is tagged
+  # Runner(Flutter) without that prefix, so read the raw syslog here.
+  _a="$(cd "$(dirname "$_fl")/.." 2>/dev/null && pwd -P)/bin/cache/artifacts"
+  sh "$0" device-check "$_fl" >/dev/null || exit 1
+  _dl=$(for _d in "$_a"/*/; do printf '%s:' "$_d"; done)
+  DYLD_LIBRARY_PATH="$_dl" "$_a/libimobiledevice/idevicesyslog" -u "$_udid" 2>&1 |
+    grep --line-buffered -E 'flutter: |Runner\(Flutter\)|No device found|Library not loaded' > "$_t" &
   _p=$!
   _u=
   for _i in $(seq 1 "$_w"); do
     _u=$(grep -o 'VM service is listening on http://[^ ]*' "$_t" 2>/dev/null | tail -1 | sed 's/.*listening on //')
     [ -n "$_u" ] && break
+    grep -q 'Cannot create a FlutterEngine instance in debug mode' "$_t" 2>/dev/null && break
     kill -0 "$_p" 2>/dev/null || break
     sleep 1
   done
-  pkill -P "$_p" 2>/dev/null; kill "$_p" 2>/dev/null; wait "$_p" 2>/dev/null
+  # The reader first: on macOS sh, waiting on the pipeline's last process also
+  # waits for idevicesyslog, which never exits on its own (hung on 12 Nov 2026).
   pkill -f "idevicesyslog -u $_udid" 2>/dev/null
+  pkill -P "$_p" 2>/dev/null; kill "$_p" 2>/dev/null; wait "$_p" 2>/dev/null
   if [ -n "$_u" ]; then rm -f "$_t"; echo "$_u"; exit 0; fi
+  if grep -q 'Cannot create a FlutterEngine instance in debug mode' "$_t" 2>/dev/null; then
+    # iOS 26: a debug build will not start its engine unless a debugger launched
+    # it (ptrace(PT_TRACE_ME) refused). Seen on an iPhone 11, iOS 26.5.2,
+    # 12 Nov 2026; on iOS 18.7.9 the same route worked.
+    echo "vm-url: the debug build refused to start without a debugger on $_udid:" >&2
+    echo "  'Cannot create a FlutterEngine instance in debug mode without Flutter tooling or" >&2
+    echo "  Xcode' (ptrace PT_TRACE_ME refused). This is iOS 26: a devicectl launch with no" >&2
+    echo "  debugger cannot run a debug build, so this route needs flutter run, which uses LLDB." >&2
+    rm -f "$_t"; exit 3
+  fi
   echo "vm-url: no 'VM service is listening' line from $_udid in ${_w}s — is a debug build running?" >&2
   sed 's/^/  /' "$_t" | tail -3 >&2; rm -f "$_t"
   exit 1

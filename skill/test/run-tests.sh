@@ -2317,6 +2317,9 @@ out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 TMPDIR="$TMP" sh "$FW" vm-url PH
 printf '#!/bin/sh\necho "[connected:$2]"\n' > "$FR/bin/cache/artifacts/libimobiledevice/idevicesyslog"
 out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 TMPDIR="$TMP" sh "$FW" vm-url PHONEUDID "$FR/bin/flutter" 2 2>&1); rc=$?
 case "$rc:$out" in 1:*"is a debug build running"*) ok "and says no debug build logged one when none did" ;; *) no "and says no debug build logged one when none did" "rc=$rc: $out" ;; esac
+printf '#!/bin/sh\necho "[connected:$2]"\necho "Nov 12 17:15:22 Runner(Flutter)[691] <Notice>: [ERROR:flutter/runtime/ptrace_check.cc(75)] Could not call ptrace(PT_TRACE_ME): Operation not permitted"\necho "Nov 12 17:15:22 Runner(Flutter)[691] <Notice>: Cannot create a FlutterEngine instance in debug mode without Flutter tooling or Xcode."\nsleep 30\n' > "$FR/bin/cache/artifacts/libimobiledevice/idevicesyslog"
+out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 TMPDIR="$TMP" sh "$FW" vm-url PHONEUDID "$FR/bin/flutter" 10 2>&1); rc=$?
+case "$rc:$out" in 3:*"refused to start without a debugger"*"iOS 26"*) ok "vm-url names iOS 26's refusal to run a debug build without a debugger, exit 3" ;; *) no "vm-url names iOS 26's refusal to run a debug build without a debugger, exit 3" "rc=$rc: $out" ;; esac
 out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=0 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1); rc=$?
 case "$rc:$out" in 1:*"ROSETTA IS NOT INSTALLED"*) ok "and refuses without it, naming Rosetta" ;; *) no "and refuses without it, naming Rosetta" "rc=$rc: $out" ;; esac
 

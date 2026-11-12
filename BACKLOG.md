@@ -790,6 +790,13 @@ was not established. `wall.sh` now reports a deleted log.
 
 **To do.** Find what rebuilds that directory.
 
+**Seen again, 12 Nov 2026.** The whole of `/tmp/maestro-mac` on oi-jamesl-mac was gone at 17:08:11, runners
+and all: `framework.sh vm-url` had run from `/tmp/maestro-mac/runners/flutter` at 16:58, and at 17:07:47 the
+next `framework.sh build` found nothing to run (`vm-url` exit 127). Lost with it were two backups this
+session kept there of the shared checkout's `ios/Podfile.lock` and `pubspec.lock`. Neither lock file had
+changed (mtimes 15:33:50 and 11 Nov). A macOS `/tmp` cleaner or a session's `rm` are both unchecked; the
+window is 16:58 to 17:07. Backups of anything that matters should not live under `/tmp/maestro-mac`.
+
 ## 152. `bench.sh` times the wrong device while another device's driver is on 22087 — **OPEN, raised 5 Nov 2026**
 
 **What.** With the iPhone 17 Pro's driver on 22087, `maestro --device <iPhone 16 Pro> hierarchy` returned the
@@ -1055,9 +1062,21 @@ oneiota.e.hugoboss.runner.uat : 0xe8008012 (This provisioning profile cannot be 
 — the development profile does not list that phone, and nothing here touches the Apple account to add it.
 `vm-url` then said `no 'VM service is listening' line ... is a debug build running?`, as it should.
 
+**On iOS 26 the route stops at the launch, 12 Nov 2026.** The Mac had no profile listing the iPhone 11: the
+user's profile files (26 Aug, in the VirtualBox shared folder) had never reached it, and double-clicking
+them installed nothing into either profile directory. Copying the ten that list the phone into
+`~/Library/Developer/Xcode/UserData/Provisioning Profiles/<UUID>.mobileprovision` did; the rebuild embedded
+UAT `92e42239-5e7b-4c3d-a874-7ba042e4e5cf` and `devicectl device install app` succeeded on the iPhone 11
+(iOS 26.5.2, 23F84). Launched with devicectl, the app logged `Runner(Flutter)[691]: [ERROR:flutter/runtime/
+ptrace_check.cc(75)] Could not call ptrace(PT_TRACE_ME): Operation not permitted` and `Cannot create a
+FlutterEngine instance in debug mode without Flutter tooling or Xcode.` So iOS 26 runs a debug build only
+under a debugger, and the devicectl, `vm-url`, attach route is iOS 18 only. `vm-url` now names this and exits
+3 (run live on the iPhone 11). It also hung once: on macOS `sh`, `wait` on the pipeline's last process waited
+for `idevicesyslog`; the reader is now stopped first. The shared checkout's lock files were unchanged.
+
 **Left.**
-- Install that debug build on a phone the profile lists (the iPhone 11 Pro had the app on 11 Nov), launch,
-  `vm-url`, attach.
-- The launch, `vm-url`, `flutter attach --debug-url` route on an iOS 26 phone (the iPhone 11 Pro).
+- On iOS 26, a debug build has to start under a debugger: `flutter run` (LLDB, which stalled on 11 Nov) or
+  Xcode. Whether `flutter run --use-application-binary` with LLDB on gets past the stall on the iPhone 11 is
+  the next thing to run; if it does, mDNS is the step after.
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
