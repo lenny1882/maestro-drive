@@ -212,7 +212,8 @@ run-diagnose)
       echo "  (xcrun devicectl device process launch --device <udid> <bundle-id>), read its URI"
       echo "  with framework.sh vm-url <udid> <flutter-bin>, and flutter attach -d <udid>"
       echo "  --debug-url=<uri>, which needs neither LLDB nor mDNS. That works on iOS 18; on iOS 26"
-      echo "  a debug build will not start without a debugger, and vm-url says so."
+      echo "  a debug build will not start without a debugger, and vm-url says so. On iOS 26.5.2"
+      echo "  flutter run --use-application-binary with LLDB on reached its VM Service in 71 s."
     fi
     if grep -qE "errno = 65.*5353|port = 5353|could not access the local network" "$_log"; then
       _n=1

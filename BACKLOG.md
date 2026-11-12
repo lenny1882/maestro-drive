@@ -1074,9 +1074,15 @@ under a debugger, and the devicectl, `vm-url`, attach route is iOS 18 only. `vm-
 3 (run live on the iPhone 11). It also hung once: on macOS `sh`, `wait` on the pipeline's last process waited
 for `idevicesyslog`; the reader is now stopped first. The shared checkout's lock files were unchanged.
 
+**`flutter run` with LLDB works on iOS 26 here, 12 Nov 2026.** On the iPhone 11 (iOS 26.5.2), with
+`enable-lldb-debugging: true`, Rosetta back, and over SSH: `flutter run -d <udid> --debug -t
+lib/main_uat.dart --use-application-binary build/ios/iphoneos/Runner.app` (the `--device --debug` build)
+reached `A Dart VM Service on hz’s iPhone is available at: http://127.0.0.1:49339/...` in 71 s, with no LLDB
+stall and no mDNS failure; `run-diagnose` found nothing (exit 1). A second run sent `r`: `Reloaded 0
+libraries in 301ms`, then `q`, exit 0. The checkout's lock files were unchanged both times. So the full
+fhrm item 21 chain works on iOS 26 on this Mac. What made the 11 Nov run on the iPhone 11 Pro stall is not
+known: that phone has not been reconnected, and the Mac then lacked Rosetta.
+
 **Left.**
-- On iOS 26, a debug build has to start under a debugger: `flutter run` (LLDB, which stalled on 11 Nov) or
-  Xcode. Whether `flutter run --use-application-binary` with LLDB on gets past the stall on the iPhone 11 is
-  the next thing to run; if it does, mDNS is the step after.
-- fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
-  is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
+- The iPhone 11 Pro, if it is reconnected: does the LLDB stall reproduce there?
+- fhrm's `start.sh` calling `device-check`, `run-diagnose`, `logs`, and on iOS 18 `vm-url` + attach.
