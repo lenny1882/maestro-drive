@@ -1042,7 +1042,14 @@ New verb `vm-url <udid> <flutter-bin> [seconds]` reads the URI: live, it printed
 `run-diagnose` now gives this route for the LLDB stall and for MDNS BLOCKED. Not yet tried on iOS 26, where
 a debug build launched without a debugger may not survive (the `mprotect failed: 13` reports).
 
+**Debug builds for a phone, 12 Nov 2026.** Asked for by fhrm item 21 (hot reload on a phone):
+`runners/flutter/build.sh --device <udid> --debug` builds `flutter build ios --debug` in the GUI session and
+prints `MMARTIFACT` as before; profile stays the default. `framework.sh build --platform ios-device` passes
+`--debug` only when `--mode debug` is given by name, since debug was already its default and every earlier
+caller got profile on a phone. Tested offline with the device-build stubs; not built on the Mac yet.
+
 **Left.**
+- A `--device --debug` build on the Mac, installed and launched with devicectl, then `vm-url` and attach.
 - The launch, `vm-url`, `flutter attach --debug-url` route on an iOS 26 phone (the iPhone 11 Pro).
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.

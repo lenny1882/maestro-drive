@@ -2382,6 +2382,20 @@ out=$(PATH="$DVSTUB:$PATH" HOME="$TMP/noprof" sh "$REPO/runners/flutter/build.sh
   && ok "the device build refuses when no profile covers the app (never touches the account)" \
   || no "the device build refuses when no profile covers the app (never touches the account)" "rc=$rc: $out"
 
+# --debug on a phone (fhrm item 21): debug build in the GUI session, artefact
+# printed as before; profile stays the default.
+printf '#!/bin/sh\necho "FLUTTER-ARGS $*"\n' > "$DVREPO/.fvm/flutter/bin/flutter"
+out=$(DVB --debug --build-only)
+case "$out" in *"FLUTTER-ARGS build ios --debug"*"(debug mode)"*|*"(debug mode)"*"FLUTTER-ARGS build ios --debug"*)
+  case "$out" in *"artifact"*"iphoneos/Runner.app"*) ok "--device --debug builds debug in the GUI session and prints the artefact" ;;
+    *) no "--device --debug builds debug in the GUI session and prints the artefact" "no artifact: $out" ;; esac ;;
+  *) no "--device --debug builds debug in the GUI session and prints the artefact" "got: $out" ;; esac
+out=$(DVB --build-only)
+case "$out" in *"FLUTTER-ARGS build ios --profile"*) ok "and without --debug a phone still builds profile" ;; *) no "and without --debug a phone still builds profile" "got: $out" ;; esac
+FWB(){ PATH="$DVSTUB:$PATH" HOME="$TMP/dvhome" sh "$REPO/runners/flutter/framework.sh" build "$DVREPO" --platform ios-device --device DEVUDID --app-id com.example.app.uat --variant uat "$@" 2>&1; }
+case "$(FWB --mode debug)" in *"build ios --debug"*) ok "framework.sh build --mode debug on ios-device asks for --debug" ;; *) no "framework.sh build --mode debug on ios-device asks for --debug" "$(FWB --mode debug | tail -3)" ;; esac
+case "$(FWB)" in *"build ios --profile"*) ok "and with no --mode a phone keeps profile, as every earlier caller had" ;; *) no "and with no --mode a phone keeps profile, as every earlier caller had" "wrong" ;; esac
+
 echo
 echo "build and install are separable (item 87)"
 # The framework's job ends at an artefact; installing it is the platform's. The

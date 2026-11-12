@@ -90,7 +90,7 @@ build)
   while [ $# -gt 0 ]; do
     case $1 in
       --platform) _plat=$2; shift 2 ;;
-      --mode)     _mode=$2; shift 2 ;;
+      --mode)     _mode=$2; _modeset=1; shift 2 ;;
       --variant)  _variant=$2; shift 2 ;;
       --target)   _target=$2; shift 2 ;;
       --app-id)   _appid=$2; shift 2 ;;
@@ -117,6 +117,9 @@ build)
     *) echo "runners/flutter build: unknown platform '$_plat'" >&2; exit 2 ;;
   esac
   [ "$_mode" = release ] && set -- "$@" --release
+  # A phone builds profile unless debug is asked for by name: the default mode
+  # is debug, and every earlier caller got profile on a phone (item 176).
+  [ "$_plat" = ios-device ] && [ "${_modeset:-}" = 1 ] && [ "$_mode" = debug ] && set -- "$@" --debug
   [ -n "${_appid:-}" ] && set -- "$@" --app-id "$_appid"
   [ -n "$_variant" ] && set -- "$@" --flavor "$_variant"
   [ -n "$_target" ] && set -- "$@" --target "$_target"

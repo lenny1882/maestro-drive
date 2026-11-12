@@ -73,7 +73,7 @@ ones talk to the Mac through `$grpc_proxy` and must never be sent.
 | `describe <repo> [app-id] [--env]` | Mac | the `build.sh --detect` report: toolchain, version, variant, entrypoint, last build. `--env` prints `FLUTTER=`, `FLAVOR=`, `TARGET=`, `GEM_HOME=` instead, and exits 1 where the variant is undecided (item 172) | `remote/build.sh` lines 144-182 |
 | `variants <repo> [--platform <p>]` | Mac | one buildable variant name per line; `--platform` is optional and ignored by a framework whose variants span both | `_flavours` |
 | `variant-for-appid <repo> <app-id> [--platform <p>]` | Mac | the variants that produce that app id, one per line | `_flavour_for_appid` |
-| `build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]` | Mac | builds, and prints `artifact <path>` as its last line | `remote/build.sh` lines 264-292 |
+| `build <repo> --platform <p> --mode <m> [--variant <v>] [--target <t>]` | Mac | builds, and prints `artifact <path>` as its last line. On `ios-device` it builds profile unless `--mode debug` is given by name, which builds debug for hot reload (fhrm item 21) | `remote/build.sh` lines 264-292 |
 | `version <repo>` | Mac | `<version>+<build>` a build from this checkout would produce — what a device is compared against, having no install time | nothing; the check did not exist |
 | `residue` | either | one glob per line; a tracked path matching one is build residue | `_gs_residue` in `remote/gitstate.sh` |
 | `devsession` | Mac | is a hot-reload session live? print the processes, exit 0; exit 1 with the consequence when not | `pgrep -fl flutter_tools` in `bin/preflight.sh` |

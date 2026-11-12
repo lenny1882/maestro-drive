@@ -9,6 +9,7 @@
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] --detect --env
 #   build.sh --repo <dir> [--app-id <id>] [--flavor <f>] [--target <file>]
 #            [--install <udid>] [--release] [--build-only]
+#   build.sh --repo <dir> ... --device <udid> [--debug] [--build-only]
 #
 # Building and installing are two different jobs and this does both. Which one
 # it is doing is now said out loud: a successful build prints
@@ -36,7 +37,7 @@
 # testable from Linux without a Mac.
 set -u
 
-REPO=; DETECT=0; ENV=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVICE=; BUILDONLY=0; LIST=
+REPO=; DETECT=0; ENV=0; FLAVOR=; TARGET=; APPID=; INSTALL=; MODE=debug; DEVMODE=profile; DEVICE=; BUILDONLY=0; LIST=
 while [ $# -gt 0 ]; do
   case $1 in
     --repo)    REPO=$2; shift 2 ;;
@@ -59,6 +60,9 @@ while [ $# -gt 0 ]; do
     --install) INSTALL="$INSTALL $2"; shift 2 ;;
     --device)  DEVICE=$2; shift 2 ;;   # a physical device: profile build + devicectl, via Aqua
     --release) MODE=release; shift ;;
+    # A physical device builds profile unless asked; --debug is for hot reload,
+    # which a profile build cannot do (flutter-hot-reload-mac item 21).
+    --debug)   DEVMODE=debug; shift ;;
     *) echo "build: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -241,9 +245,11 @@ fi
 #   1. codesign fails in an SSH (Background) session — flutter's own signing
 #      included — so the build has to run in the GUI (Aqua) session. Apple Events
 #      reach the GUI from SSH, so hand Terminal a script and poll its log.
-#   2. A debug Flutter build cannot launch standalone on the device and a
-#      debugger suppresses suspension, so this builds PROFILE mode and installs
-#      with devicectl, not simctl.
+#   2. This builds PROFILE mode by default and installs with devicectl, not
+#      simctl: a debug build was held to need a debugger to launch. --debug
+#      builds debug for hot reload. Measured on an XS Max on iOS 18.7.9
+#      (12 Nov 2026), a debug build launched with devicectl alone ran and served
+#      its VM Service; iOS 26 is not measured (item 176).
 if [ -n "$DEVICE" ]; then
   # Never reach for the Apple account: a profile for the app must already be
   # local. If not, say how to get one rather than creating records with
@@ -263,7 +269,7 @@ if [ -n "$DEVICE" ]; then
     echo "#!/bin/sh"
     echo "cd '$REPO' || exit 1"
     [ -n "${GEM:-}" ] && echo "export GEM_HOME='$GEM' PATH='$GEM/bin':\$PATH"
-    printf "'%s' build ios --profile" "$FL"
+    printf "'%s' build ios --%s" "$FL" "$DEVMODE"
     [ -n "$FLAVOR" ] && printf " --flavor '%s'" "$FLAVOR"
     [ -n "$TARGET" ] && printf " -t '%s'" "$TARGET"
     echo
@@ -295,9 +301,9 @@ if [ -n "$DEVICE" ]; then
     exit 1; }
 
   if [ "$BUILDONLY" = 1 ]; then
-    echo "building $APPID for device $DEVICE in the GUI session (profile mode), install left to the caller"
+    echo "building $APPID for device $DEVICE in the GUI session ($DEVMODE mode), install left to the caller"
   else
-    echo "building $APPID for device $DEVICE in the GUI session (profile mode)"
+    echo "building $APPID for device $DEVICE in the GUI session ($DEVMODE mode)"
   fi
   waited=0; limit=${DEVICE_BUILD_TIMEOUT:-1200}
   while [ "$waited" -lt "$limit" ]; do
