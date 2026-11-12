@@ -205,16 +205,17 @@ run-diagnose)
       _n=1
       echo "LLDB STALL: lldb attached but never handed the app on. Measured on an iPhone 11 Pro"
       echo "  (iOS 26.5.2, Xcode 27.2) this went silent for 11 minutes, with device support for"
-      echo "  the phone present. Stop the run rather than wait. Turning LLDB off"
-      echo "  (flutter config --no-enable-lldb-debugging) moves VM Service discovery to mDNS,"
-      echo "  which failed on the same Mac (below). The app's output still streams through"
-      echo "  framework.sh logs <udid> <flutter-bin>."
+      echo "  the phone present. Stop the run rather than wait. The app is installed: launch it"
+      echo "  (xcrun devicectl device process launch --device <udid> <bundle-id>), read its URI"
+      echo "  with framework.sh vm-url <udid> <flutter-bin>, and flutter attach -d <udid>"
+      echo "  --debug-url=<uri>, which needs neither LLDB nor mDNS."
     fi
     if grep -qE "errno = 65.*5353|port = 5353|could not access the local network" "$_log"; then
       _n=1
       echo "MDNS BLOCKED: Flutter's VM Service discovery on UDP 5353 failed (errno 65, No route to"
       echo "  host). Granting Local Network and Automation > Xcode to Terminal did not clear it"
-      echo "  (11 Nov 2026), so no fix is known yet. Without discovery there is no hot reload."
+      echo "  (11 Nov 2026). Skip discovery: framework.sh vm-url <udid> <flutter-bin> reads the"
+      echo "  URI from the phone's log, then flutter attach -d <udid> --debug-url=<uri>."
     fi
     if grep -q "Dart VM Service was not discovered" "$_log"; then
       _n=1
@@ -224,6 +225,33 @@ run-diagnose)
   fi
   [ "$_n" = 1 ] && exit 0
   echo "run-diagnose: no known phone failure in $_log"
+  exit 1
+  ;;
+
+vm-url)
+  # The app's Dart VM Service URI as the phone logs it, for `flutter attach
+  # --debug-url=<it>`, which skips both LLDB and mDNS discovery (item 176). Run it
+  # just before or after launching the debug build (devicectl device process
+  # launch): it waits up to <seconds> for the app's "The Dart VM service is
+  # listening on" line and prints the URI. The URI is the phone's own loopback;
+  # flutter attach forwards it. Measured on the XS Max (iOS 18.7.9, Flutter
+  # 3.41.9, 12 Nov 2026): attach came up and a hot reload went through.
+  _udid=${1:?vm-url <udid> <flutter-bin> [seconds]}; _fl=${2:?flutter-bin}; _w=${3:-30}
+  _t=${TMPDIR:-/tmp}/vm-url-$_udid.$$
+  sh "$0" logs "$_udid" "$_fl" > "$_t" 2>&1 &
+  _p=$!
+  _u=
+  for _i in $(seq 1 "$_w"); do
+    _u=$(grep -o 'VM service is listening on http://[^ ]*' "$_t" 2>/dev/null | tail -1 | sed 's/.*listening on //')
+    [ -n "$_u" ] && break
+    kill -0 "$_p" 2>/dev/null || break
+    sleep 1
+  done
+  pkill -P "$_p" 2>/dev/null; kill "$_p" 2>/dev/null; wait "$_p" 2>/dev/null
+  pkill -f "idevicesyslog -u $_udid" 2>/dev/null
+  if [ -n "$_u" ]; then rm -f "$_t"; echo "$_u"; exit 0; fi
+  echo "vm-url: no 'VM service is listening' line from $_udid in ${_w}s — is a debug build running?" >&2
+  sed 's/^/  /' "$_t" | tail -3 >&2; rm -f "$_t"
   exit 1
   ;;
 

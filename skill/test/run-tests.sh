@@ -2287,7 +2287,7 @@ case "$(rd 'LLDB is taking longer than expected to start debugging the app.\nA D
   *"LLDB STALL"*) no "a run that reached its VM Service is not called stalled" "named" ;;
   *"rc=1"*) ok "a run that reached its VM Service is not called stalled" ;; *) no "a run that reached its VM Service is not called stalled" "rc" ;; esac
 case "$(rd 'Flutter could not access the local network.\nSocketException: Send failed (OS Error: No route to host, errno = 65), address = 0.0.0.0, port = 5353\nThe Dart VM Service was not discovered after 60 seconds.\n')" in
-  *"MDNS BLOCKED"*"NO VM SERVICE"*"rc=0"*) ok "run-diagnose names the port 5353 errno 65 failure and the undiscovered VM Service" ;;
+  *"MDNS BLOCKED"*"vm-url"*"--debug-url"*"NO VM SERVICE"*"rc=0"*) ok "run-diagnose names the port 5353 errno 65 failure, the vm-url way round it, and the undiscovered VM Service" ;;
   *) no "run-diagnose names the port 5353 errno 65 failure and the undiscovered VM Service" "missed" ;; esac
 case "$(rd 'Launching lib/main.dart\nSyncing files\n')" in
   *"no known phone failure"*"rc=1"*) ok "a log with none of them says so and exits 1" ;; *) no "a log with none of them says so and exits 1" "wrong" ;; esac
@@ -2312,6 +2312,11 @@ out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 sh "$FW" logs PHONEUDID "$FR/bin
 case "$out" in *"flutter: hello from the app"*) case "$out" in *Sandbox*) no "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" "kept a system line" ;;
   *) ok "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" ;; esac ;;
   *) no "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" "got: $out" ;; esac
+out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 TMPDIR="$TMP" sh "$FW" vm-url PHONEUDID "$FR/bin/flutter" 5 2>&1); rc=$?
+[ "$rc:$out" = "0:http://127.0.0.1:49482/eK=/" ] && ok "vm-url prints the URI the phone logged, for flutter attach --debug-url" || no "vm-url prints the URI the phone logged, for flutter attach --debug-url" "rc=$rc: $out"
+printf '#!/bin/sh\necho "[connected:$2]"\n' > "$FR/bin/cache/artifacts/libimobiledevice/idevicesyslog"
+out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 TMPDIR="$TMP" sh "$FW" vm-url PHONEUDID "$FR/bin/flutter" 2 2>&1); rc=$?
+case "$rc:$out" in 1:*"is a debug build running"*) ok "and says no debug build logged one when none did" ;; *) no "and says no debug build logged one when none did" "rc=$rc: $out" ;; esac
 out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=0 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1); rc=$?
 case "$rc:$out" in 1:*"ROSETTA IS NOT INSTALLED"*) ok "and refuses without it, naming Rosetta" ;; *) no "and refuses without it, naming Rosetta" "rc=$rc: $out" ;; esac
 

@@ -1029,7 +1029,20 @@ printed only its header. So `logs` now runs that `idevicesyslog` and keeps the `
 The syslog carries the VM Service URI, but as the phone's own loopback, so it is not reachable from the Mac
 without a forward; `vmservice.sh` does not use it.
 
+**A way round LLDB and mDNS, run live, 12 Nov 2026.** Flutter 3.41.8 fixed an LLDB bug on iOS 26.4
+(juejin.cn/post/7633684246478209060), and 3.41.9 still stalled here; flutter#177307 is the same errno 65 on
+a physical iPhone, unresolved. Flutter's own way round mDNS is `flutter attach --debug-url` (flutter PR
+#166782). On the XS Max (iOS 18.7.9), with the debug UAT build installed: `devicectl device process launch`,
+the URI from the phone's log, then `flutter attach -d <udid> -t lib/main_uat.dart
+--debug-url=http://127.0.0.1:49519/ZD3NBH3p0pk=/` from the checkout synced files, printed `A Dart VM Service on
+Monica’s iPhone is available at: http://127.0.0.1:51783/...`, and `r` answered `Reloaded 0 libraries in
+249ms`. No LLDB, no mDNS. `pubspec.lock` and the other session's changes in the checkout were untouched.
+New verb `vm-url <udid> <flutter-bin> [seconds]` reads the URI: live, it printed
+`http://127.0.0.1:49542/kZZu1ZnbUl8=/` 4 s after a launch and left no `idevicesyslog` running.
+`run-diagnose` now gives this route for the LLDB stall and for MDNS BLOCKED. Not yet tried on iOS 26, where
+a debug build launched without a debugger may not survive (the `mprotect failed: 13` reports).
+
 **Left.**
+- The launch, `vm-url`, `flutter attach --debug-url` route on an iOS 26 phone (the iPhone 11 Pro).
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
-- The LLDB stall and the mDNS failure have names, not fixes.
