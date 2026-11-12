@@ -960,9 +960,24 @@ ahead of the item 46 message, and name the Settings path.
 - `_is_device` reads `${DEVICE_MAP:-}`, so `driver.sh` under a stub `lib.sh` without it no longer stops on
   `set -u`.
 
-**Left.** Run each of the three on a phone: lay it flat on the prebuilt driver and check the FACE-UP message
-appears; turn it on its side and check the warning; untrust the developer and check both messages. If the
-flat message still does not appear, get that run's `devdrv` log.
+**Flat, run on a phone, 12 Nov 2026.** iPhone XS Max `00008020-000A396C3606002E`, flat (`faceUp`), prebuilt
+driver forced with `DRIVER_XCTESTRUN=/nonexistent` (the signed source build survives a flat phone). The first
+`driver.sh tap` crashed the driver and printed `Bad Gateway` and a settle note, exit 0, naming nothing. Two
+causes, neither the tail: over the ssh transport the proxy answers a dead driver with a `Bad Gateway` body and
+curl exits 0, so `_post` printed it as the reply; and every CLI verb ending `; echo` exited with echo's status.
+The fatal was at line 39 of 91 in the `devdrv` log, so the tail would have missed it too. Fixed: `_gone` in
+`bin/driver.sh` recognises `Bad Gateway`; `_post` then fails, says the driver died on that action and runs
+`_devdrv_hint`; `_settle` counts it as no answer, runs the hint and returns 2, which fails the CLI verb;
+`_echo_rc` keeps `_post`'s status through the trailing `echo` on the eight verbs that ended that way. Rerun:
+`POST /touch got 'Bad Gateway'`, the log tail with the fatal, the FACE-UP message, exit 1.
+
+**Waiting on a phone prompt.** The first bring-up on the XS Max failed after about a minute with `Timed out
+while enabling automation mode`, and only then said to look at the phone. `deviceup.sh` now says LOOK AT THE
+PHONE NOW 10 s into a started driver that is not up (`_waiting_note`), and `device.sh up` streams the
+bring-up instead of printing it at the end. Not yet seen live: the retries came up without a prompt.
+
+**Left.** Turn a phone on its side and check the landscape warning; untrust the developer and check both
+certificate messages; see `LOOK AT THE PHONE NOW` on a phone that is waiting for input.
 
 ## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
 

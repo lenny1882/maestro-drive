@@ -1624,6 +1624,24 @@ out=$(_hint165 'The connection was invalidated\n** TEST EXECUTE FAILED **\n')
 case "$out" in *"session dying (item 46)"*) ok "a log with neither cause still gets item 46's message" ;;
   *) no "a log with neither cause still gets item 46's message" "got: $out" ;; esac
 
+# Item 165, live on the flat XS Max: the touch killed the driver, the proxy
+# answered "Bad Gateway" with curl exiting 0, and the tap exited 0 naming nothing.
+out=$( ( DEV=PHONEUDID; BASE=http://x; _start(){ :; }; curl(){ printf 'Bad Gateway'; }
+         _is_device(){ return 0; }; _devdrv_hint(){ echo "HINT-RAN" >&2; }
+         source <(sed -n '/^_gone()/p' "$REPO/bin/driver.sh")
+         source <(sed -n '/^_echo_rc()/p' "$REPO/bin/driver.sh")
+         source <(sed -n '/^_post()/,/^}/p' "$REPO/bin/driver.sh")
+         _post touch '{"x":1,"y":2}'; _echo_rc; echo "rc=$?" ) 2>&1 )
+case "$out" in *"died on this action"*"HINT-RAN"*"rc=1"*) ok "a 'Bad Gateway' reply fails the verb and runs the device hint (item 165)" ;;
+  *) no "a 'Bad Gateway' reply fails the verb and runs the device hint (item 165)" "got: $out" ;; esac
+out=$( ( BASE=http://x; _start(){ :; }; curl(){ printf '{"ok":true}'; }
+         source <(sed -n '/^_gone()/p' "$REPO/bin/driver.sh")
+         source <(sed -n '/^_echo_rc()/p' "$REPO/bin/driver.sh")
+         source <(sed -n '/^_post()/,/^}/p' "$REPO/bin/driver.sh")
+         _post touch '{}'; _echo_rc; echo "rc=$?" ) 2>&1 )
+case "$out" in *'{"ok":true}'*"rc=0"*) ok "a normal reply is printed and the verb exits 0" ;;
+  *) no "a normal reply is printed and the verb exits 0" "got: $out" ;; esac
+
 # Item 165, landscape. A registered phone answering wider than tall is warned
 # about; a simulator, or a phone upright, is not.
 _screen165() {  # _screen165 <udid> <w> <h>
@@ -1873,6 +1891,11 @@ case "$w" in *"FACE-UP crash"*) ok "the face-up crash is named at bring-up" ;; *
 w=$(why "Unable to launch dev.mobile.maestro-driver-iosUITests.xctrunner because it has an invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user.\n** TEST EXECUTE FAILED **\n")
 case "$w" in *"NOT TRUST the developer certificate"*"VPN & Device Management"*) ok "an untrusted developer certificate is named at bring-up (item 165)" ;;
   *) no "an untrusted developer certificate is named at bring-up (item 165)" "got: $w" ;; esac
+wn() { printf '%b' "$1" > "$TMP/wn.log"
+  ( source <(sed -n '/^_waiting_note()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _waiting_note "$TMP/wn.log" 2>&1 ); }
+case "$(wn 'Testing started\n')" in *"LOOK AT THE PHONE NOW"*) ok "a started driver not up yet says to look at the phone while it waits (item 165)" ;;
+  *) no "a started driver not up yet says to look at the phone while it waits (item 165)" "no note" ;; esac
+[ -z "$(wn 'Resolve Package Graph\n')" ] && ok "and says nothing before the test has started" || no "and says nothing before the test has started" "note printed"
 w=$(why 'Failed to initialize for UI testing: Timed out while enabling automation mode.\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"waiting for"*"input"*) ok "a phone that would not enter automation mode says to look at it" ;; *) no "a phone that would not enter automation mode says to look at it" "got: $w" ;; esac
 w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')

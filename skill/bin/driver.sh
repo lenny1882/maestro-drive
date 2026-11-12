@@ -329,9 +329,27 @@ _tree() {  # _tree <tree|nodes>
   _hier | python3 "$HERE/tree.py" "${1:-tree}"
 }
 
+# A driver that dies on the action (a flat phone's first /touch) does not fail
+# curl: over the ssh transport the proxy answers "Bad Gateway" with a 0 exit,
+# and that body used to be printed as the reply while the verb exited 0 — the
+# flat XS Max on 12 Nov 2026 got "Bad Gateway" and a settle note, and the
+# face-up crash was never named (item 165). Treat it as the driver gone.
+_gone() { case "$1" in *"Bad Gateway"*|*"502 Bad Gateway"*) return 0 ;; esac; return 1; }
+
+# The CLI verbs end in `echo` for the newline after the reply, and the verb's
+# exit status was echo's: a failed _post exited 0 (item 165). Keep the status.
+_echo_rc() { local r=$?; echo; return $r; }
+
 _post() {  # _post <route> <json>
   _start || return 1
-  curl -s -m 30 -X POST -H 'Content-Type: application/json' -d "$2" "$BASE/$1"
+  local out
+  out=$(curl -s -m 30 -X POST -H 'Content-Type: application/json' -d "$2" "$BASE/$1")
+  if _gone "$out"; then
+    echo "driver: POST /$1 got 'Bad Gateway' — the driver died on this action" >&2
+    _is_device && _devdrv_hint
+    return 1
+  fi
+  printf '%s' "$out"
 }
 
 _appids='"appIds":["'"$APP_ID"'"]'
@@ -400,10 +418,11 @@ _settle() {  # _settle [timeout-seconds]
   [ "$limit" = 0 ] && return 0
   local empty=0 deadline=$((SECONDS + limit)) tree prevtree=
   while [ "$SECONDS" -lt "$deadline" ]; do
-    case "$(curl -s -m 5 "$BASE/isScreenStatic" 2>/dev/null)" in
+    local st; st=$(curl -s -m 5 "$BASE/isScreenStatic" 2>/dev/null)
+    case "$st" in
       *true*) return 0 ;;
       "")     empty=$((empty + 1)) ;;
-      *)      empty=0 ;;
+      *)      if _gone "$st"; then empty=$((empty + 1)); else empty=0; fi ;;
     esac
     # After 2s of "moving", ask the tree too (BACKLOG item 105). On a phone
     # /isScreenStatic said moving on 17-19 of 20 reads of a still screen, while
@@ -438,7 +457,8 @@ print("SPIN" if spins(d.get("axElement", d)) else
     # (BACKLOG item 105). Three empty answers in a row is not a screen.
     if [ "$empty" -ge 3 ]; then
       echo "settle: the driver stopped answering after the last action — not a moving screen" >&2
-      return 1
+      _is_device && _devdrv_hint
+      return 2
     fi
     sleep 0.2
     waited=$((waited + 1))
@@ -1094,7 +1114,7 @@ case "${1:-start}" in
   tree|nodes) _tree "$1" ;;
   shot) shift; _shot "$@" ;;
   static)   _start && curl -s -m 10 "$BASE/isScreenStatic"; echo ;;
-  keyboard) _post keyboard "{$_appids}"; echo ;;
+  keyboard) _post keyboard "{$_appids}"; _echo_rc ;;
   # Two answers, because the route gives only one of them (BACKLOG item 104).
   # runningApp takes a list of bundle ids and returns whichever is in front,
   # or com.apple.springboard when none of them is, so it cannot name any other
@@ -1123,7 +1143,7 @@ except Exception: print("")')
   tap)      [ $# -ge 3 ] || { echo "usage: $0 tap <x> <y> [seconds]" >&2; exit 2; }
             # a duration turns the tap into a long press, so only send one when asked
             if [ -n "${4:-}" ]; then _post touch "{\"x\":$2,\"y\":$3,\"duration\":$4}"
-            else _post touch "{\"x\":$2,\"y\":$3}"; fi; echo ;;
+            else _post touch "{\"x\":$2,\"y\":$3}"; fi; _echo_rc ;;
   # With an argument it types. Bare, it prints the screen as text, which is what
   # --text after a verb does (item 130). A `tree|nodes|text` case above this one
   # used to catch both, so `text "x"` printed the tree and exited 0 having typed
@@ -1131,8 +1151,8 @@ except Exception: print("")')
   text)     if [ $# -lt 2 ]; then CMD=read; _tree text
             else shift; _post inputText "{\"text\":$(printf '%s' "$*" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'),$_appids}"; echo
             fi ;;
-  key)      _post pressKey "{\"key\":\"${2:?key name, e.g. delete / return}\"}"; echo ;;
-  button)   _post pressButton "{\"button\":\"${2:?button name, e.g. home}\"}"; echo ;;
+  key)      _post pressKey "{\"key\":\"${2:?key name, e.g. delete / return}\"}"; _echo_rc ;;
+  button)   _post pressButton "{\"button\":\"${2:?button name, e.g. home}\"}"; _echo_rc ;;
   erase)    if [ "${2:-}" = "--all" ]; then
               _post eraseText "{\"charactersToErase\":9999,$_appids}"; echo
             else
@@ -1142,11 +1162,11 @@ except Exception: print("")')
   scrollto) _scrollto "${2:?usage: $0 scrollto <pattern> [up|down|left|right] [max-swipes]}" "${3:-down}" "${4:-20}" ;;
   clearstate) _ssh "sh '$PLATFORM_SH' uninstall '$(_dev)' '$APP_ID'; echo cleared" ;;
   swipe)    [ $# -ge 5 ] || { echo "usage: $0 swipe <x1> <y1> <x2> <y2> [duration]" >&2; exit 2; }
-            _post swipeV2 "{\"appId\":\"$APP_ID\",\"startX\":$2,\"startY\":$3,\"endX\":$4,\"endY\":$5,\"duration\":${6:-0.4},$_appids}"; echo ;;
+            _post swipeV2 "{\"appId\":\"$APP_ID\",\"startX\":$2,\"startY\":$3,\"endX\":$4,\"endY\":$5,\"duration\":${6:-0.4},$_appids}"; _echo_rc ;;
   orient)   # camelCase on the wire; PORTRAIT / LANDSCAPE_LEFT are rejected
-            _post setOrientation "{\"orientation\":\"${2:?portrait|landscapeLeft|landscapeRight|upsideDown}\"}"; echo ;;
-  launch)   _post launchApp "{\"bundleId\":\"${2:-$APP_ID}\"}"; echo ;;
-  kill)     _post terminateApp "{\"appId\":\"${2:-$APP_ID}\"}"; echo ;;
+            _post setOrientation "{\"orientation\":\"${2:?portrait|landscapeLeft|landscapeRight|upsideDown}\"}"; _echo_rc ;;
+  launch)   _post launchApp "{\"bundleId\":\"${2:-$APP_ID}\"}"; _echo_rc ;;
+  kill)     _post terminateApp "{\"appId\":\"${2:-$APP_ID}\"}"; _echo_rc ;;
   find)     shift; _ensure_screen || exit 1
             pat=${1:?usage: $0 find <pattern> [--explain]}; shift
             _hier | python3 "$HERE/resolve.py" "$pat" \
@@ -1232,8 +1252,9 @@ rc=$?
 case "$CMD" in
   # launch gets the longer wait the journey verb has always used: a cold start
   # is the slowest thing here and 20 s has not always been enough for one.
-  launch) [ "$rc" -eq 0 ] && { _settle "${SETTLE:-30}" || true; } ;;
-  tap|text|key|button|erase|swipe|orient) [ "$rc" -eq 0 ] && { _settle || true; } ;;
+  # Except a driver that stopped answering (status 2): that is a failed verb.
+  launch) [ "$rc" -eq 0 ] && { _settle "${SETTLE:-30}"; [ $? = 2 ] && rc=1; } ;;
+  tap|text|key|button|erase|swipe|orient) [ "$rc" -eq 0 ] && { _settle; [ $? = 2 ] && rc=1; } ;;
 esac
 [ -n "$THEN" ] && _tree "$THEN"
 exit $rc

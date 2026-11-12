@@ -92,8 +92,9 @@ case "${1:-list}" in
     port=$(_device_port "$udid" "${3:-}" "$live") || exit 2
     echo "device: $udid on port $port"
     # The driver cold-starts in tens of seconds; the default timeout is too short.
-    out=$(TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"); rc=$?
-    printf '%s\n' "$out"
+    # Streamed, not captured: the bring-up says "look at the phone" while it is
+    # still waiting, and a captured note only arrived after the failure (item 165).
+    TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"; rc=$?
     [ "$rc" -eq 0 ] || { echo "device: bring-up failed — not registered." >&2; exit "$rc"; }
     _register "$udid" "$port"
     echo "registered $udid on port $port"

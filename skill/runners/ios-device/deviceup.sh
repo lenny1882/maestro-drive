@@ -179,12 +179,25 @@ _why() {  # _why <log>
   fi
 }
 
+# Said WHILE the bring-up waits, not after it fails. A phone asking for input
+# (a passcode, a trust or UI Automation prompt) holds XCUITest at "enabling
+# automation mode" until xcodebuild gives up, and the user only heard about it
+# at the failure, a minute or more later (item 165). Once the test has started
+# and the server is not up 10 s on, tell them to look at the phone now.
+_waiting_note() {  # _waiting_note <log>
+  grep -q "Testing started" "$1" 2>/dev/null || return 0
+  echo "LOOK AT THE PHONE NOW: the driver has started but is not up after 10 s. If the" >&2
+  echo "  phone shows a prompt (passcode, Trust, Enable UI Automation), answer it — the" >&2
+  echo "  bring-up is still waiting and comes up as soon as it is answered." >&2
+}
+
 # Cold start measured at ~10-30s on the XS Max: xcodebuild launches the runner,
 # it binds its server on the phone, the forwarder relays it. Poll, do not sleep.
-for _ in $(seq 1 60); do
+for _i in $(seq 1 60); do
   if [ "$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/status" 2>/dev/null)" = 200 ]; then
     echo "up on $PORT"; exit 0
   fi
+  [ "$_i" = 6 ] && _waiting_note "$LOG"
   if grep -qE "Testing failed|TEST EXECUTE FAILED|error:" "$LOG" 2>/dev/null; then
     echo "the device driver failed to start; $LOG ends:" >&2
     tail -5 "$LOG" >&2
