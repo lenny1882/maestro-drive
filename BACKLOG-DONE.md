@@ -3677,3 +3677,27 @@ re-proposing any of them.
   the user write it.
 
 ---
+
+## 164. Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2 — **DONE**
+
+**What.** Reported from `hugoboss-flutter-runner` on 11 Nov 2026: Mac `oi-jamesl-mac`, iPhone 11 Pro
+`00008030-000A199A3E98402E` on iOS 26.5.2, Xcode 27.2, Maestro 2.12.1. `maestro list-devices` showed no iOS
+device. `maestro test` and `maestro --device <udid> hierarchy --apple-team-id 38RS7YKR5P` answered `Device <udid>
+was requested, but it is not connected`, while `devicectl` read `connected`, `wired`. In `maestro-client.jar`
+2.12.1, `DeviceService.listConnectedDevices` → `listDevices` → `listIOSDevices` lists simulators only.
+`listIOSConnectedDevices`, which calls `LocalIOSDevice.listDeviceViaDeviceCtl` and keeps devices with
+`tunnelState == "connected"`, has no callers. `physical-device.md` §3 already records this from the XS Max on
+5 Nov 2026; the rest of that section is the 2.8.0 record, and the report read it as describing 2.8.0.
+
+**Why.** A session read the 2.8.0 steps, tried `maestro test` on a phone, and spent time on an error the skill
+already knew the cause of.
+
+**To do.** Put the 2.12.1 limit where a session meets it first: `SKILL.md` and the top of `physical-device.md`,
+saying that flows on a phone go through `device.sh` and `driver.sh`, and that `maestro test` will refuse. Recheck
+on each Maestro upgrade whether `listIOSConnectedDevices` has a caller.
+
+**Done, 12 Nov 2026.** `skill/SKILL.md` says, at the end of "Driving", that a phone is driven through
+`bin/device.sh` and `driver.sh` and that `maestro test` refuses, and points at `physical-device.md`; its
+reference and script tables now list `physical-device.md` and `bin/device.sh`, which they did not. The top
+of `skill/physical-device.md` states the 2.12.1 limit with both sightings and the recheck on each Maestro
+upgrade, ahead of the 2.8.0 record. Docs only; nothing run on a phone.

@@ -135,12 +135,30 @@ _devdrv_hint() {
     echo "  XCUITest cannot attach to a locked screen; it fails as a relay/connection" >&2
     echo "  error, not as a lock (item 46)." >&2
   fi
-  t=$(_ssh 'f=$HOME/devdrv-'"$DEV"'.log; [ -f "$f" ] || exit 0
+  # The tail is what is shown; the cause is matched against the whole log. After
+  # the face-up fatal, xcodebuild goes on writing its test summary and
+  # "Testing failed" lines, so the fatal can sit above the last six and a
+  # match on the tail alone missed it (item 165: a flat iPhone 11 Pro got only
+  # the item 46 note). The known-cause lines follow a @@match marker.
+  local all
+  all=$(_ssh 'f=$HOME/devdrv-'"$DEV"'.log; [ -f "$f" ] || exit 0
 now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
-[ $((now - m)) -lt 600 ] && tail -6 "$f"' 2>/dev/null)
+[ $((now - m)) -lt 600 ] || exit 0
+tail -6 "$f"; echo @@match
+grep -E "ScreenSizeHelper|Not implemented yet|Certificate is not trusted|explicitly trusted by the user" "$f" | head -3' 2>/dev/null)
+  t=${all%%@@match*}; t=${t%$'\n'}
   [ -n "$t" ] || return 0
   echo "  ~/devdrv-$DEV.log on the Mac (the on-device driver) ends:" >&2
   printf '%s\n' "$t" | sed 's/^/    /' >&2
+  # An untrusted developer certificate stops the runner launching at all, and no
+  # restart changes that, so it is named ahead of everything else (item 165).
+  case "$all" in
+    *"Certificate is not trusted"*|*"explicitly trusted by the user"*)
+      echo "  the phone does NOT TRUST the developer certificate that signed the driver" >&2
+      echo "  (item 165). On the phone: Settings > General > VPN & Device Management >" >&2
+      echo "  the developer > Trust, then retry. A driver restart does not fix it." >&2
+      return 0 ;;
+  esac
   # The face-up crash (item 50) has a distinct cause and a distinct fix, so name
   # it before the generic XCTest-death message below — a restart alone does not
   # help while the phone stays flat. Reproduced live: a raw /touch on a
@@ -148,7 +166,7 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
   # implemented yet". The on-device runner still crashes even though the jar's
   # own ScreenSizeHelper.swift handles .faceUp — the runner is built from older
   # source (item 55).
-  case "$t" in
+  case "$all" in
     *ScreenSizeHelper*|*"Not implemented yet"*)
       echo "  this is the FACE-UP crash (item 50): the phone is lying flat, reports" >&2
       echo "  .faceUp, and the runner kills itself on the first /touch. STAND THE" >&2
@@ -171,7 +189,7 @@ now=$(date +%s); m=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null 
 
 # Is DEV a physical device this session brought up (bin/device.sh), rather than a
 # simulator? Devices are in the registry; simulators are found by the process scan.
-_is_device() { [ -n "${DEV:-}" ] && grep -q "^$DEV " "$DEVICE_MAP" 2>/dev/null; }
+_is_device() { [ -n "${DEV:-}" ] && grep -q "^$DEV " "${DEVICE_MAP:-}" 2>/dev/null; }
 
 # Count this phone's automatic restarts, and on the third within ten minutes
 # say what fixes it: restarting CoreDevice on the Mac. Retrying,
@@ -334,6 +352,13 @@ $(printf '%s' "$d" | python3 -c 'import json,sys
 d=json.load(sys.stdin); print(d["widthPoints"], d["heightPoints"])')
 EOF
   [ -n "${SCREEN_W:-}" ] || { echo "could not read screen size from /deviceInfo" >&2; return 1; }
+  # A phone on its side answers wider than tall (812x375 on an iPhone 11 Pro),
+  # and the portrait nodes then read `off` in rows, with nothing saying why
+  # (item 165). Warn, do not refuse: an iPad may be driven in landscape on purpose.
+  if _is_device && [ "$(_gt "$SCREEN_W" "$SCREEN_H")" = 1 ]; then
+    echo "note: $DEV reports ${SCREEN_W}x${SCREEN_H}, wider than tall — the phone is on its" >&2
+    echo "  side. Turn it portrait, or rows will mark the portrait layout off (item 165)." >&2
+  fi
 }
 
 # Float comparison, for asking whether a picture is landscape the same way the

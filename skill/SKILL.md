@@ -496,6 +496,15 @@ is the only way to answer "did anything leave the list while nobody touched it".
 `--json` for a machine. **An empty list is a result, not an error:** it prints
 `n=0` and exits 0, because a list that has emptied is usually the finding.
 
+**A physical iPhone is driven through `bin/device.sh` and `driver.sh`, never
+`maestro test`.** Maestro 2.12.1 lists simulators only, so `maestro test` and
+`maestro --device <udid> hierarchy` answer `Device <udid> was requested, but it
+is not connected` while `devicectl` reads the phone `connected` (item 164).
+`bin/device.sh up <udid>` starts the phone's driver and registers it; after that
+`DEV=<udid> bin/driver.sh …` drives it like a simulator. Read
+`physical-device.md` before the first phone run: the phone must be unlocked and
+upright, and portrait.
+
 ## Watching for a change nobody causes
 
 `expect` waits for one element to appear or clear, in the foreground, against a
@@ -825,6 +834,7 @@ fix it yourself.
 
 | file | when |
 | --- | --- |
+| `physical-device.md` | a USB or wifi iPhone — what must be true first, signing, the driver, the tunnel |
 | `reference/setup.md` | installing this on a new machine — Mac prerequisites, SSH config and proxy routing, hosts, settings, MCP registration |
 | `reference/driving.md` | the method in full — reading state, selectors, wrong bounds, batching, preflight |
 | `reference/driving-discipline.md` | how to *use* the toolkit well — the rules with their evidence, and where the next skill-usage lesson goes (here, not a project's memory) |
@@ -848,6 +858,7 @@ fix it yourself.
 | `bin/docs-check.sh` | is the bundled docs mirror still the installed version? |
 | `bin/docs-refresh.sh` | re-download the mirror (runs on the Mac) |
 | `bin/drivers.sh` | a driver per simulator, each on its own port — list, up, down, ports, rig |
+| `bin/device.sh` | start a physical iPhone's driver and register it, so `driver.sh` can drive it |
 | `bin/driver.sh` | the driver API: read, resolve, tap, type, swipe, run journeys |
 | `bin/resolve.py` | label pattern -> true point (used by `driver.sh`) |
 | `bin/jtok.py` | split a journey line into arguments, then expand `${VAR}` in each |

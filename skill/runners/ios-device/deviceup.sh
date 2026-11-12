@@ -152,6 +152,11 @@ _why() {  # _why <log>
     echo "cleared by restarting the phone; the next install takes seconds. A second" >&2
     echo "process using the phone's tunnel (a devicectl loop) causes the same error." >&2
     echo "Retrying without dealing with either does not help." >&2
+  elif grep -qE "Certificate is not trusted|explicitly trusted by the user" "$1" 2>/dev/null; then
+    echo "the phone does NOT TRUST the developer certificate that signed the driver, so" >&2
+    echo "it cannot launch (item 165). On the phone: Settings > General >" >&2
+    echo "VPN & Device Management > the developer > Trust, then retry. A restart does" >&2
+    echo "not fix it." >&2
   elif grep -qE "Bind\(49\)|Can't assign requested address" "$1" 2>/dev/null; then
     echo "the driver could not listen on the tunnel address it was given — the tunnel" >&2
     echo "was rebuilt with a new address before it started. Retry; the address is read" >&2

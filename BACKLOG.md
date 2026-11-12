@@ -922,24 +922,6 @@ Terminal, finding the identity and profile itself and refusing by name when eith
 asked, like `bin/build.sh`. When `deviceup.sh` falls back to the prebuilt driver, its note names that subcommand.
 Offline tests in `run-tests.sh` for the identity and profile lookup; measure it on the flat XS Max.
 
-## 164. Maestro 2.12.1 lists no phone, confirmed on a second phone and iOS 26.5.2 — **OPEN, raised 11 Nov 2026**
-
-**What.** Reported from `hugoboss-flutter-runner` on 11 Nov 2026: Mac `oi-jamesl-mac`, iPhone 11 Pro
-`00008030-000A199A3E98402E` on iOS 26.5.2, Xcode 27.2, Maestro 2.12.1. `maestro list-devices` showed no iOS
-device. `maestro test` and `maestro --device <udid> hierarchy --apple-team-id 38RS7YKR5P` answered `Device <udid>
-was requested, but it is not connected`, while `devicectl` read `connected`, `wired`. In `maestro-client.jar`
-2.12.1, `DeviceService.listConnectedDevices` → `listDevices` → `listIOSDevices` lists simulators only.
-`listIOSConnectedDevices`, which calls `LocalIOSDevice.listDeviceViaDeviceCtl` and keeps devices with
-`tunnelState == "connected"`, has no callers. `physical-device.md` §3 already records this from the XS Max on
-5 Nov 2026; the rest of that section is the 2.8.0 record, and the report read it as describing 2.8.0.
-
-**Why.** A session read the 2.8.0 steps, tried `maestro test` on a phone, and spent time on an error the skill
-already knew the cause of.
-
-**To do.** Put the 2.12.1 limit where a session meets it first: `SKILL.md` and the top of `physical-device.md`,
-saying that flows on a phone go through `device.sh` and `driver.sh`, and that `maestro test` will refuse. Recheck
-on each Maestro upgrade whether `listIOSConnectedDevices` has a caller.
-
 ## 165. Three phone states get a generic message or none: flat, landscape, untrusted certificate — **OPEN, raised 11 Nov 2026**
 
 **What.** Reported from the same run as item 164 (iPhone 11 Pro, iOS 26.5.2, Xcode 27.2, Maestro 2.12.1).
@@ -963,6 +945,24 @@ VPN & Device Management), and the messages point at none of them.
 **To do.** Get the flat run's `devdrv` log and find why the hint missed. Warn when `deviceInfo` is wider than it
 is tall on a phone. Match the untrusted-certificate text in the driver log in `deviceup.sh` and `_devdrv_hint`,
 ahead of the item 46 message, and name the Settings path.
+
+**Done so far, 12 Nov 2026.** Tested offline only; nothing run on a phone.
+- Flat: `_devdrv_hint` still shows the last six lines of `~/devdrv-<udid>.log`, but now matches the face-up
+  and untrusted-certificate texts against the whole log. The likely miss: after the fatal, xcodebuild writes
+  its test summary and `Testing failed` lines, which push the fatal above the last six. Not confirmed against
+  the real log.
+- Landscape: `_ensure_screen` in `bin/driver.sh` warns when a registered phone's `deviceInfo` is wider than
+  tall. It warns and carries on, because an iPad may be driven in landscape.
+- Untrusted certificate: `_why` in `deviceup.sh` and `_devdrv_hint` in `driver.sh` match `Certificate is
+  not trusted` / `explicitly trusted by the user`, ahead of the item 46 message, and name Settings → General
+  → VPN & Device Management.
+- `physical-device.md`'s list of what must be true first has a portrait line and a trust line.
+- `_is_device` reads `${DEVICE_MAP:-}`, so `driver.sh` under a stub `lib.sh` without it no longer stops on
+  `set -u`.
+
+**Left.** Run each of the three on a phone: lay it flat on the prebuilt driver and check the FACE-UP message
+appears; turn it on its side and check the warning; untrust the developer and check both messages. If the
+flat message still does not appear, get that run's `devdrv` log.
 
 ## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
 
@@ -1023,3 +1023,18 @@ the LLDB or mDNS stall, and the app's output is then lost.
 2. Detect the LLDB stall ("LLDB is taking longer than expected") and name it.
 3. Detect the port 5353 errno = 65 / "VM Service was not discovered" failure and name it.
 4. Fall back to `flutter logs -d <udid>` for the app's output.
+
+**Related.**
+- Item 93: fhrm 2.0 is the caller. Its V2-PLAN.md (claude-skills `e72a2da`) hands item 19 to `ios-device`
+  but never says who runs `flutter run` on a phone. fhrm's `start.sh` runs it for a simulator, and
+  `skill/runners/ios-device` has no build or launch script (`deviceup.sh`, `platform.sh`, `iproxy.py`, the
+  driver). Decide that first: either checks here that fhrm's `start.sh` calls before and during the launch,
+  as it calls `_label_guard` (item 112), or a phone launch path in this runner.
+- Item 165: the same run, and the same kind of fix, matching a known failure text and naming its cause.
+  Its untrusted-certificate case also followed a `flutter run --debug` install.
+- Item 164: the same run and phone. The Rosetta and LLDB notes belong at the top of `physical-device.md`
+  beside the 2.12.1 limit once the checks exist.
+- Item 174: a phone launch path adds a second way onto a phone with no label check.
+- `skill/runners/flutter/vmservice.sh` reads the `flutter run` log first, then falls back to `xcrun simctl
+  spawn <udid> log show`, which reads a simulator only. When mDNS fails on a phone, no VM Service address
+  reaches the log either, so it comes back empty. It needs a phone fallback, or to say it has none.

@@ -1600,6 +1600,49 @@ else
   no "no lock and no device log means no extra output (a simulator run is unaffected)" "printed something"
 fi
 
+# Item 165. The fake _ssh runs the remote half for real, against a log in a
+# scratch HOME, so the tail and the whole-log match are both exercised.
+HH="$TMP/hint165"; mkdir -p "$HH"
+_hint165() {  # _hint165 <log text>
+  printf '%b' "$1" > "$HH/devdrv-devudid.log"
+  ( DEV=devudid; PLATFORM_SH=/x/platform.sh
+    _ssh(){ case "$*" in *locked*) return 1 ;; *) HOME="$HH" bash -c "$*" ;; esac; }
+    source <(sed -n '/^_devdrv_hint()/,/^}/p' "$REPO/bin/driver.sh")
+    _devdrv_hint 2>&1 ); }
+out=$(_hint165 'Device orientation is 5\nScreenSizeHelper.swift:99: Fatal error: Not implemented yet\nRestarting after unexpected exit\nTest Suite All tests failed\nExecuted 1 test, with 1 failure\nTest session results\n** TEST EXECUTE FAILED **\nTesting failed:\n\tmaestro-driver-iosUITests crashed\n')
+case "$out" in
+  *"FACE-UP crash (item 50)"*) ok "the face-up fatal is named when it sits above the last six log lines (item 165)" ;;
+  *) no "the face-up fatal is named when it sits above the last six log lines (item 165)" "got: $out" ;; esac
+case "$out" in *"@@match"*) no "and the match marker is not shown" "marker printed" ;; *) ok "and the match marker is not shown" ;; esac
+out=$(_hint165 "Unable to launch dev.mobile.maestro-driver-iosUITests.xctrunner because it has an invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user.\nthe Developer App Certificate is not trusted\n** TEST EXECUTE FAILED **\n")
+case "$out" in
+  *"NOT TRUST the developer certificate"*"VPN & Device Management"*) ok "an untrusted developer certificate is named with the Settings path (item 165)" ;;
+  *) no "an untrusted developer certificate is named with the Settings path (item 165)" "got: $out" ;; esac
+case "$out" in *"XCTest session dying"*) no "and item 46's restart advice is not printed for it" "both printed" ;;
+  *) ok "and item 46's restart advice is not printed for it" ;; esac
+out=$(_hint165 'The connection was invalidated\n** TEST EXECUTE FAILED **\n')
+case "$out" in *"session dying (item 46)"*) ok "a log with neither cause still gets item 46's message" ;;
+  *) no "a log with neither cause still gets item 46's message" "got: $out" ;; esac
+
+# Item 165, landscape. A registered phone answering wider than tall is warned
+# about; a simulator, or a phone upright, is not.
+_screen165() {  # _screen165 <udid> <w> <h>
+  ( LDIR="$TMP/scr165"; mkdir -p "$LDIR"; DEVICE_MAP="$LDIR/devices.map"
+    echo "PHONEUDID 22187 device" > "$DEVICE_MAP"; DEV=$1; BASE=http://x
+    _start(){ :; }; curl(){ printf '{"widthPoints": %s, "heightPoints": %s}' "$W" "$H"; }
+    W=$2 H=$3
+    source <(sed -n '/^_is_device()/,/^}/p' "$REPO/bin/driver.sh")
+    source <(sed -n '/^_gt()/p' "$REPO/bin/driver.sh")
+    source <(sed -n '/^_ensure_screen()/,/^}/p' "$REPO/bin/driver.sh")
+    _ensure_screen 2>&1; echo "rc=$?" ); }
+out=$(_screen165 PHONEUDID 812 375)
+case "$out" in *"wider than tall"*"rc=0"*) ok "a phone on its side is warned about, and the read still succeeds (item 165)" ;;
+  *) no "a phone on its side is warned about, and the read still succeeds (item 165)" "got: $out" ;; esac
+out=$(_screen165 PHONEUDID 375 812)
+case "$out" in *"wider than tall"*) no "an upright phone gets no landscape warning" "got: $out" ;; *) ok "an upright phone gets no landscape warning" ;; esac
+out=$(_screen165 SIMUDID 812 375)
+case "$out" in *"wider than tall"*) no "a landscape simulator gets no phone warning" "got: $out" ;; *) ok "a landscape simulator gets no phone warning" ;; esac
+
 echo
 echo "a registered physical device resolves like a simulator (item 45)"
 # bin/device.sh registers a phone in DEVICE_MAP; _driver_map must merge it so
@@ -1827,6 +1870,9 @@ w=$(why "[FlyingFox] server error: SocketError. Bind(49): Can't assign requested
 case "$w" in *"was rebuilt with a new address"*) ok "a gone tunnel address is named" ;; *) no "a gone tunnel address is named" "got: $w" ;; esac
 w=$(why 'ScreenSizeHelper.swift:99: Fatal error: Not implemented yet\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"FACE-UP crash"*) ok "the face-up crash is named at bring-up" ;; *) no "the face-up crash is named at bring-up" "got: $w" ;; esac
+w=$(why "Unable to launch dev.mobile.maestro-driver-iosUITests.xctrunner because it has an invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user.\n** TEST EXECUTE FAILED **\n")
+case "$w" in *"NOT TRUST the developer certificate"*"VPN & Device Management"*) ok "an untrusted developer certificate is named at bring-up (item 165)" ;;
+  *) no "an untrusted developer certificate is named at bring-up (item 165)" "got: $w" ;; esac
 w=$(why 'Failed to initialize for UI testing: Timed out while enabling automation mode.\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"waiting for"*"input"*) ok "a phone that would not enter automation mode says to look at it" ;; *) no "a phone that would not enter automation mode says to look at it" "got: $w" ;; esac
 w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')

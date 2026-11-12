@@ -17,7 +17,17 @@ brings up the forwarder and a persistent driver and registers the phone, so
 below are why each step is there, and the manual commands behind it. Building the
 app *on* a device is still by hand (the signing gate, item 45).
 
-**Two things must be true before any of it, or the driver fails as an opaque
+**Maestro 2.12.1 does not see a phone.** `maestro test` and `maestro --device
+<udid> hierarchy` refuse with `Device <udid> was requested, but it is not
+connected`, even with `devicectl` reading the phone `connected`, `wired`. Seen on
+an XS Max on iOS 18.7.9 (5 Nov 2026) and an iPhone 11 Pro on iOS 26.5.2 (11 Nov
+2026). In the 2.12.1 jar `listIOSDevices` lists simulators only, and
+`listIOSConnectedDevices`, which would list phones, has no callers. Flows on a
+phone go through `bin/device.sh` and `bin/driver.sh`. §3 has the detail; the rest
+of §3 is the record from 2.8.0. Recheck on each Maestro upgrade whether
+`listIOSConnectedDevices` has a caller (item 164).
+
+**These must be true before any of it, or the driver fails as an opaque
 "connection was invalidated" rather than as the real cause:**
 
 - **The phone must be UNLOCKED, and set Auto-Lock to Never** (Settings → Display
@@ -45,6 +55,14 @@ app *on* a device is still by hand (the signing gate, item 45).
   `~/devdrv-<udid>.log` and says "STAND THE PHONE UPRIGHT". Posture can be read
   before a touch with `xcrun devicectl device orientation get --device <udid>`
   (Xcode 27).
+- **Portrait, not on its side.** In landscape `deviceInfo` answers wider than
+  tall (812x375 on an iPhone 11 Pro) and `rows` marks the portrait nodes `off`.
+  `driver.sh` warns when a registered phone reports wider than tall (item 165).
+- **The developer certificate must be trusted on the phone.** After a `flutter
+  run --debug` install the driver would not launch: `the Developer App
+  Certificate is not trusted`. Trust it in Settings → General → VPN & Device
+  Management. `deviceup.sh` and `driver.sh` name it; a driver restart does not
+  fix it (item 165).
 
 ## 1. Nothing signs from an SSH session
 
