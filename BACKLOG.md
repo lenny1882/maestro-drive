@@ -976,8 +976,12 @@ while enabling automation mode`, and only then said to look at the phone. `devic
 PHONE NOW 10 s into a started driver that is not up (`_waiting_note`), and `device.sh up` streams the
 bring-up instead of printing it at the end. Not yet seen live: the retries came up without a prompt.
 
-**Left.** Turn a phone on its side and check the landscape warning; untrust the developer and check both
-certificate messages; see `LOOK AT THE PHONE NOW` on a phone that is waiting for input.
+**Landscape, run on a phone, 12 Nov 2026.** The same XS Max, source-built driver, stood in landscape on the
+home screen. `driver.sh rows "."` printed `note: 00008020-000A396C3606002E reports 896x414, wider than tall —
+the phone is on its side`, then the rows (77, exit 0), with the 414x896 `Home screen icons` node marked `off`.
+
+**Left.** Untrust the developer and check both certificate messages; see `LOOK AT THE PHONE NOW` on a phone
+that is waiting for input.
 
 ## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
 
