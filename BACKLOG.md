@@ -980,8 +980,13 @@ bring-up instead of printing it at the end. Not yet seen live: the retries came 
 home screen. `driver.sh rows "."` printed `note: 00008020-000A396C3606002E reports 896x414, wider than tall —
 the phone is on its side`, then the rows (77, exit 0), with the 414x896 `Home screen icons` node marked `off`.
 
-**Left.** Untrust the developer and check both certificate messages; see `LOOK AT THE PHONE NOW` on a phone
-that is waiting for input.
+**Waiting note, tried on a phone, 12 Nov 2026.** Staging a waiting phone by turning Settings → Developer →
+Enable UI Automation off on the XS Max (iOS 18.7.9) did not work: the driver came up in 7 s anyway, so the note
+had nothing to fire on. What held the first bring-up at `enabling automation mode` is not known.
+
+**Left.** Untrust the developer and check both certificate messages (on iOS that means deleting the
+developer's apps, the driver included); see `LOOK AT THE PHONE NOW` on a phone that is waiting for input,
+once a way to make one wait is found.
 
 ## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
 
