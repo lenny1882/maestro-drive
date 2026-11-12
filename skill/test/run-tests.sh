@@ -3814,6 +3814,9 @@ for line in sys.stdin:
 print(last)'
 }
 
+# Each _mcp is a fresh server; CLAUDE_PID makes them one session, as a real
+# session's single long-lived server is (item 175).
+export CLAUDE_PID=999989
 mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
 [ "$mc_out" = "TOOLS 1 bridge action" ] \
   && ok "one tool, named bridge, taking one argument and no path" \
@@ -3855,21 +3858,25 @@ case "$mc_out" in
   *) no "and stopping twice says so rather than pretending" "said: $mc_out" ;;
 esac
 
+unset CLAUDE_PID
+
 echo
 echo "the helper stops when the session does (item 96, 2.2)"
 # A helper that outlives the session that asked for it is a shell channel into
 # this machine that nobody is watching — the thing the item's controls are
 # about. SessionEnd already takes down the rig; the bridge goes with it.
-mc_out=$(timeout 30 python3 "$REPO/bin/bridge-mcp.py" --status 2>&1)
+mc_out=$(CLAUDE_PID=999990 timeout 30 python3 "$REPO/bin/bridge-mcp.py" --status 2>&1)
 case "$mc_out" in
   *"no helper"*) ok "the server answers on the command line, for a hook that is not a session" ;;
   *) no "the server answers on the command line, for a hook that is not a session" "said: $mc_out" ;;
 esac
 
-mc_out=$(_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
+# CLAUDE_PID stands in for the Claude process both the server and the hook run
+# under; the case after these runs without it, on the parent walk.
+mc_out=$(CLAUDE_PID=999991 _mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}')
 mc_dir=$(printf '%s' "$mc_out" | sed -n 's/^serving //p' | head -1)
 if [ -n "$mc_dir" ] && [ -p "$mc_dir/control" ]; then
-  TRANSPORT=ssh MAESTRO_DRIVE_CONF=/dev/null timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
+  CLAUDE_PID=999991 TRANSPORT=ssh MAESTRO_DRIVE_CONF=/dev/null timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
   timeout 20 sh -c 'until [ ! -f "$1/pid" ]; do sleep 0.1; done' _ "$mc_dir" \
     && ok "the SessionEnd hook stops it" \
     || no "the SessionEnd hook stops it" "pid file still in $mc_dir"
@@ -3882,6 +3889,86 @@ else
   no "the SessionEnd hook stops it" "no helper started"
   no "and leaves the log behind to be read" "no helper started"
 fi
+
+echo
+echo "each session stops only the helper it started (item 175)"
+# Every session of the user shares /tmp/claude-<uid>. Until 2.2.0 the record
+# was one file there, so one session's SessionEnd stopped another's helper in
+# the middle of a 40-minute run, and a second start overwrote the first's.
+_start_as() {  # _start_as <owner> -- prints the helper directory
+  CLAUDE_PID=$1 _mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge","arguments":{"action":"start"}}}' |
+    sed -n 's/^serving //p' | head -1
+}
+iso_a=$(_start_as 999992)
+iso_b=$(_start_as 999993)
+if [ -n "$iso_a" ] && [ -n "$iso_b" ] && [ "$iso_a" != "$iso_b" ] && [ -p "$iso_a/control" ] && [ -p "$iso_b/control" ]; then
+  ok "a second session's start gets a helper of its own"
+  CLAUDE_PID=999993 TRANSPORT=ssh MAESTRO_DRIVE_CONF=/dev/null timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
+  timeout 20 sh -c 'until [ ! -f "$1/pid" ]; do sleep 0.1; done' _ "$iso_b" \
+    && ok "the second session's SessionEnd stops the second helper" \
+    || no "the second session's SessionEnd stops the second helper" "pid file still in $iso_b"
+  iso_st=$(CLAUDE_PID=999992 timeout 30 python3 "$REPO/bin/bridge-mcp.py" --status 2>&1)
+  case "$iso_st" in
+    "serving $iso_a"*) ok "and the first session's helper is still serving" ;;
+    *) no "and the first session's helper is still serving" "status said: $(printf '%s' "$iso_st" | head -1)" ;;
+  esac
+  iso_ran=$(TRANSPORT=bridge APP_ID=x BRIDGE_DIR="$iso_a" BRIDGE_HOST=10.0.0.9 \
+    MAESTRO_DRIVE_CONF=/dev/null bash -c ". $REPO/bin/lib.sh 2>/dev/null; TMO=10 _ssh 'echo still'" 2>/dev/null)
+  [ "$iso_ran" = "still" ] \
+    && ok "and still runs scripts" \
+    || no "and still runs scripts" "got '$iso_ran'"
+  iso_none=$(env -u CLAUDE_PID timeout 30 python3 "$REPO/bin/bridge-mcp.py" --stop 2>&1)
+  case "$iso_none" in
+    *"no helper of mine"*) ok "a --stop that belongs to no session stops nothing" ;;
+    *) no "a --stop that belongs to no session stops nothing" "said: $iso_none" ;;
+  esac
+  # A record under one name whose helper names another owner is not that owner's.
+  cp "$(dirname "$iso_a")/.maestro-bridge.999992" "$(dirname "$iso_a")/.maestro-bridge.999994" 2>/dev/null
+  iso_fake=$(timeout 30 python3 "$REPO/bin/bridge-mcp.py" --stop --owner 999994 2>&1)
+  case "$iso_fake" in
+    *"no helper of mine"*) ok "a record copied to another owner does not reach the helper" ;;
+    *) no "a record copied to another owner does not reach the helper" "said: $iso_fake" ;;
+  esac
+  rm -f "$(dirname "$iso_a")/.maestro-bridge.999994"
+  [ -f "$iso_a/pid" ] \
+    && ok "and after both, the first helper is still up" \
+    || no "and after both, the first helper is still up" "pid file gone from $iso_a"
+else
+  for t in "a second session's start gets a helper of its own" \
+           "the second session's SessionEnd stops the second helper" \
+           "and the first session's helper is still serving" "and still runs scripts" \
+           "a --stop that belongs to no session stops nothing" \
+           "a record copied to another owner does not reach the helper" \
+           "and after both, the first helper is still up"; do
+    no "$t" "helpers: '$iso_a' '$iso_b'"
+  done
+fi
+CLAUDE_PID=999992 timeout 30 python3 "$REPO/bin/bridge-mcp.py" --stop >/dev/null 2>&1
+
+# Without CLAUDE_PID: the server is a direct child of the Claude process, and
+# the hook walks up its own parents to it. A shell stands in for Claude, and the
+# server runs straight under it — no timeout in between, or timeout would be
+# the parent. Its stdin ends after the start call, so it exits by itself.
+walk_out=$(env -u CLAUDE_PID REPO="$REPO" TRANSPORT=ssh MAESTRO_DRIVE_CONF=/dev/null bash -c '
+  printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}" \
+    "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"bridge\",\"arguments\":{\"action\":\"start\"}}}" |
+    python3 "$REPO/bin/bridge-mcp.py" > "$TMPDIR/walk-start.json"
+  d=$(python3 -c "import json,sys; t=[json.loads(x) for x in open(sys.argv[1])][-1][\"result\"][\"content\"][0][\"text\"]; print(t.splitlines()[0][8:])" "$TMPDIR/walk-start.json")
+  echo "dir $d"
+  echo "self $$"
+  echo "found $(timeout 10 python3 "$REPO/bin/bridge-mcp.py" --owner)"
+  timeout 60 bash "$REPO/hooks/rig-down-on-end.sh" >/dev/null 2>&1
+  timeout 20 sh -c "until [ ! -f \"\$1/pid\" ]; do sleep 0.1; done" _ "$d" && echo stopped
+' 2>&1)
+walk_self=$(printf '%s\n' "$walk_out" | sed -n 's/^self //p')
+case "$walk_out" in
+  *"found $walk_self"*) ok "without CLAUDE_PID, the hook finds the server's owner among its own parents" ;;
+  *) no "without CLAUDE_PID, the hook finds the server's owner among its own parents" "$(printf '%s' "$walk_out" | tr '\n' ' ')" ;;
+esac
+case "$walk_out" in
+  *stopped*) ok "and stops that helper" ;;
+  *) no "and stops that helper" "$(printf '%s' "$walk_out" | tr '\n' ' ')" ;;
+esac
 
 # The order matters: under the bridge, `rig down` travels through the helper.
 grep -n 'DRIVERS" rig down' "$REPO/hooks/rig-down-on-end.sh" | head -1 | cut -d: -f1 > "$TMP/rigline"

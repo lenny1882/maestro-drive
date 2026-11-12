@@ -3600,6 +3600,39 @@ on one Mac, one log would give the other device's URI.
 is no longer read, so hot-reload 1.x falls back to the simulator log's last five minutes. All three callers
 already pass `RDIR`. Tests cover the per-device log and that another device's is not read.
 
+## 175. One session's SessionEnd stops the bridge helper another session started — **DONE**
+
+**What.** `skill/bin/bridge-mcp.py` kept its record in one file, `/tmp/claude-<uid>/.maestro-bridge`, for
+every session of the user. `start()` wrote the helper's directory there, and `stop()` and `status()` read
+it. `skill/hooks/rig-down-on-end.sh` runs `bridge-mcp.py --stop` at SessionEnd, so that stopped whichever
+helper was started last, by any session. A second session's `start` also overwrote the first's record.
+
+**Why.** Reported on 12 Nov 2026 by the claude-skills-91 session. At 10:45:06 a session in
+oneiota-products-rn ended, and its hook stopped the helper claude-skills-91 was using: the helper's log
+shows `stop requested` then `bridge down`, and every later request hung. flutter-hot-reload-mac's Android
+check over `TRANSPORT=bridge` (claude-skills item 20) takes 30-40 minutes, and any other session ending in
+that time killed it.
+
+**Done, 12 Nov 2026, 2.2.1.** The record is per owner: `.maestro-bridge.<owner>`, where the owner is the
+pid of the Claude process. The server takes it from `CLAUDE_PID` or, failing that, from its own parent.
+The helper's directory also holds an `owner` file, and `stop` and `status` act only on a helper whose
+`owner` matches. The hook runs `bridge-mcp.py --owner` before it detaches. That takes `CLAUDE_PID` or
+walks up the hook's parents to the first one with a record. The hook then passes the owner to
+`--stop --owner`. If no owner is found, nothing is stopped. `start` and `status` print the owner. The
+shared `.maestro-bridge` from 2.2.0 and earlier is no longer read. A helper it points at keeps running
+until it is stopped by hand.
+
+Tests in `skill/test/run-tests.sh` start two helpers under two owners. The second session's hook stops
+only the second helper; the first is still serving and still runs scripts. A `--stop` with no owner stops
+nothing, and a record copied under another owner's name does not reach the helper. A case without
+`CLAUDE_PID` checks the parent walk: the server runs under a stand-in shell, and the hook finds that shell
+and stops the helper. 714 passed, 0 failed.
+
+**Not yet seen.** No real session has been checked to confirm that Claude Code passes `CLAUDE_PID` to an
+MCP server or a hook, or that it spawns the server as its direct child. If neither holds, the hook finds
+no owner and leaves the helper running until it is stopped with the `bridge` tool. `bridge status`
+in a session prints `owner <pid>`, and that should match the session's `CLAUDE_PID`.
+
 ## Measured and rejected
 
 Alternatives tried and thrown out between 11 and 13 Aug 2026, each with the

@@ -38,7 +38,60 @@ BRIDGE = os.path.join(os.path.dirname(HERE), "remote", "bridge.sh")
 # it the channel: /tmp/claude-<uid>. Both sides see it, and it is per-session
 # rather than a well-known path anything else writes to.
 BASE = "/tmp/claude-%d" % os.getuid()
-STATE = os.path.join(BASE if os.path.isdir(BASE) else "/tmp", ".maestro-bridge")
+STATE_DIR = BASE if os.path.isdir(BASE) else "/tmp"
+
+# One record per Claude session, keyed by the pid of the Claude process that
+# owns it (BACKLOG item 175). Until 2.2.0 this was one file for every session of
+# the user, so any session's SessionEnd hook stopped whichever helper was started
+# last, by anyone, and a second session's start overwrote the first's record.
+#
+# The server finds its owner as CLAUDE_PID, which Claude Code sets in the
+# environment of what it spawns, or else as its own parent: Claude Code spawns
+# stdio servers directly. A hook or command line, which is not the server, finds
+# it the same way, or else by walking up its own parents to the first one that
+# has a record — the Claude process is an ancestor of both.
+def _state(owner):
+    return os.path.join(STATE_DIR, ".maestro-bridge.%s" % owner)
+
+
+def _env_owner():
+    v = os.environ.get("CLAUDE_PID", "").strip()
+    return v if v.isdigit() else None
+
+
+def _parent(pid):
+    try:
+        with open("/proc/%d/stat" % pid) as fh:
+            # The command name is in parentheses and may hold spaces; the ppid
+            # is the second field after it.
+            return int(fh.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, IndexError, ValueError):
+        pass
+    try:
+        out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5)
+        return int(out.stdout.strip())
+    except Exception:
+        return 0
+
+
+def server_owner():
+    return _env_owner() or str(os.getppid())
+
+
+def find_owner():
+    """The owner whose record this process sits under, for the hook's --stop."""
+    env = _env_owner()
+    if env:
+        return env
+    pid = os.getppid()
+    for _ in range(64):
+        if pid <= 1:
+            break
+        if os.path.exists(_state(pid)):
+            return str(pid)
+        pid = _parent(pid)
+    return None
 
 
 def _run(cmd):
@@ -59,14 +112,24 @@ def _host():
     return out.split()[0] if out.split() else ""
 
 
-def _current():
-    """The directory of the helper this server started, if it is still alive."""
+def _current(owner):
+    """The directory of the helper this owner started, if it is still alive."""
+    if not owner:
+        return None
     try:
-        with open(STATE) as fh:
+        with open(_state(owner)) as fh:
             d = fh.read().strip()
     except OSError:
         return None
     if not d or not os.path.isdir(d):
+        return None
+    # The helper's own record of who started it. A record whose helper names
+    # somebody else is not this owner's, whatever the file name says.
+    try:
+        with open(os.path.join(d, "owner")) as fh:
+            if fh.read().strip() != str(owner):
+                return None
+    except OSError:
         return None
     try:
         with open(os.path.join(d, "pid")) as fh:
@@ -77,13 +140,15 @@ def _current():
     return d
 
 
-def start():
-    d = _current()
+def start(owner):
+    d = _current(owner)
     if d:
         return "already serving %s\n\n%s" % (d, _conf(d))
     tag = "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(8))
     d = os.path.join(BASE if os.path.isdir(BASE) else "/tmp", "maestro-bridge-" + tag)
     os.makedirs(d, mode=0o700, exist_ok=True)
+    with open(os.path.join(d, "owner"), "w") as fh:
+        fh.write("%s\n" % owner)
     try:
         subprocess.Popen(
             ["sh", BRIDGE, d],
@@ -101,11 +166,11 @@ def start():
     if not os.path.exists(os.path.join(d, "control")):
         return "the helper did not come up. Its own log:\n%s" % _tail(os.path.join(d, "serve.log"))
     try:
-        with open(STATE, "w") as fh:
+        with open(_state(owner), "w") as fh:
             fh.write(d)
     except OSError:
         pass
-    return "serving %s\n\n%s" % (d, _conf(d))
+    return "serving %s\nowner %s\n\n%s" % (d, owner, _conf(d))
 
 
 def _conf(d):
@@ -136,10 +201,10 @@ def _tail(path, n=10):
         return "(no log)"
 
 
-def stop():
-    d = _current()
+def stop(owner):
+    d = _current(owner)
     if not d:
-        return "no helper of mine is running."
+        return "no helper of mine is running (owner %s)." % (owner or "unknown")
     try:
         # The helper's own control loop understands this, so it stops between
         # requests rather than in the middle of one.
@@ -148,23 +213,24 @@ def stop():
     except OSError as exc:
         return "could not reach the helper's control fifo: %s" % exc
     try:
-        os.unlink(STATE)
+        os.unlink(_state(owner))
     except OSError:
         pass
     return "told the helper in %s to stop. Its log stays for reading." % d
 
 
-def status():
-    d = _current()
+def status(owner):
+    d = _current(owner)
     if not d:
-        return "no helper is running. The device host address would be %s." % (_host() or "unknown")
+        return "no helper of mine is running (owner %s). The device host address would be %s." % (
+            owner or "unknown", _host() or "unknown")
     ran = 0
     try:
         with open(os.path.join(d, "log")) as fh:
             ran = sum(1 for line in fh if line.rstrip().endswith("  ---"))
     except OSError:
         pass
-    return "serving %s\n%d scripts run so far\n\n%s" % (d, ran, _conf(d))
+    return "serving %s\nowner %s\n%d scripts run so far\n\n%s" % (d, owner, ran, _conf(d))
 
 
 TOOL = {
@@ -192,6 +258,7 @@ def reply(mid, result):
 
 
 def main():
+    owner = server_owner()
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -214,7 +281,7 @@ def main():
             params = msg.get("params") or {}
             action = (params.get("arguments") or {}).get("action", "status")
             fn = ACTIONS.get(action)
-            text = fn() if fn else "unknown action %r — use start, stop or status." % action
+            text = fn(owner) if fn else "unknown action %r — use start, stop or status." % action
             reply(mid, {"content": [{"type": "text", "text": text}]})
         elif mid is not None:
             reply(mid, {})
@@ -223,7 +290,24 @@ def main():
 if __name__ == "__main__":
     # Two entry points, one implementation. The SessionEnd hook cannot call an
     # MCP tool — hooks are not a Claude session — so it runs this with --stop.
-    if len(sys.argv) > 1 and sys.argv[1] in ("--stop", "--status", "--start"):
-        print(ACTIONS[sys.argv[1][2:]]())
+    #
+    # The hook names its owner with --owner, found before it detaches: a
+    # detached process is reparented and can no longer walk up to Claude.
+    # `--owner` on its own prints the owner this process would act for.
+    args = sys.argv[1:]
+    if args and args[0] in ("--stop", "--status", "--start", "--owner"):
+        owner = None
+        if "--owner" in args[1:]:
+            i = args.index("--owner", 1)
+            owner = args[i + 1] if i + 1 < len(args) and args[i + 1].isdigit() else None
+        elif args[0] == "--start":
+            owner = server_owner()
+        else:
+            owner = find_owner()
+        if args[0] == "--owner":
+            if owner:
+                print(owner)
+            raise SystemExit(0 if owner else 1)
+        print(ACTIONS[args[0][2:]](owner))
         raise SystemExit(0)
     main()

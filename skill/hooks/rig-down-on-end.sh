@@ -48,10 +48,20 @@ DRIVERS="$HERE/../bin/drivers.sh"
 # It is a process outside the sandbox with a shell channel into this machine, so
 # ending the session ends it; a helper that outlives the session that asked for
 # it is the thing the item's controls are about.
+#
+# Only this session's helper (item 175). Every session of the user shares
+# /tmp/claude-<uid>, and a bare --stop once took down another session's helper
+# in the middle of a 40-minute run. The owner is the Claude process this hook
+# runs under, found here, before the subshell detaches: once detached it is
+# reparented and can no longer walk up to Claude. No owner found means this
+# session started no helper, and nothing is stopped.
 BRIDGE_MCP="$HERE/../bin/bridge-mcp.py"
+BRIDGE_OWNER=
+[ -r "$BRIDGE_MCP" ] && command -v python3 >/dev/null 2>&1 &&
+  BRIDGE_OWNER=$(timeout 10 python3 "$BRIDGE_MCP" --owner 2>/dev/null)
 (
   bash "$DRIVERS" rig down
-  [ -r "$BRIDGE_MCP" ] && command -v python3 >/dev/null 2>&1 &&
-    python3 "$BRIDGE_MCP" --stop
+  [ -n "$BRIDGE_OWNER" ] &&
+    python3 "$BRIDGE_MCP" --stop --owner "$BRIDGE_OWNER"
 ) >/dev/null 2>&1 &
 exit 0
