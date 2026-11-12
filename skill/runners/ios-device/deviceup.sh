@@ -182,11 +182,12 @@ _why() {  # _why <log>
 # Said WHILE the bring-up waits, not after it fails. A phone asking for input
 # (a passcode, a trust or UI Automation prompt) holds XCUITest at "enabling
 # automation mode" until xcodebuild gives up, and the user only heard about it
-# at the failure, a minute or more later (item 165). Once the test has started
-# and the server is not up 10 s on, tell them to look at the phone now.
+# at the failure, a minute or more later (item 165). 10 s on with the server not
+# up, tell them to look at the phone now. On time alone: xcodebuild writes
+# "Testing started" late, so gating on it kept the note silent while a
+# restarted XS Max sat waiting for input (12 Nov 2026).
 _waiting_note() {  # _waiting_note <log>
-  grep -q "Testing started" "$1" 2>/dev/null || return 0
-  echo "LOOK AT THE PHONE NOW: the driver has started but is not up after 10 s. If the" >&2
+  echo "LOOK AT THE PHONE NOW: the driver is not up after 10 s. If the" >&2
   echo "  phone shows a prompt (passcode, Trust, Enable UI Automation), answer it — the" >&2
   echo "  bring-up is still waiting and comes up as soon as it is answered." >&2
 }

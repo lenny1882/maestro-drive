@@ -1893,9 +1893,8 @@ case "$w" in *"NOT TRUST the developer certificate"*"VPN & Device Management"*) 
   *) no "an untrusted developer certificate is named at bring-up (item 165)" "got: $w" ;; esac
 wn() { printf '%b' "$1" > "$TMP/wn.log"
   ( source <(sed -n '/^_waiting_note()/,/^}/p' "$REPO/runners/ios-device/deviceup.sh"); _waiting_note "$TMP/wn.log" 2>&1 ); }
-case "$(wn 'Testing started\n')" in *"LOOK AT THE PHONE NOW"*) ok "a started driver not up yet says to look at the phone while it waits (item 165)" ;;
-  *) no "a started driver not up yet says to look at the phone while it waits (item 165)" "no note" ;; esac
-[ -z "$(wn 'Resolve Package Graph\n')" ] && ok "and says nothing before the test has started" || no "and says nothing before the test has started" "note printed"
+case "$(wn 'Running tests...\n')" in *"LOOK AT THE PHONE NOW"*) ok "a driver not up yet says to look at the phone while it waits, before any 'Testing started' (item 165)" ;;
+  *) no "a driver not up yet says to look at the phone while it waits, before any 'Testing started' (item 165)" "no note" ;; esac
 w=$(why 'Failed to initialize for UI testing: Timed out while enabling automation mode.\n** TEST EXECUTE FAILED **\n')
 case "$w" in *"waiting for"*"input"*) ok "a phone that would not enter automation mode says to look at it" ;; *) no "a phone that would not enter automation mode says to look at it" "got: $w" ;; esac
 w=$(why 'The connection was invalidated.\n** TEST EXECUTE FAILED **\n')
