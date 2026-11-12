@@ -992,9 +992,12 @@ prompt answered, the next `device.sh up` came up in 6 s. The note now fires on t
 prompt read, in the user's words, "something along the lines of unlock phone to allow XCUITest to run"; the
 note now names it and the passcode.
 
-**Left.** Restart the phone and see `LOOK AT THE PHONE NOW` arrive at about 10 s, then answer the prompt
-inside xcodebuild's timeout and see the same bring-up come up. Untrust the developer and check both
-certificate messages (on iOS that means deleting the developer's apps, the driver included).
+**Waiting note, seen on a phone, 12 Nov 2026.** XS Max restarted again, prompt left unanswered.
+`device.sh up` at 16:18:30; `LOOK AT THE PHONE NOW` streamed at 16:18:50 (10 s into the poll, after the
+forwarder and tunnel wake); the user entered the passcode; `up on 22187` at 16:19:21, the same bring-up.
+
+**Left.** Untrust the developer and check both certificate messages (on iOS that means deleting the
+developer's apps, the driver included).
 
 ## 166. `scrollto` reported not found while the matching chips were on screen — **OPEN, raised 11 Nov 2026**
 
