@@ -3961,3 +3961,64 @@ known: that phone has not been reconnected, and the Mac then lacked Rosetta.
 the 11 Nov LLDB stall did not reproduce on the iOS 26 iPhone 11 and has not been retried on the iPhone 11
 Pro, which has not been reconnected; fhrm's `start.sh` calling these verbs is fhrm's work (its items 19 and
 21), told to the claude-skills session on 12 Nov.
+
+## 93. `flutter-hot-reload-mac` carries its own Flutter answers, and they are worse — **DONE**
+
+**What.** Split out of item 87 (its Stage 5.3). The work is in the
+`flutter-hot-reload-mac` repo; it is filed here because the seam it should plug
+into is here. The sister skill installs alongside this one, reads the same
+`.maestro-drive.conf`, and builds from source, launches under `flutter run` and
+pushes edits as hot reloads. It hardcodes defaults where this package
+discovers them from the same conf:
+
+```
+flutter-hot-reload-mac                    runners/flutter
+bin/lib.sh:46  FLUTTER_BIN               build.sh  _flutter(), eight candidates
+   := .fvm/flutter/bin/flutter                     in preference order, the
+                                                   pinned SDK first
+bin/lib.sh:48  TARGET                    build.sh  derived from the flavour,
+   := lib/main_dev.dart                            which is derived from APP_ID
+remote/frun.py:34  FRUN_FLUTTER          build.sh  the same discovery
+   := .fvm/flutter/bin/flutter
+remote/frun.py:55  --flavor FLAVOR       build.sh  _flavour_for_appid, which
+                                                   REFUSES rather than guessing
+```
+
+Its `inspect` equivalent is its own VM Service discovery in `frun.py`, reading
+`/tmp/frun.log`, which `runners/flutter/vmservice.sh` also checks by name: two
+implementations of one answer.
+
+**Why.** `lib/main_dev.dart` is hardcoded as the entrypoint. This package
+derives it from the bundle id under test and refuses when two flavours build
+the same one, because building the wrong flavour installs a different app and
+leaves the one under test untouched, and nothing reports it. A project that is
+not `dev`-flavoured gets the right answer from one skill and the wrong one from
+the other, from the same conf. Separately (item 24), `bin/start.sh` runs
+`git checkout` on the single shared `$REPO`, so pointing it at a review branch
+overwrites uncommitted work in anything else using that checkout; that is a
+safety requirement for concurrent reviews.
+
+**To do.** Make `flutter-hot-reload-mac` consume this package's runner verbs —
+`describe`, `build` and `inspect` — instead of its own defaults. Then hot reload
+for another framework becomes a runner module rather than a second skill, and
+two skills reading one conf cannot disagree about which flavour a project
+builds.
+
+**Gated on.** Item 87 landing, so the contract is stable.
+
+**2.0 plan, 11 Nov 2026.** `flutter-hot-reload-mac` is being rebuilt as 2.0 on
+this package: it will source `skill/bin/lib.sh` and call
+`runners/flutter/framework.sh`, as rrcd sources rrc's `rrc-lib.sh`. Plan:
+claude-skills branch `flutter-hot-reload-mac-v2-plan`,
+`packages/flutter-hot-reload-mac/V2-PLAN.md` (commit e148cc3). It needs four
+changes here first: items 171 (library version constant), 172 (`describe
+--env`), 173 (`vmservice.sh` reads the per-device log) and the 2.0 addition to
+item 112 (label check as a callable function). All four are in, 11 Nov 2026,
+on branch `item-93-hot-reload-v2-seams`; the same-`REPO` refusal is the
+hot-reload skill's.
+
+**Done, 12 Nov 2026.** Closed here: this item was filed in this repo only because the seam was here, and
+the seam is delivered. Items 171, 172, 173 and item 112's callable label check are in and released in 2.2.0;
+item 176 added `device-check`, `run-diagnose`, `logs`, `vm-url` and `build --device --debug` for phones.
+What is left is `flutter-hot-reload-mac` 2.0's own work, tracked in claude-skills'
+`packages/flutter-hot-reload-mac/V2-PLAN.md` and that package's BACKLOG.md.
