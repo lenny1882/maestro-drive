@@ -1015,8 +1015,14 @@ second launch path here. Listed in `skill/runners/README.md`; 12 offline tests i
 - `skill/runners/flutter/vmservice.sh` skips the `simctl` fallback for a udid `simctl list devices` does not
   name, says a phone has no simulator log, and runs `run-diagnose` on the run log.
 
+**Live after Rosetta, 12 Nov 2026.** The user reinstalled Rosetta at 16:35 (`Install of Rosetta 2 finished
+successfully`). `device-check` then answered `rosetta: installed`, exit 0. `logs` attached to the XS Max
+(`Showing Monica’s iPhone logs:`), but in 25 s after `devicectl device process launch` of
+`oneiota.e.hugoboss.runner.uat` it printed nothing more. That build's mode, and whether it prints at launch,
+were not checked, so this neither confirms nor refutes the route.
+
 **Left.**
-- Rosetta back on oi-jamesl-mac (an administrator's `sudo`), then `logs` live against a running app.
+- `logs` against a debug build that is known to print, to see its output arrive.
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
 - The LLDB stall and the mDNS failure have names, not fixes.
