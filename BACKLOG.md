@@ -1046,10 +1046,18 @@ a debug build launched without a debugger may not survive (the `mprotect failed:
 `runners/flutter/build.sh --device <udid> --debug` builds `flutter build ios --debug` in the GUI session and
 prints `MMARTIFACT` as before; profile stays the default. `framework.sh build --platform ios-device` passes
 `--debug` only when `--mode debug` is given by name, since debug was already its default and every earlier
-caller got profile on a phone. Tested offline with the device-build stubs; not built on the Mac yet.
+caller got profile on a phone. Tested offline with the device-build stubs. **Built on the Mac, 12 Nov 2026:** `framework.sh build
+<repo> --platform ios-device --device <udid> --mode debug --variant uat --target lib/main_uat.dart` printed
+`building oneiota.e.hugoboss.runner.uat ... (debug mode)` and `artifact .../build/ios/iphoneos/Runner.app`,
+rc 0, with the shared checkout's `ios/Podfile.lock` and `pubspec.lock` unchanged. The install on an iPhone
+11 (`00008030-001858493C91402E`, newly paired) failed: `Failed to install embedded profile for
+oneiota.e.hugoboss.runner.uat : 0xe8008012 (This provisioning profile cannot be installed on this device.)`
+— the development profile does not list that phone, and nothing here touches the Apple account to add it.
+`vm-url` then said `no 'VM service is listening' line ... is a debug build running?`, as it should.
 
 **Left.**
-- A `--device --debug` build on the Mac, installed and launched with devicectl, then `vm-url` and attach.
+- Install that debug build on a phone the profile lists (the iPhone 11 Pro had the app on 11 Nov), launch,
+  `vm-url`, attach.
 - The launch, `vm-url`, `flutter attach --debug-url` route on an iOS 26 phone (the iPhone 11 Pro).
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
