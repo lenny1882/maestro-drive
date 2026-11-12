@@ -991,3 +991,35 @@ simulator in `drivers.sh up` — then call `_label_guard` from `device.sh up` an
 `skill/test/run-tests.sh`. Labels exist for the wall, and the wall shows no phone yet (item 90), so settle
 this with item 90 or alongside it.
 
+
+## 176. `flutter run --debug` on a phone fails three ways, and `runners/ios-device` names none of them — **OPEN, raised 12 Nov 2026**
+
+**What.** Handed over from flutter-hot-reload-mac BACKLOG item 19 (no physical-device path; claude-skills
+commit f7f092d). fhrm 2.0 reuses this package's runners, so its V2-PLAN.md (line 166) and its item 14 give
+physical devices to `skill/runners/ios-device`. Found on 11 Nov 2026 by the hugoboss-flutter-runner session:
+`flutter run --debug` on a USB iPhone 11 Pro (iPhone12,3, iOS 26.5.2), Mac oi-jamesl-mac (Xcode 27.2,
+macOS 27.2), Flutter 3.41.9 via fvm.
+
+- **No Rosetta.** Flutter's bundled `artifacts/libusbmuxd/iproxy` is x86_64. The app built, installed and
+  launched, then the run died with "Flutter failed to run .../iproxy ... built with the incorrect
+  architecture". Installing Rosetta (sudo, by the user) fixed it.
+- **LLDB never connects.** "LLDB is taking longer than expected to start debugging the app", then 11 minutes
+  of silence, with lldb attached and device support for iPhone12,3 26.5.2 present.
+- **mDNS fails without LLDB** (`flutter config --no-enable-lldb-debugging`): "Flutter could not access the
+  local network", "SocketException: Send failed (OS Error: No route to host, errno = 65), address = 0.0.0.0,
+  port = 5353", then "The Dart VM Service was not discovered after 60 seconds". It persisted after Local
+  Network and Automation → Xcode were granted to Terminal.
+
+Release-mode `flutter run` and `devicectl device process launch --console` show no `print`/`debugPrint`
+output. `log stream` has no device option and `devicectl` has no syslog subcommand. `flutter logs -d <udid>`
+(idevicesyslog, once Rosetta is in) was the only route that streamed the app's output.
+
+**Why.** Each failure ends a phone run with Flutter's own text, which names neither the missing Rosetta nor
+the LLDB or mDNS stall, and the app's output is then lost.
+
+**To do.** In `skill/runners/ios-device`:
+1. Check for Rosetta (`arch -x86_64 /usr/bin/true`) before launching, and say what is missing and that
+   installing it needs sudo.
+2. Detect the LLDB stall ("LLDB is taking longer than expected") and name it.
+3. Detect the port 5353 errno = 65 / "VM Service was not discovered" failure and name it.
+4. Fall back to `flutter logs -d <udid>` for the app's output.
