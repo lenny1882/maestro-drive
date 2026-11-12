@@ -230,12 +230,19 @@ run-diagnose)
 logs)
   # The app's print/debugPrint output from a phone (item 176). Release-mode
   # flutter run and `devicectl device process launch --console` show none, `log
-  # stream` has no device option and devicectl has no syslog subcommand;
-  # `flutter logs -d <udid>` (idevicesyslog underneath) was the only route that
-  # streamed it. It needs Rosetta the same way, so that is checked first.
+  # stream` has no device option and devicectl has no syslog subcommand. `flutter
+  # logs -d <udid>` printed only its "Showing ... logs:" header on the XS Max
+  # (Flutter 3.41.9, 12 Nov 2026), from the project directory or not, while the
+  # idevicesyslog bundled in the same SDK streamed the app's `flutter:` lines. So
+  # this runs that idevicesyslog with the SDK's libraries and keeps those lines.
   _udid=${1:?logs <udid> <flutter-bin>}; _fl=${2:?flutter-bin}
   sh "$0" device-check "$_fl" >/dev/null || exit 1
-  exec "$_fl" logs -d "$_udid"
+  _a="$(cd "$(dirname "$_fl")/.." 2>/dev/null && pwd -P)/bin/cache/artifacts"
+  [ -x "$_a/libimobiledevice/idevicesyslog" ] || {
+    echo "logs: no $_a/libimobiledevice/idevicesyslog — run 'flutter precache --ios' on the Mac" >&2; exit 1; }
+  _dl=$(for _d in "$_a"/*/; do printf '%s:' "$_d"; done)
+  DYLD_LIBRARY_PATH="$_dl" "$_a/libimobiledevice/idevicesyslog" -u "$_udid" 2>&1 |
+    grep --line-buffered -E 'flutter: |No device found|Library not loaded'
   ;;
 
 inspect)

@@ -2305,8 +2305,13 @@ case "$(dc DC_ROSETTA=0)" in *"ROSETTA IS NOT INSTALLED"*"sudo softwareupdate"*"
 case "$(dc DC_ROSETTA=1)" in *"rosetta: installed"*"rc=0"*) ok "and passes once Rosetta is in" ;; *) no "and passes once Rosetta is in" "wrong" ;; esac
 case "$(dc DC_ARCHS='x86_64 arm64')" in *"not needed"*"rc=0"*) ok "an iproxy with an arm64 slice needs no Rosetta" ;; *) no "an iproxy with an arm64 slice needs no Rosetta" "wrong" ;; esac
 case "$(dc DC_M=x86_64)" in *"not needed on x86_64"*"rc=0"*) ok "an Intel Mac needs no Rosetta" ;; *) no "an Intel Mac needs no Rosetta" "wrong" ;; esac
+mkdir -p "$FR/bin/cache/artifacts/libimobiledevice"
+printf '#!/bin/sh\necho "[connected:$2]"\necho "Nov 12 16:37:39 kernel(Sandbox)[0] <Error>: Sandbox: Runner(625) deny(1)"\necho "Nov 12 16:37:43 Runner(Flutter)[628] <Notice>: flutter: The Dart VM service is listening on http://127.0.0.1:49482/eK=/"\necho "Nov 12 16:37:44 Runner(Flutter)[628] <Notice>: flutter: hello from the app"\n' > "$FR/bin/cache/artifacts/libimobiledevice/idevicesyslog"
+chmod +x "$FR/bin/cache/artifacts/libimobiledevice/idevicesyslog"
 out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=1 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1)
-[ "$out" = "flutter logs -d PHONEUDID" ] && ok "logs runs flutter logs -d <udid> once Rosetta is in" || no "logs runs flutter logs -d <udid> once Rosetta is in" "got: $out"
+case "$out" in *"flutter: hello from the app"*) case "$out" in *Sandbox*) no "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" "kept a system line" ;;
+  *) ok "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" ;; esac ;;
+  *) no "logs streams the app's flutter: lines from the SDK's idevicesyslog, and nothing else" "got: $out" ;; esac
 out=$(env PATH="$TMP/dcstub:$PATH" DC_ROSETTA=0 sh "$FW" logs PHONEUDID "$FR/bin/flutter" 2>&1); rc=$?
 case "$rc:$out" in 1:*"ROSETTA IS NOT INSTALLED"*) ok "and refuses without it, naming Rosetta" ;; *) no "and refuses without it, naming Rosetta" "rc=$rc: $out" ;; esac
 

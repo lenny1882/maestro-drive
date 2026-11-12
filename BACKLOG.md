@@ -1018,11 +1018,18 @@ second launch path here. Listed in `skill/runners/README.md`; 12 offline tests i
 **Live after Rosetta, 12 Nov 2026.** The user reinstalled Rosetta at 16:35 (`Install of Rosetta 2 finished
 successfully`). `device-check` then answered `rosetta: installed`, exit 0. `logs` attached to the XS Max
 (`Showing Monica’s iPhone logs:`), but in 25 s after `devicectl device process launch` of
-`oneiota.e.hugoboss.runner.uat` it printed nothing more. That build's mode, and whether it prints at launch,
-were not checked, so this neither confirms nor refutes the route.
+`oneiota.e.hugoboss.runner.uat` it printed nothing more. The app does print: the SDK's own
+`bin/cache/artifacts/libimobiledevice/idevicesyslog -u <udid>`, with the SDK's artifact directories on
+`DYLD_LIBRARY_PATH`, showed `Runner(Flutter)[628] <Notice>: flutter: The Dart VM service is listening on
+http://127.0.0.1:49482/...` and the app's debug lines. `flutter logs -d` run from the project checkout also
+printed only its header. So `logs` now runs that `idevicesyslog` and keeps the `flutter: ` lines (and its own
+`No device found` / `Library not loaded` failures). **Run live:** 12 app lines in 25 s after a launch, from
+`flutter: The Dart VM service is listening on http://127.0.0.1:49499/...` on.
+
+The syslog carries the VM Service URI, but as the phone's own loopback, so it is not reachable from the Mac
+without a forward; `vmservice.sh` does not use it.
 
 **Left.**
-- `logs` against a debug build that is known to print, to see its output arrive.
 - fhrm's `start.sh` calling `device-check` before a phone launch, `run-diagnose` on its log when the VM Service
   is not found or the LLDB line appears, and `logs` for output. That is claude-skills work.
 - The LLDB stall and the mDNS failure have names, not fixes.
