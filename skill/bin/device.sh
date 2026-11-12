@@ -88,6 +88,9 @@ case "${1:-list}" in
       _push "$HERE/../runners/ios-device/driver/build.sh" "$HERE/../runners/ios-device/driver/sign.sh" \
             "$HERE/../runners/ios-device/driver/bind-address.patch" "$RMODS/ios-device/driver/" ||
       { echo "device: could not copy the ios-device module" >&2; exit 1; }
+    # A phone carries a wall label like a simulator (item 174): refuse one another
+    # session labelled today, before its driver is replaced.
+    _label_guard "$udid" || exit 1
     live=$(_ssh "sh '$PL' driver-scan" 2>/dev/null)
     port=$(_device_port "$udid" "${3:-}" "$live") || exit 2
     echo "device: $udid on port $port"
@@ -97,6 +100,7 @@ case "${1:-list}" in
     TMO=${TMO:-180} _ssh "RDIR='$RDIR' sh '$PL' driver-up '$udid' '$port'"; rc=$?
     [ "$rc" -eq 0 ] || { echo "device: bring-up failed — not registered." >&2; exit "$rc"; }
     _register "$udid" "$port"
+    _label_default "$udid" "$live"
     echo "registered $udid on port $port"
     echo "drive it:  DEV=$udid $HERE/driver.sh nodes"
     ;;

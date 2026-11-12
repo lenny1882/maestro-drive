@@ -25,6 +25,7 @@ UC=$(base64 < "$(dirname "$0")/../remote/upgradecheck.sh" | tr -d '\n')
 #
 # Both now come from the framework runner, on the Mac, inside the same SSH call
 # (BACKLOG item 87, runners/README.md call sites 1 and 2).
+_helpers_ensure || exit 1
 FW=$("$(dirname "$0")/runner.sh" rpath framework) || exit 1
 
 _ssh "

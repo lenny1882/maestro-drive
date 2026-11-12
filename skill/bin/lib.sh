@@ -533,6 +533,75 @@ printf '%s|%s|%s|%s\n' \"\$(date -r \"\$L\" +%Y-%m-%d 2>/dev/null)\" \"\$(date +
   return 1
 }
 
+# Name the device's tile on the wall. Two rules, and the second is item 67.
+#
+# 1. A name set by hand is never overwritten. `bin/wall.sh label` is explicit
+#    and this is only a default, so it fills a blank and otherwise leaves well
+#    alone.
+#
+# 2. A name left behind by a session that is GONE is overwritten. Nothing clears
+#    a label at session end, so without this every stale label reads as
+#    hand-set: the wall has shown four simulators named 13 hours earlier, none
+#    of them working, and a tile still saying `named 15h ago` under a live
+#    session that was not the one named on it.
+#
+# Telling the two apart needs more than a session-id mismatch, because two live
+# sessions share this Mac routinely (item 80) and the second must not rename the
+# first's device out from under it. The test is BOTH of:
+#
+#   * the label names a different session, and
+#   * that device has no live driver, and
+#   * the label has not been touched for $LABEL_STALE_AFTER (default 3600s,
+#     the same threshold wall.py already greys a tile at).
+#
+# A driver is the liveness signal because a session that is driving has one up
+# by definition. The age is there because Maestro tears a driver down on every
+# CLI or MCP run, so "no driver right now" on its own would rename a peer's
+# device mid-session.
+: "${LABEL_STALE_AFTER:=3600}"
+
+_label_default() {  # _label_default <udid> [<live-map>]
+  local udid=$1 map=${2:-} name group mine
+  name=${PROFILE:-${APP_ID:-}}
+  group=$(basename "$PROJECT_DIR")
+  [ -n "$name" ] || name=$group
+  mine=$(_label_by)
+  # `-s` fills a blank; the second clause reclaims a dead session's label. Both
+  # are evaluated on the Mac in one round trip, so this costs nothing extra.
+  #
+  # The live-driver test below is the exception: its $( ) sits in a
+  # double-quoted string, so THIS shell expands it before anything is sent, and
+  # the awk runs here against the $map read here. Its \$ escapes were written as
+  # though it ran on the Mac, so awk received a literal backslash, died with
+  # "backslash not last character on line", and the substitution came back
+  # empty — making the test always false. A live driver therefore stopped
+  # protecting a peer's label, leaving the age check as the only one of the
+  # three guards still working. Found by the first live rig up after Stage 3,
+  # and invisible to the tests because a recent label is kept by the age check
+  # whether or not this one fires.
+  printf 'name=%s\ngroup=%s\nby=%s\n' "$name" "$group" "$mine" |
+    _ssh "mkdir -p '$RDIR/labels'
+L='$RDIR/labels/$udid'
+if [ ! -s \"\$L\" ]; then cat > \"\$L\"; exit 0; fi
+if grep -qF 'by=$mine' \"\$L\" 2>/dev/null; then cat >/dev/null; exit 0; fi
+if [ -n '$(printf '%s\n' "$map" | awk -v d="$udid" '$1==d{print $2; exit}')' ]; then cat >/dev/null; exit 0; fi
+AGE=\$(( \$(date +%s) - \$(stat -f %m \"\$L\" 2>/dev/null || stat -c %Y \"\$L\" 2>/dev/null || date +%s) ))
+if [ \"\$AGE\" -gt $LABEL_STALE_AFTER ]; then cat > \"\$L\"; else cat >/dev/null; fi" \
+    >/dev/null 2>&1 || true
+}
+
+# The Mac's helpers live under $RDIR, in /tmp, and macOS empties /tmp when it
+# boots: on 12 Nov 2026 a reboot at 17:04 took every pushed helper, and the next
+# framework.sh call failed with "not found" (item 144). One round trip to ask
+# whether they are there; bin/install.sh pushes them back when they are not.
+_helpers_ensure() {
+  _ports_here && return 0
+  _ssh "[ -r '$RHELP/hier.py' ] && [ -r '$RMODS/${RUNNER:-flutter}/framework.sh' ]" >/dev/null 2>&1 && return 0
+  echo "note: the Mac's helpers are gone from $RDIR (a reboot empties /tmp) — pushing them again" >&2
+  bash "${HELPERS_INSTALL:-$(dirname "${BASH_SOURCE[0]}")/install.sh}" >/dev/null 2>&1 ||
+    { echo "  bin/install.sh failed; run it by hand" >&2; return 1; }
+}
+
 # The Mac's current LAN address. It moves between networks — its name resolves
 # to an address on each of them and DNS returns them all, whichever one is
 # actually live, so nothing may hardcode it. Ask the Mac which address it is

@@ -90,62 +90,8 @@ _port_for() {  # _port_for <udid> <live-map> <ports-map>
   echo "$p"
 }
 
-# Name the device's tile on the wall. Two rules, and the second is item 67.
-#
-# 1. A name set by hand is never overwritten. `bin/wall.sh label` is explicit
-#    and this is only a default, so it fills a blank and otherwise leaves well
-#    alone.
-#
-# 2. A name left behind by a session that is GONE is overwritten. Nothing clears
-#    a label at session end, so without this every stale label reads as
-#    hand-set: the wall has shown four simulators named 13 hours earlier, none
-#    of them working, and a tile still saying `named 15h ago` under a live
-#    session that was not the one named on it.
-#
-# Telling the two apart needs more than a session-id mismatch, because two live
-# sessions share this Mac routinely (item 80) and the second must not rename the
-# first's device out from under it. The test is BOTH of:
-#
-#   * the label names a different session, and
-#   * that device has no live driver, and
-#   * the label has not been touched for $LABEL_STALE_AFTER (default 3600s,
-#     the same threshold wall.py already greys a tile at).
-#
-# A driver is the liveness signal because a session that is driving has one up
-# by definition. The age is there because Maestro tears a driver down on every
-# CLI or MCP run, so "no driver right now" on its own would rename a peer's
-# device mid-session.
-: "${LABEL_STALE_AFTER:=3600}"
-
-_label_default() {  # _label_default <udid> [<live-map>]
-  local udid=$1 map=${2:-} name group mine
-  name=${PROFILE:-${APP_ID:-}}
-  group=$(basename "$PROJECT_DIR")
-  [ -n "$name" ] || name=$group
-  mine=$(_label_by)
-  # `-s` fills a blank; the second clause reclaims a dead session's label. Both
-  # are evaluated on the Mac in one round trip, so this costs nothing extra.
-  #
-  # The live-driver test below is the exception: its $( ) sits in a
-  # double-quoted string, so THIS shell expands it before anything is sent, and
-  # the awk runs here against the $map read here. Its \$ escapes were written as
-  # though it ran on the Mac, so awk received a literal backslash, died with
-  # "backslash not last character on line", and the substitution came back
-  # empty — making the test always false. A live driver therefore stopped
-  # protecting a peer's label, leaving the age check as the only one of the
-  # three guards still working. Found by the first live rig up after Stage 3,
-  # and invisible to the tests because a recent label is kept by the age check
-  # whether or not this one fires.
-  printf 'name=%s\ngroup=%s\nby=%s\n' "$name" "$group" "$mine" |
-    _ssh "mkdir -p '$RDIR/labels'
-L='$RDIR/labels/$udid'
-if [ ! -s \"\$L\" ]; then cat > \"\$L\"; exit 0; fi
-if grep -qF 'by=$mine' \"\$L\" 2>/dev/null; then cat >/dev/null; exit 0; fi
-if [ -n '$(printf '%s\n' "$map" | awk -v d="$udid" '$1==d{print $2; exit}')' ]; then cat >/dev/null; exit 0; fi
-AGE=\$(( \$(date +%s) - \$(stat -f %m \"\$L\" 2>/dev/null || stat -c %Y \"\$L\" 2>/dev/null || date +%s) ))
-if [ \"\$AGE\" -gt $LABEL_STALE_AFTER ]; then cat > \"\$L\"; else cat >/dev/null; fi" \
-    >/dev/null 2>&1 || true
-}
+# _label_default and LABEL_STALE_AFTER live in lib.sh: bin/device.sh labels a
+# phone the same way (item 174).
 # --- the rig: several simulators brought up and taken down as one -----------
 # Setting a rig up and tearing it down are units of work in their own right.
 # Setting one up by hand takes about forty-five minutes; taking one down by

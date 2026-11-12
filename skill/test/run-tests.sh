@@ -4790,9 +4790,9 @@ reclaim(){ # reclaim <label-contents> <mine> <live-port-or-empty> <age-secs> -> 
 #
 # Reading the file rather than running it, because the string cannot be
 # extracted from the function without rebuilding the very thing under test.
-if grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" >/dev/null 2>&1; then
+if grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" "$REPO/bin/lib.sh" >/dev/null 2>&1; then
   no "no awk inside a local \$( ) escapes its field references" \
-     "$(grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" | head -1)"
+     "$(grep -nE 'awk -v d=.*\\\$[12]' "$REPO/bin/drivers.sh" "$REPO/bin/lib.sh" | head -1)"
 else
   ok "no awk inside a local \$( ) escapes its field references"
 fi
@@ -4802,9 +4802,38 @@ fi
   || no "label: a recently-named peer survives a torn-down driver" "renamed too eagerly"
 # a session-id mismatch alone must NOT be sufficient — two live sessions share
 # this Mac routinely (item 80)
-sed -n '/^_label_default()/,/^}/p' "$REPO/bin/drivers.sh" | drain_grep -q 'AGE' \
+sed -n '/^_label_default()/,/^}/p' "$REPO/bin/lib.sh" | drain_grep -q 'AGE' \
   && ok "label: the reclaim needs age, not just a mismatch" \
   || no "label: the reclaim needs age, not just a mismatch" "mismatch alone would rename"
+
+# Item 174: a phone carries a label. device.sh up asks _label_guard before it
+# replaces a driver, and writes the label after registering, as drivers.sh up
+# does for a simulator.
+_up=$(sed -n '/^  up)/,/^    ;;/p' "$REPO/bin/device.sh")
+g=$(printf '%s\n' "$_up" | grep -n '_label_guard "$udid" || exit 1' | cut -d: -f1)
+d=$(printf '%s\n' "$_up" | grep -n "driver-up" | head -1 | cut -d: -f1)
+l=$(printf '%s\n' "$_up" | grep -n '_label_default "$udid"' | cut -d: -f1)
+r=$(printf '%s\n' "$_up" | grep -n '_register "$udid" "$port"' | cut -d: -f1)
+{ [ -n "$g" ] && [ -n "$d" ] && [ "$g" -lt "$d" ] && [ -n "$l" ] && [ "$l" -gt "$r" ]; } \
+  && ok "device.sh up refuses a phone another session labelled, then labels its own (item 174)" \
+  || no "device.sh up refuses a phone another session labelled, then labels its own (item 174)" "guard=$g driver-up=$d register=$r label=$l"
+if ( . "$REPO/bin/lib.sh" >/dev/null 2>&1 <<< ""; type _label_default ) >/dev/null 2>&1 || grep -q '^_label_default()' "$REPO/bin/lib.sh"; then
+  ok "_label_default lives in lib.sh, for drivers.sh and device.sh both"
+else
+  no "_label_default lives in lib.sh, for drivers.sh and device.sh both" "not in lib.sh"
+fi
+# Item 144: after a reboot empties /tmp, _helpers_ensure pushes the helpers back.
+out=$( ( _ports_here(){ return 1; }; RHELP=/x RMODS=/y RUNNER=flutter RDIR=/tmp/maestro-mac
+         _ssh(){ return 1; }
+         source <(sed -n '/^_helpers_ensure()/,/^}/p' "$REPO/bin/lib.sh")
+         mkdir -p "$TMP/fakebin"; HELPERS_INSTALL="$TMP/fakebin/install.sh"
+         printf '#!/bin/bash\necho PUSHED > "%s/pushed"\n' "$TMP" > "$HELPERS_INSTALL"
+         _helpers_ensure; echo "rc=$?" ) 2>&1 )
+case "$out" in *"helpers are gone"*"rc=0"*) [ -f "$TMP/pushed" ] && ok "_helpers_ensure re-pushes the Mac's helpers when a reboot has removed them (item 144)" || no "_helpers_ensure re-pushes the Mac's helpers when a reboot has removed them (item 144)" "install.sh not run" ;;
+  *) no "_helpers_ensure re-pushes the Mac's helpers when a reboot has removed them (item 144)" "got: $out" ;; esac
+out=$( ( _ports_here(){ return 1; }; RHELP=/x RMODS=/y; _ssh(){ return 0; }
+         source <(sed -n '/^_helpers_ensure()/,/^}/p' "$REPO/bin/lib.sh"); _helpers_ensure; echo "rc=$?" ) 2>&1 )
+[ "$out" = "rc=0" ] && ok "and says nothing when they are there" || no "and says nothing when they are there" "got: $out"
 
 echo "no ssh call sits inside a loop reading from stdin (item 84)"
 # The lint runs over the whole source, every time. _ssh passes stdin to the

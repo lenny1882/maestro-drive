@@ -3780,3 +3780,184 @@ forwarder and tunnel wake); the user entered the passcode; `up on 22187` at 16:1
 messages are tested offline only, against the iPhone 11 Pro run's text: on iOS, untrusting a developer means
 deleting every app it signed, and on the XS Max the driver (team `38RS7YKR5P`) sits beside four project builds
 that would each need a signed rebuild. Left that way by the user's decision.
+
+## 144. Something removed the wall's log and script from `/tmp/maestro-mac` — **DONE**
+
+**What.** On 5 Nov 2026 a running wall (pid 13345) held `wall.log` open after the file and
+`wall.py` had gone from `/tmp/maestro-mac`, which was rebuilt from 11:56. What removed them
+was not established. `wall.sh` now reports a deleted log.
+
+**Why.** Whatever did it can do it to a live wall again.
+
+**To do.** Find what rebuilds that directory.
+
+**Seen again, 12 Nov 2026.** The whole of `/tmp/maestro-mac` on oi-jamesl-mac was gone at 17:08:11, runners
+and all: `framework.sh vm-url` had run from `/tmp/maestro-mac/runners/flutter` at 16:58, and at 17:07:47 the
+next `framework.sh build` found nothing to run (`vm-url` exit 127). Lost with it were two backups this
+session kept there of the shared checkout's `ios/Podfile.lock` and `pubspec.lock`. Neither lock file had
+changed (mtimes 15:33:50 and 11 Nov). A macOS `/tmp` cleaner or a session's `rm` are both unchecked; the
+window is 16:58 to 17:07. Backups of anything that matters should not live under `/tmp/maestro-mac`.
+
+**Done, 12 Nov 2026.** The 12 Nov wipe was a reboot: `last` shows shutdown 17:03 and boot 17:04:26, and
+macOS empties `/private/tmp` at boot. This macOS has no `/etc/periodic/daily`, so no daily cleaner did the
+5 Nov removal, and `last` shows no reboot that day (reboots 26 Oct and 11 Nov); that one stays unexplained.
+`_helpers_ensure` in `skill/bin/lib.sh` asks in one round trip whether `$RHELP/hier.py` and the framework
+module are on the Mac and runs `bin/install.sh` when they are not; `bin/preflight.sh` calls it first.
+**Run live:** with `hier.py` moved aside, preflight printed `note: the Mac's helpers are gone from
+/tmp/maestro-mac (a reboot empties /tmp) — pushing them again` and `hier.py` was back. A running wall's
+log is not protected by this.
+
+## 174. A phone has no wall label, so the item 112 check cannot protect it — **DONE**
+
+**What.** `_label_guard` in `skill/bin/lib.sh` refuses a launch onto a device another session labelled
+today, and `bin/build.sh` and `bin/drivers.sh up <udid>` call it. `bin/device.sh up`, which starts the
+driver on a physical iPhone, does not, and calling it there would always pass: `device.sh` never writes
+`$RDIR/labels/<udid>`, so a phone never carries a label to check.
+
+**Why.** Two sessions on one phone collide as item 112 describes for a simulator: the second driver start or
+install ends the first session's journey, and nothing reads who was there.
+
+**To do.** Decide who writes a phone's label and when — `device.sh up`, as `_label_default` does for a
+simulator in `drivers.sh up` — then call `_label_guard` from `device.sh up` and cover both in
+`skill/test/run-tests.sh`. Labels exist for the wall, and the wall shows no phone yet (item 90), so settle
+this with item 90 or alongside it.
+
+**Done, 12 Nov 2026.** `_label_default` moved from `bin/drivers.sh` to `skill/bin/lib.sh`, beside
+`_label_guard`, with `LABEL_STALE_AFTER`. `bin/device.sh up` calls `_label_guard` before it replaces a
+phone's driver and `_label_default` after registering it, as `drivers.sh up` does for a simulator. The wall
+still shows no phone (item 90); the label is there for the guard. **Run live** on the iPhone 11
+(`00008030-001858493C91402E`): `device.sh up` wrote `name=oneiota.e.hugoboss.runner.uat` /
+`by=yellow · 42df5fa`; with a label `by=peer-session · 99999` planted, it refused ("labelled by another
+session today: peer-session · 99999 (named peer-test)"), exit 1; the real label was put back. Two tests in
+`skill/test/run-tests.sh`.
+
+## 176. `flutter run --debug` on a phone fails three ways, and `runners/ios-device` names none of them — **DONE**
+
+**What.** Handed over from flutter-hot-reload-mac BACKLOG item 19 (no physical-device path; claude-skills
+commit f7f092d). fhrm 2.0 reuses this package's runners, so its V2-PLAN.md (line 166) and its item 14 give
+physical devices to `skill/runners/ios-device`. Found on 11 Nov 2026 by the hugoboss-flutter-runner session:
+`flutter run --debug` on a USB iPhone 11 Pro (iPhone12,3, iOS 26.5.2), Mac oi-jamesl-mac (Xcode 27.2,
+macOS 27.2), Flutter 3.41.9 via fvm.
+
+- **No Rosetta.** Flutter's bundled `artifacts/libusbmuxd/iproxy` is x86_64. The app built, installed and
+  launched, then the run died with "Flutter failed to run .../iproxy ... built with the incorrect
+  architecture". Installing Rosetta (sudo, by the user) fixed it.
+- **LLDB never connects.** "LLDB is taking longer than expected to start debugging the app", then 11 minutes
+  of silence, with lldb attached and device support for iPhone12,3 26.5.2 present.
+- **mDNS fails without LLDB** (`flutter config --no-enable-lldb-debugging`): "Flutter could not access the
+  local network", "SocketException: Send failed (OS Error: No route to host, errno = 65), address = 0.0.0.0,
+  port = 5353", then "The Dart VM Service was not discovered after 60 seconds". It persisted after Local
+  Network and Automation → Xcode were granted to Terminal.
+
+Release-mode `flutter run` and `devicectl device process launch --console` show no `print`/`debugPrint`
+output. `log stream` has no device option and `devicectl` has no syslog subcommand. `flutter logs -d <udid>`
+(idevicesyslog, once Rosetta is in) was the only route that streamed the app's output.
+
+**Why.** Each failure ends a phone run with Flutter's own text, which names neither the missing Rosetta nor
+the LLDB or mDNS stall, and the app's output is then lost.
+
+**To do.** In `skill/runners/ios-device`:
+1. Check for Rosetta (`arch -x86_64 /usr/bin/true`) before launching, and say what is missing and that
+   installing it needs sudo.
+2. Detect the LLDB stall ("LLDB is taking longer than expected") and name it.
+3. Detect the port 5353 errno = 65 / "VM Service was not discovered" failure and name it.
+4. Fall back to `flutter logs -d <udid>` for the app's output.
+
+**Related.**
+- Item 93: fhrm 2.0 is the caller. Its V2-PLAN.md (claude-skills `e72a2da`) hands item 19 to `ios-device`
+  but never says who runs `flutter run` on a phone. fhrm's `start.sh` runs it for a simulator, and
+  `skill/runners/ios-device` has no build or launch script (`deviceup.sh`, `platform.sh`, `iproxy.py`, the
+  driver). Decide that first: either checks here that fhrm's `start.sh` calls before and during the launch,
+  as it calls `_label_guard` (item 112), or a phone launch path in this runner.
+- Item 165: the same run, and the same kind of fix, matching a known failure text and naming its cause.
+  Its untrusted-certificate case also followed a `flutter run --debug` install.
+- Item 164: the same run and phone. The Rosetta and LLDB notes belong at the top of `physical-device.md`
+  beside the 2.12.1 limit once the checks exist.
+- Item 174: a phone launch path adds a second way onto a phone with no label check.
+- `skill/runners/flutter/vmservice.sh` reads the `flutter run` log first, then falls back to `xcrun simctl
+  spawn <udid> log show`, which reads a simulator only. When mDNS fails on a phone, no VM Service address
+  reaches the log either, so it comes back empty. It needs a phone fallback, or to say it has none.
+
+**Done so far, 12 Nov 2026.** Through the seam fhrm 2.0 already uses: Mac-side verbs in
+`skill/runners/flutter/framework.sh` that fhrm's `start.sh` calls around its own `flutter run`, rather than a
+second launch path here. Listed in `skill/runners/README.md`; 12 offline tests in `skill/test/run-tests.sh`.
+1. `device-check <flutter-bin>`: on an arm64 Mac, when Flutter's `bin/cache/artifacts/libusbmuxd/iproxy` has
+   no arm64 slice, `arch -x86_64 /usr/bin/true` must work; otherwise exit 1 naming Rosetta and
+   `sudo softwareupdate --install-rosetta --agree-to-license`. **Run live on oi-jamesl-mac:** it refused.
+   Flutter 3.41.9's iproxy is `x86_64` only, and `arch -x86_64 /usr/bin/true` answers `Bad CPU type in
+   executable`, with no `oahd` and no Rosetta package receipt, on macOS 27.2.1. The Rosetta installed on
+   11 Nov (macOS 27.2) is not there now.
+2. and 3. `run-diagnose <flutter-run-log>`: names ROSETTA (`incorrect architecture`), LLDB STALL (`LLDB is
+   taking longer than expected`), MDNS BLOCKED (`errno = 65` / `port = 5353` / `could not access the local
+   network`) and NO VM SERVICE (`was not discovered`); the stall and discovery causes only when the run never
+   reached its VM Service. Exit 1 when none. Offline only; no fix is known for the mDNS failure.
+4. `logs <udid> <flutter-bin>`: `device-check`, then `flutter logs -d <udid>`. Run live: it refused on the
+   missing Rosetta, as it should.
+- `skill/runners/flutter/vmservice.sh` skips the `simctl` fallback for a udid `simctl list devices` does not
+  name, says a phone has no simulator log, and runs `run-diagnose` on the run log.
+
+**Live after Rosetta, 12 Nov 2026.** The user reinstalled Rosetta at 16:35 (`Install of Rosetta 2 finished
+successfully`). `device-check` then answered `rosetta: installed`, exit 0. `logs` attached to the XS Max
+(`Showing Monica’s iPhone logs:`), but in 25 s after `devicectl device process launch` of
+`oneiota.e.hugoboss.runner.uat` it printed nothing more. The app does print: the SDK's own
+`bin/cache/artifacts/libimobiledevice/idevicesyslog -u <udid>`, with the SDK's artifact directories on
+`DYLD_LIBRARY_PATH`, showed `Runner(Flutter)[628] <Notice>: flutter: The Dart VM service is listening on
+http://127.0.0.1:49482/...` and the app's debug lines. `flutter logs -d` run from the project checkout also
+printed only its header. So `logs` now runs that `idevicesyslog` and keeps the `flutter: ` lines (and its own
+`No device found` / `Library not loaded` failures). **Run live:** 12 app lines in 25 s after a launch, from
+`flutter: The Dart VM service is listening on http://127.0.0.1:49499/...` on.
+
+The syslog carries the VM Service URI, but as the phone's own loopback, so it is not reachable from the Mac
+without a forward; `vmservice.sh` does not use it.
+
+**A way round LLDB and mDNS, run live, 12 Nov 2026.** Flutter 3.41.8 fixed an LLDB bug on iOS 26.4
+(juejin.cn/post/7633684246478209060), and 3.41.9 still stalled here; flutter#177307 is the same errno 65 on
+a physical iPhone, unresolved. Flutter's own way round mDNS is `flutter attach --debug-url` (flutter PR
+#166782). On the XS Max (iOS 18.7.9), with the debug UAT build installed: `devicectl device process launch`,
+the URI from the phone's log, then `flutter attach -d <udid> -t lib/main_uat.dart
+--debug-url=http://127.0.0.1:49519/ZD3NBH3p0pk=/` from the checkout synced files, printed `A Dart VM Service on
+Monica’s iPhone is available at: http://127.0.0.1:51783/...`, and `r` answered `Reloaded 0 libraries in
+249ms`. No LLDB, no mDNS. `pubspec.lock` and the other session's changes in the checkout were untouched.
+New verb `vm-url <udid> <flutter-bin> [seconds]` reads the URI: live, it printed
+`http://127.0.0.1:49542/kZZu1ZnbUl8=/` 4 s after a launch and left no `idevicesyslog` running.
+`run-diagnose` now gives this route for the LLDB stall and for MDNS BLOCKED. Not yet tried on iOS 26, where
+a debug build launched without a debugger may not survive (the `mprotect failed: 13` reports).
+
+**Debug builds for a phone, 12 Nov 2026.** Asked for by fhrm item 21 (hot reload on a phone):
+`runners/flutter/build.sh --device <udid> --debug` builds `flutter build ios --debug` in the GUI session and
+prints `MMARTIFACT` as before; profile stays the default. `framework.sh build --platform ios-device` passes
+`--debug` only when `--mode debug` is given by name, since debug was already its default and every earlier
+caller got profile on a phone. Tested offline with the device-build stubs. **Built on the Mac, 12 Nov 2026:** `framework.sh build
+<repo> --platform ios-device --device <udid> --mode debug --variant uat --target lib/main_uat.dart` printed
+`building oneiota.e.hugoboss.runner.uat ... (debug mode)` and `artifact .../build/ios/iphoneos/Runner.app`,
+rc 0, with the shared checkout's `ios/Podfile.lock` and `pubspec.lock` unchanged. The install on an iPhone
+11 (`00008030-001858493C91402E`, newly paired) failed: `Failed to install embedded profile for
+oneiota.e.hugoboss.runner.uat : 0xe8008012 (This provisioning profile cannot be installed on this device.)`
+— the development profile does not list that phone, and nothing here touches the Apple account to add it.
+`vm-url` then said `no 'VM service is listening' line ... is a debug build running?`, as it should.
+
+**On iOS 26 the route stops at the launch, 12 Nov 2026.** The Mac had no profile listing the iPhone 11: the
+user's profile files (26 Aug, in the VirtualBox shared folder) had never reached it, and double-clicking
+them installed nothing into either profile directory. Copying the ten that list the phone into
+`~/Library/Developer/Xcode/UserData/Provisioning Profiles/<UUID>.mobileprovision` did; the rebuild embedded
+UAT `92e42239-5e7b-4c3d-a874-7ba042e4e5cf` and `devicectl device install app` succeeded on the iPhone 11
+(iOS 26.5.2, 23F84). Launched with devicectl, the app logged `Runner(Flutter)[691]: [ERROR:flutter/runtime/
+ptrace_check.cc(75)] Could not call ptrace(PT_TRACE_ME): Operation not permitted` and `Cannot create a
+FlutterEngine instance in debug mode without Flutter tooling or Xcode.` So iOS 26 runs a debug build only
+under a debugger, and the devicectl, `vm-url`, attach route is iOS 18 only. `vm-url` now names this and exits
+3 (run live on the iPhone 11). It also hung once: on macOS `sh`, `wait` on the pipeline's last process waited
+for `idevicesyslog`; the reader is now stopped first. The shared checkout's lock files were unchanged.
+
+**`flutter run` with LLDB works on iOS 26 here, 12 Nov 2026.** On the iPhone 11 (iOS 26.5.2), with
+`enable-lldb-debugging: true`, Rosetta back, and over SSH: `flutter run -d <udid> --debug -t
+lib/main_uat.dart --use-application-binary build/ios/iphoneos/Runner.app` (the `--device --debug` build)
+reached `A Dart VM Service on hz’s iPhone is available at: http://127.0.0.1:49339/...` in 71 s, with no LLDB
+stall and no mDNS failure; `run-diagnose` found nothing (exit 1). A second run sent `r`: `Reloaded 0
+libraries in 301ms`, then `q`, exit 0. The checkout's lock files were unchanged both times. So the full
+fhrm item 21 chain works on iOS 26 on this Mac. What made the 11 Nov run on the iPhone 11 Pro stall is not
+known: that phone has not been reconnected, and the Mac then lacked Rosetta.
+
+**Done, 12 Nov 2026.** Everything the item asked of this package is in and has run on a phone. Two notes:
+the 11 Nov LLDB stall did not reproduce on the iOS 26 iPhone 11 and has not been retried on the iPhone 11
+Pro, which has not been reconnected; fhrm's `start.sh` calling these verbs is fhrm's work (its items 19 and
+21), told to the claude-skills session on 12 Nov.
