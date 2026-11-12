@@ -55,6 +55,10 @@ of §3 is the record from 2.8.0. Recheck on each Maestro upgrade whether
   `~/devdrv-<udid>.log` and says "STAND THE PHONE UPRIGHT". Posture can be read
   before a touch with `xcrun devicectl device orientation get --device <udid>`
   (Xcode 27).
+- **After a restart, enter the passcode for XCUITest.** The first driver start after the phone restarts
+  shows "Enter iPhone Password for 'xctest'" / "Enable UI Automation" on the phone and waits; unanswered,
+  xcodebuild fails after about a minute with `Timed out while enabling automation mode`. `deviceup.sh`
+  says LOOK AT THE PHONE NOW 10 s in (item 165).
 - **Portrait, not on its side.** In landscape `deviceInfo` answers wider than
   tall (812x375 on an iPhone 11 Pro) and `rows` marks the portrait nodes `off`.
   `driver.sh` warns when a registered phone reports wider than tall (item 165).

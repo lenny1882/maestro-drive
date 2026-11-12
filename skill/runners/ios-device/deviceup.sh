@@ -188,9 +188,9 @@ _why() {  # _why <log>
 # restarted XS Max sat waiting for input (12 Nov 2026).
 _waiting_note() {  # _waiting_note <log>
   echo "LOOK AT THE PHONE NOW: the driver is not up after 10 s. After a restart the phone" >&2
-  echo "  asks to be unlocked to allow XCUITest to run: enter its passcode. Answer any other" >&2
-  echo "  prompt (Trust, Enable UI Automation) too. The bring-up is still waiting and comes" >&2
-  echo "  up once it is answered; xcodebuild gives up after about a minute." >&2
+  echo "  shows \"Enter iPhone Password for 'xctest'\" / \"Enable UI Automation\": enter its" >&2
+  echo "  passcode. Answer any other prompt (Trust) too. The bring-up is still waiting and" >&2
+  echo "  comes up once it is answered; xcodebuild gives up after about a minute." >&2
 }
 
 # Cold start measured at ~10-30s on the XS Max: xcodebuild launches the runner,
